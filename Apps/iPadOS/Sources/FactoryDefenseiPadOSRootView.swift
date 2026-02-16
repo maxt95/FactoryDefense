@@ -62,6 +62,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     @State private var techTree = TechTreeViewModel.productionPreset
     @State private var onboarding = OnboardingGuideViewModel.starter
     @State private var interaction = GameplayInteractionState()
+    @StateObject private var placementFeedback = PlacementFeedbackController()
     @State private var overlayLayout = GameplayOverlayLayoutState.defaultLayout(
         viewportSize: CGSize(width: 1280, height: 900)
     )
@@ -175,6 +176,9 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                 onboarding.update(from: runtime.world)
                 validateSelection()
             }
+            .onChange(of: runtime.latestEvents) { _, events in
+                placementFeedback.consume(events: events)
+            }
             .onChange(of: runtime.world.board) { oldBoard, newBoard in
                 reconcileCameraForBoardChange(from: oldBoard, to: newBoard, viewport: proxy.size)
             }
@@ -221,7 +225,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                     .background(.regularMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
 
-                Text(placementLabel(runtime.placementResult))
+                Text(placementLabel(placementFeedback.displayedResult(current: runtime.placementResult)))
                     .font(.caption)
                     .padding(10)
                     .background(.regularMaterial)

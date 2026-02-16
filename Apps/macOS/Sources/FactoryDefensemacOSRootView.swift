@@ -249,6 +249,7 @@ private struct FactoryDefensemacOSGameplayView: View {
     @State private var techTree = TechTreeViewModel.productionPreset
     @State private var onboarding = OnboardingGuideViewModel.starter
     @State private var interaction = GameplayInteractionState()
+    @StateObject private var placementFeedback = PlacementFeedbackController()
     @State private var overlayLayout = GameplayOverlayLayoutState.defaultLayout(
         viewportSize: CGSize(width: 1280, height: 720)
     )
@@ -406,6 +407,9 @@ private struct FactoryDefensemacOSGameplayView: View {
                 onboarding.update(from: runtime.world)
                 validateSelection()
             }
+            .onChange(of: runtime.latestEvents) { _, events in
+                placementFeedback.consume(events: events)
+            }
             .onChange(of: runtime.world.board) { oldBoard, newBoard in
                 reconcileCameraForBoardChange(from: oldBoard, to: newBoard, viewport: proxy.size)
             }
@@ -455,7 +459,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                Text("Placement: \(placementLabel(runtime.placementResult))")
+                Text("Placement: \(placementLabel(placementFeedback.displayedResult(current: runtime.placementResult)))")
                     .font(.caption)
                     .padding(8)
                     .background(.ultraThinMaterial)

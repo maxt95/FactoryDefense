@@ -22,9 +22,10 @@
   - Removed logistics transport fallback to global inventory; produced items remain in routed buffers/pools until physically consumed.
   - `GameRuntimeController` command helper expansion (`placeConveyor`, `rotateBuilding`, `pinRecipe`, `removeStructure`) and rotation-aware place APIs for shared platform wiring.
   - Introduced shared `GameplayInteractionState` in `GameUI` and adopted it across macOS/iOS/iPadOS/CLI gameplay roots for unified build/interact mode and build-menu selection transitions.
+  - Added shared timed rejection-feedback controller (`PlacementFeedbackController`) with 1.5s placement-rejection label persistence wired across macOS/iOS/iPadOS/CLI gameplay roots.
   - Golden replay fingerprint regeneration and new command/snapshot/removal tests.
 - Still in progress / remaining for parity:
-  - Shared interaction module follow-through: drag-draw parity, demolish confirmation flow, and canonical rejection-feedback timing.
+  - Shared interaction module follow-through: drag-draw parity and demolish confirmation flow.
 
 ## Locked Decisions
 1. Scope: full PRD parity for both target PRDs.
