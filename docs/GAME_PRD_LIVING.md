@@ -89,6 +89,8 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 
 ## Linked Execution Docs
 - Systems implementation plan: `/Users/maxconrad/Workspace/factory-defense/docs/GAME_SYSTEMS_PLAN.md`
+- Factory & Economy PRD: `docs/prd/factory_economy.md`
+- Building Specifications PRD: `docs/prd/building_specifications.md`
 
 ## Change Control
 When updating this file:
@@ -102,4 +104,5 @@ When updating this file:
 - Long-run scaling: when to introduce elite/flying/siege enemy variants.
 
 ## Changelog
+- 2026-02-15: Added Factory & Economy PRD link.
 - 2026-02-16: Initialized living PRD from approved high-level product direction and implemented architecture baseline.

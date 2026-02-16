@@ -31,6 +31,10 @@ public struct GridPosition: Codable, Hashable, Sendable {
     public func manhattanDistance(to other: GridPosition) -> Int {
         abs(x - other.x) + abs(y - other.y) + abs(z - other.z)
     }
+
+    public func translated(byX dx: Int = 0, byY dy: Int = 0, byZ dz: Int = 0) -> GridPosition {
+        GridPosition(x: x + dx, y: y + dy, z: z + dz)
+    }
 }
 
 public enum StructureType: String, Codable, CaseIterable, Sendable {
@@ -284,9 +288,9 @@ public struct CombatState: Codable, Hashable, Sendable {
         enemies: [EntityID: EnemyRuntime] = [:],
         projectiles: [EntityID: ProjectileRuntime] = [:],
         basePosition: GridPosition = .zero,
-        spawnEdgeX: Int = 18,
-        spawnYMin: Int = 1,
-        spawnYMax: Int = 12
+        spawnEdgeX: Int = 56,
+        spawnYMin: Int = 27,
+        spawnYMax: Int = 36
     ) {
         self.enemies = enemies
         self.projectiles = projectiles
@@ -429,12 +433,12 @@ public struct WorldState: Codable, Hashable, Sendable {
     public static func bootstrap() -> WorldState {
         let board = BoardState.bootstrap()
         var store = EntityStore()
-        _ = store.spawnStructure(.powerPlant, at: GridPosition(x: 1, y: 5))
-        _ = store.spawnStructure(.miner, at: GridPosition(x: 2, y: 5))
-        _ = store.spawnStructure(.smelter, at: GridPosition(x: 3, y: 5))
-        _ = store.spawnStructure(.ammoModule, at: GridPosition(x: 4, y: 5))
-        _ = store.spawnStructure(.turretMount, at: GridPosition(x: 5, y: 6))
-        _ = store.spawnStructure(.turretMount, at: GridPosition(x: 5, y: 8))
+        _ = store.spawnStructure(.powerPlant, at: GridPosition(x: 39, y: 30))
+        _ = store.spawnStructure(.miner, at: GridPosition(x: 40, y: 30))
+        _ = store.spawnStructure(.smelter, at: GridPosition(x: 41, y: 30))
+        _ = store.spawnStructure(.ammoModule, at: GridPosition(x: 42, y: 30))
+        _ = store.spawnStructure(.turretMount, at: GridPosition(x: 43, y: 31))
+        _ = store.spawnStructure(.turretMount, at: GridPosition(x: 43, y: 33))
 
         return WorldState(
             tick: 0,

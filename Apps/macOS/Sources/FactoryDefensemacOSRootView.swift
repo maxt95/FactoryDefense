@@ -68,6 +68,8 @@ private struct FactoryDefensemacOSGameplayView: View {
     @State private var zoomGestureScale: CGFloat = 1
     @State private var renderDiagnostic: String?
 
+    private static let keyboardPanStep: Float = 56
+
     private var selectedStructure: StructureType {
         buildMenu.selectedEntry()?.structure ?? .wall
     }
@@ -88,9 +90,12 @@ private struct FactoryDefensemacOSGameplayView: View {
                     onTap: { location, viewport in
                         handleTap(at: location, viewport: viewport)
                     },
-                    onScrollZoom: { delta in
-                        let scale: Float = delta < 0 ? 1.08 : 0.92
-                        cameraState.zoomBy(scale: scale)
+                    onScrollZoom: { delta, location, viewport in
+                        let scale: Float = delta < 0 ? 0.92 : 1.08
+                        zoomCamera(scale: scale, around: location, viewport: viewport)
+                    },
+                    onKeyboardPan: { dx, dy, viewport in
+                        handleKeyboardPan(deltaX: dx, deltaY: dy, viewport: viewport)
                     }
                 )
                 .ignoresSafeArea()
@@ -100,7 +105,8 @@ private struct FactoryDefensemacOSGameplayView: View {
                         .onChanged { value in
                             let deltaX = value.translation.width - dragTranslation.width
                             let deltaY = value.translation.height - dragTranslation.height
-                            cameraState.panBy(deltaX: Float(deltaX), deltaY: Float(deltaY))
+                            cameraState.panBy(deltaX: -Float(deltaX), deltaY: -Float(deltaY))
+                            enforceCameraConstraints(viewport: proxy.size)
                             dragTranslation = value.translation
                             previewPlacement(at: value.location, viewport: proxy.size)
                         }
@@ -112,7 +118,10 @@ private struct FactoryDefensemacOSGameplayView: View {
                     MagnificationGesture()
                         .onChanged { scale in
                             let delta = scale / zoomGestureScale
-                            cameraState.zoomBy(scale: Float(delta))
+                            guard delta.isFinite, delta > 0 else { return }
+                            let inverted = Float(1 / delta)
+                            let anchor = CGPoint(x: proxy.size.width * 0.5, y: proxy.size.height * 0.5)
+                            zoomCamera(scale: inverted, around: anchor, viewport: proxy.size)
                             zoomGestureScale = scale
                         }
                         .onEnded { _ in
@@ -187,6 +196,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                     buildMenu.select(entryID: first.id)
                 }
                 onboarding.update(from: runtime.world)
+                enforceCameraConstraints(viewport: proxy.size)
             }
             .onDisappear {
                 runtime.stop()
@@ -194,10 +204,16 @@ private struct FactoryDefensemacOSGameplayView: View {
             .onChange(of: runtime.world.tick) { _, _ in
                 onboarding.update(from: runtime.world)
             }
+            .onChange(of: runtime.world.board) { oldBoard, newBoard in
+                reconcileCameraForBoardChange(from: oldBoard, to: newBoard, viewport: proxy.size)
+            }
             .onChange(of: buildMenu.selectedEntryID) { _, _ in
                 if let highlighted = runtime.highlightedCell {
                     runtime.previewPlacement(structure: selectedStructure, at: highlighted)
                 }
+            }
+            .onChange(of: proxy.size) { _, _ in
+                enforceCameraConstraints(viewport: proxy.size)
             }
             .onReceive(NotificationCenter.default.publisher(for: RenderDiagnostics.notificationName)) { note in
                 renderDiagnostic = note.userInfo?[RenderDiagnostics.messageKey] as? String
@@ -236,6 +252,41 @@ private struct FactoryDefensemacOSGameplayView: View {
         runtime.previewPlacement(structure: selectedStructure, at: position)
     }
 
+    private func handleKeyboardPan(deltaX: Float, deltaY: Float, viewport: CGSize) {
+        cameraState.panBy(
+            deltaX: -deltaX * Self.keyboardPanStep,
+            deltaY: -deltaY * Self.keyboardPanStep
+        )
+        enforceCameraConstraints(viewport: viewport)
+    }
+
+    private func zoomCamera(scale: Float, around anchor: CGPoint, viewport: CGSize) {
+        cameraState.zoomBy(
+            scale: scale,
+            around: anchor,
+            viewport: viewport,
+            board: runtime.world.board
+        )
+    }
+
+    private func enforceCameraConstraints(viewport: CGSize) {
+        cameraState.clampToSafePerimeter(viewport: viewport, board: runtime.world.board)
+    }
+
+    private func reconcileCameraForBoardChange(from oldBoard: BoardState, to newBoard: BoardState, viewport: CGSize) {
+        guard oldBoard != newBoard else {
+            enforceCameraConstraints(viewport: viewport)
+            return
+        }
+        cameraState.compensateForBoardGrowth(
+            deltaWidth: newBoard.width - oldBoard.width,
+            deltaHeight: newBoard.height - oldBoard.height,
+            deltaBaseX: newBoard.basePosition.x - oldBoard.basePosition.x,
+            deltaBaseY: newBoard.basePosition.y - oldBoard.basePosition.y
+        )
+        cameraState.clampToSafePerimeter(viewport: viewport, board: newBoard)
+    }
+
     private func pickGrid(at location: CGPoint, viewport: CGSize) -> GridPosition? {
         return WhiteboxPicker().gridPosition(
             at: location,
@@ -253,15 +304,18 @@ private struct MetalSurfaceView: NSViewRepresentable {
     var highlightedStructure: StructureType?
     var placementResult: PlacementResult
     var onTap: (CGPoint, CGSize) -> Void
-    var onScrollZoom: (CGFloat) -> Void
+    var onScrollZoom: (CGFloat, CGPoint, CGSize) -> Void
+    var onKeyboardPan: (Float, Float, CGSize) -> Void
 
     func makeNSView(context: Context) -> MTKView {
         let view = ScrollableMTKView(frame: .zero)
         view.onTap = onTap
         view.onScrollZoom = onScrollZoom
+        view.onKeyboardPan = onKeyboardPan
         if let renderer = context.coordinator.renderer {
             renderer.attach(to: view)
         }
+        view.window?.makeFirstResponder(view)
         return view
     }
 
@@ -270,6 +324,8 @@ private struct MetalSurfaceView: NSViewRepresentable {
         if let interactiveView = nsView as? ScrollableMTKView {
             interactiveView.onTap = onTap
             interactiveView.onScrollZoom = onScrollZoom
+            interactiveView.onKeyboardPan = onKeyboardPan
+            interactiveView.window?.makeFirstResponder(interactiveView)
         }
         renderer.worldState = world
         renderer.cameraState = cameraState
@@ -288,13 +344,24 @@ private struct MetalSurfaceView: NSViewRepresentable {
 
 private final class ScrollableMTKView: MTKView {
     var onTap: ((CGPoint, CGSize) -> Void)?
-    var onScrollZoom: ((CGFloat) -> Void)?
+    var onScrollZoom: ((CGFloat, CGPoint, CGSize) -> Void)?
+    var onKeyboardPan: ((Float, Float, CGSize) -> Void)?
+
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
+    }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
 
     override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
         let local = convert(event.locationInWindow, from: nil)
         let y = isFlipped ? local.y : (bounds.height - local.y)
         onTap?(CGPoint(x: local.x, y: y), bounds.size)
@@ -302,7 +369,24 @@ private final class ScrollableMTKView: MTKView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        onScrollZoom?(event.scrollingDeltaY)
+        let local = convert(event.locationInWindow, from: nil)
+        let y = isFlipped ? local.y : (bounds.height - local.y)
+        onScrollZoom?(event.scrollingDeltaY, CGPoint(x: local.x, y: y), bounds.size)
         super.scrollWheel(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 0, 123: // A, Left
+            onKeyboardPan?(-1, 0, bounds.size)
+        case 2, 124: // D, Right
+            onKeyboardPan?(1, 0, bounds.size)
+        case 13, 126: // W, Up
+            onKeyboardPan?(0, -1, bounds.size)
+        case 1, 125: // S, Down
+            onKeyboardPan?(0, 1, bounds.size)
+        default:
+            super.keyDown(with: event)
+        }
     }
 }

@@ -175,24 +175,24 @@ public struct BoardDef: Codable, Hashable, Sendable {
     }
 
     public static let starter = BoardDef(
-        width: 20,
-        height: 14,
-        basePosition: BoardPointDef(x: 2, y: 7, z: 0),
-        spawnEdgeX: 18,
-        spawnYMin: 2,
-        spawnYMax: 11,
+        width: 96,
+        height: 64,
+        basePosition: BoardPointDef(x: 40, y: 32, z: 0),
+        spawnEdgeX: 56,
+        spawnYMin: 27,
+        spawnYMax: 36,
         blockedCells: [],
         restrictedCells: [
-            BoardPointDef(x: 2, y: 7),
-            BoardPointDef(x: 1, y: 7),
-            BoardPointDef(x: 3, y: 7),
-            BoardPointDef(x: 2, y: 6),
-            BoardPointDef(x: 2, y: 8)
+            BoardPointDef(x: 40, y: 32),
+            BoardPointDef(x: 39, y: 32),
+            BoardPointDef(x: 41, y: 32),
+            BoardPointDef(x: 40, y: 31),
+            BoardPointDef(x: 40, y: 33)
         ],
         ramps: [
-            BoardRampDef(position: BoardPointDef(x: 9, y: 6), elevation: 1),
-            BoardRampDef(position: BoardPointDef(x: 9, y: 7), elevation: 1),
-            BoardRampDef(position: BoardPointDef(x: 9, y: 8), elevation: 1)
+            BoardRampDef(position: BoardPointDef(x: 47, y: 31), elevation: 1),
+            BoardRampDef(position: BoardPointDef(x: 47, y: 32), elevation: 1),
+            BoardRampDef(position: BoardPointDef(x: 47, y: 33), elevation: 1)
         ]
     )
 }

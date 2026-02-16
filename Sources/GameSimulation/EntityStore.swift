@@ -90,4 +90,13 @@ public struct EntityStore: Codable, Hashable, Sendable {
             remove(id)
         }
     }
+
+    public mutating func translateAll(byX dx: Int = 0, byY dy: Int = 0) {
+        guard dx != 0 || dy != 0 else { return }
+        for id in entitiesByID.keys {
+            guard var entity = entitiesByID[id] else { continue }
+            entity.position = entity.position.translated(byX: dx, byY: dy)
+            entitiesByID[id] = entity
+        }
+    }
 }

@@ -54,9 +54,13 @@ public final class GameRuntimeController: ObservableObject {
 
     @discardableResult
     public func advanceTick() -> [SimEvent] {
+        let previousBoard = world.board
         let events = engine.step()
         world = engine.worldState
         latestEvents = events
+        if world.board != previousBoard {
+            clearPlacementPreview()
+        }
         return events
     }
 
@@ -69,7 +73,16 @@ public final class GameRuntimeController: ObservableObject {
 
     public func previewPlacement(structure: StructureType, at position: GridPosition) {
         highlightedCell = position
-        placementResult = placementValidator.canPlace(structure, at: position, in: world)
+        let coveredCells = structure.coveredCells(anchor: position)
+        guard let expansionInsets = world.board.plannedExpansion(for: coveredCells) else {
+            placementResult = .outOfBounds
+            return
+        }
+
+        var previewWorld = world
+        previewWorld.applyBoardExpansion(expansionInsets)
+        let adjustedPosition = position.translated(byX: expansionInsets.left, byY: expansionInsets.top)
+        placementResult = placementValidator.canPlace(structure, at: adjustedPosition, in: previewWorld)
     }
 
     public func clearPlacementPreview() {

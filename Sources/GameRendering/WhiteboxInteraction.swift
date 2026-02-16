@@ -7,6 +7,14 @@ public struct WhiteboxCameraState: Codable, Hashable, Sendable {
     public var pan: SIMD2<Float>
     public var zoom: Float
 
+    public static let minimumZoom: Float = 0.45
+    public static let maximumZoom: Float = 2.8
+    public static let defaultSafePerimeterTiles: Float = 4
+
+    private static let baseTileWidth: Float = 34
+    private static let baseTileHeight: Float = 22
+    private static let verticalBoardOffset: Float = 0.5
+
     public init(pan: SIMD2<Float> = SIMD2<Float>(0, 0), zoom: Float = 1.0) {
         self.pan = pan
         self.zoom = zoom
@@ -19,7 +27,131 @@ public struct WhiteboxCameraState: Codable, Hashable, Sendable {
 
     public mutating func zoomBy(scale: Float) {
         guard scale.isFinite, scale > 0 else { return }
-        zoom = max(0.45, min(2.8, zoom * scale))
+        zoom = max(Self.minimumZoom, min(Self.maximumZoom, zoom * scale))
+    }
+
+    public mutating func zoomBy(
+        scale: Float,
+        around anchor: CGPoint,
+        viewport: CGSize,
+        board: BoardState,
+        safePerimeterTiles: Float = WhiteboxCameraState.defaultSafePerimeterTiles
+    ) {
+        guard scale.isFinite, scale > 0 else { return }
+        guard viewport.width > 0, viewport.height > 0 else { return }
+        guard anchor.x.isFinite, anchor.y.isFinite else { return }
+
+        let viewWidth = Float(max(1, viewport.width))
+        let viewHeight = Float(max(1, viewport.height))
+        let oldZoom = max(0.001, zoom)
+        let oldTileWidth = Self.baseTileWidth * oldZoom
+        let oldTileHeight = Self.baseTileHeight * oldZoom
+        let oldBoardPixelWidth = Float(board.width) * oldTileWidth
+        let oldBoardPixelHeight = Float(board.height) * oldTileHeight
+        let oldOriginBaseX = (viewWidth - oldBoardPixelWidth) * 0.5
+        let oldOriginBaseY = (viewHeight * Self.verticalBoardOffset) - (oldBoardPixelHeight * 0.5)
+        let oldOriginX = oldOriginBaseX + pan.x
+        let oldOriginY = oldOriginBaseY + pan.y
+        let localX = (Float(anchor.x) - oldOriginX) / oldTileWidth
+        let localY = (Float(anchor.y) - oldOriginY) / oldTileHeight
+
+        let computedMinimumZoom = minimumZoomToHideBoardEdge(
+            viewport: viewport,
+            board: board,
+            safePerimeterTiles: safePerimeterTiles
+        )
+        let minimumZoom = min(Self.maximumZoom, max(Self.minimumZoom, computedMinimumZoom))
+        zoom = max(minimumZoom, min(Self.maximumZoom, zoom * scale))
+
+        let newZoom = max(0.001, zoom)
+        let newTileWidth = Self.baseTileWidth * newZoom
+        let newTileHeight = Self.baseTileHeight * newZoom
+        let newBoardPixelWidth = Float(board.width) * newTileWidth
+        let newBoardPixelHeight = Float(board.height) * newTileHeight
+        let newOriginBaseX = (viewWidth - newBoardPixelWidth) * 0.5
+        let newOriginBaseY = (viewHeight * Self.verticalBoardOffset) - (newBoardPixelHeight * 0.5)
+
+        pan.x = Float(anchor.x) - (newOriginBaseX + (localX * newTileWidth))
+        pan.y = Float(anchor.y) - (newOriginBaseY + (localY * newTileHeight))
+        clampToSafePerimeter(viewport: viewport, board: board, safePerimeterTiles: safePerimeterTiles)
+    }
+
+    public func minimumZoomToHideBoardEdge(
+        viewport: CGSize,
+        board: BoardState,
+        safePerimeterTiles: Float = WhiteboxCameraState.defaultSafePerimeterTiles
+    ) -> Float {
+        let safeTiles = max(0, safePerimeterTiles)
+        let horizontalSpanTiles = max(1, Float(board.width) - (safeTiles * 2))
+        let verticalSpanTiles = max(1, Float(board.height) - (safeTiles * 2))
+        let viewportWidth = Float(max(1, viewport.width))
+        let viewportHeight = Float(max(1, viewport.height))
+        let requiredX = viewportWidth / (horizontalSpanTiles * Self.baseTileWidth)
+        let requiredY = viewportHeight / (verticalSpanTiles * Self.baseTileHeight)
+        return max(Self.minimumZoom, max(requiredX, requiredY))
+    }
+
+    public mutating func compensateForBoardGrowth(
+        deltaWidth: Int,
+        deltaHeight: Int,
+        deltaBaseX: Int,
+        deltaBaseY: Int
+    ) {
+        let clampedZoom = max(0.001, zoom)
+        let tileWidth = Self.baseTileWidth * clampedZoom
+        let tileHeight = Self.baseTileHeight * clampedZoom
+        pan.x += (Float(deltaWidth - (2 * deltaBaseX)) * tileWidth) * 0.5
+        pan.y += (Float(deltaHeight - (2 * deltaBaseY)) * tileHeight) * 0.5
+    }
+
+    public mutating func clampToSafePerimeter(
+        viewport: CGSize,
+        board: BoardState,
+        safePerimeterTiles: Float = WhiteboxCameraState.defaultSafePerimeterTiles
+    ) {
+        guard viewport.width > 0, viewport.height > 0 else { return }
+
+        let computedMinimumZoom = minimumZoomToHideBoardEdge(
+            viewport: viewport,
+            board: board,
+            safePerimeterTiles: safePerimeterTiles
+        )
+        let minimumZoom = min(Self.maximumZoom, max(Self.minimumZoom, computedMinimumZoom))
+        zoom = max(minimumZoom, min(Self.maximumZoom, zoom))
+
+        let safeTiles = max(0, safePerimeterTiles)
+        let tileWidth = Self.baseTileWidth * zoom
+        let tileHeight = Self.baseTileHeight * zoom
+        let boardPixelWidth = Float(board.width) * tileWidth
+        let boardPixelHeight = Float(board.height) * tileHeight
+        let safeMarginX = safeTiles * tileWidth
+        let safeMarginY = safeTiles * tileHeight
+        let viewWidth = Float(viewport.width)
+        let viewHeight = Float(viewport.height)
+
+        let originBaseX = (viewWidth - boardPixelWidth) * 0.5
+        let originBaseY = (viewHeight * Self.verticalBoardOffset) - (boardPixelHeight * 0.5)
+
+        let minOriginX = viewWidth + safeMarginX - boardPixelWidth
+        let maxOriginX = -safeMarginX
+        var originX = originBaseX + pan.x
+        if minOriginX > maxOriginX {
+            originX = (minOriginX + maxOriginX) * 0.5
+        } else {
+            originX = min(max(originX, minOriginX), maxOriginX)
+        }
+
+        let minOriginY = viewHeight + safeMarginY - boardPixelHeight
+        let maxOriginY = -safeMarginY
+        var originY = originBaseY + pan.y
+        if minOriginY > maxOriginY {
+            originY = (minOriginY + maxOriginY) * 0.5
+        } else {
+            originY = min(max(originY, minOriginY), maxOriginY)
+        }
+
+        pan.x = originX - originBaseX
+        pan.y = originY - originBaseY
     }
 }
 

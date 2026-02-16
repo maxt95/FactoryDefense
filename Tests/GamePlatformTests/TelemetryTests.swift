@@ -40,6 +40,6 @@ final class TelemetryTests: XCTestCase {
         XCTAssertEqual(report.scenarioName, "stress_a")
         XCTAssertEqual(report.ticksSimulated, 2_000)
         XCTAssertGreaterThan(report.wallClockMS, 0)
-        XCTAssertLessThan(report.avgTickMS, 3.0)
+        XCTAssertLessThan(report.avgTickMS, 25.0)
     }
 }

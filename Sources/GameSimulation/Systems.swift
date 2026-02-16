@@ -9,12 +9,26 @@ public struct CommandSystem: SimulationSystem {
         for command in context.commands {
             switch command.payload {
             case .placeStructure(let request):
-                let result = placementValidator.canPlace(request.structure, at: request.position, in: state)
+                let coveredCells = request.structure.coveredCells(anchor: request.position)
+                guard let expansionInsets = state.board.plannedExpansion(for: coveredCells) else {
+                    context.emit(
+                        SimEvent(
+                            tick: state.tick,
+                            kind: .placementRejected,
+                            value: PlacementResult.outOfBounds.rawValue
+                        )
+                    )
+                    continue
+                }
+
+                state.applyBoardExpansion(expansionInsets)
+                let placementAnchor = request.position.translated(byX: expansionInsets.left, byY: expansionInsets.top)
+                let result = placementValidator.canPlace(request.structure, at: placementAnchor, in: state)
                 if result == .ok {
                     let placementPosition = GridPosition(
-                        x: request.position.x,
-                        y: request.position.y,
-                        z: state.board.elevation(at: request.position)
+                        x: placementAnchor.x,
+                        y: placementAnchor.y,
+                        z: state.board.elevation(at: placementAnchor)
                     )
                     _ = state.entities.spawnStructure(request.structure, at: placementPosition)
                 } else {
