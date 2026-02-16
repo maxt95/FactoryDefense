@@ -106,7 +106,7 @@ Build menu organized by category: Defense, Production, Logistics, Utility.
 | Ammo truth (turrets check inventory) | Exists |
 | Build/wave phase UI distinction | Gap — no visual mode switch |
 | Build cost enforcement | Gap — structures placed for free |
-| Warning banner system | Gap — HUD models exist, no triggers |
+| Warning banner system | Partial — `HUDViewModel.build()` generates `baseCritical`, `lowAmmo`, `raidImminent` warnings from `WorldState`; gap: warnings not rendered in gameplay view, `powerShortage` warning type missing |
 
 ### 1.6 Open Questions
 
@@ -261,9 +261,9 @@ Longer chains = higher tier ammo = more structures required = more power demande
 | `craft_ammo_light` | 2.0 | 40 | Ammo Module |
 | `craft_ammo_heavy` | 2.6 | 52 | Ammo Module |
 | `craft_ammo_plasma` | 3.0 | 60 | Ammo Module |
-| `craft_wall_kit` | 3.0 | 60 | Assembler |
-| `craft_turret_core` | 4.0 | 80 | Assembler |
-| `craft_repair_kit` | 2.5 | 50 | Assembler |
+| `craft_wall_kit` | 1.2 | 24 | Assembler |
+| `craft_turret_core` | 2.5 | 50 | Assembler |
+| `craft_repair_kit` | 2.0 | 40 | Assembler |
 
 **Effective output rates (per structure, at 1.0 throughput):**
 
@@ -330,7 +330,7 @@ Power is the universal constraint. A power shortage does not affect one chain �
 | Assembler | +3 (consumes) | Medium draw, precision crafting |
 | Ammo Module | +4 (consumes) | Highest draw, ammunition fabrication |
 | Conveyor | +1 (consumes) | Minimal, motors only |
-| Storage | 0 | Passive, no power needed |
+| Storage | +1 (consumes) | Low draw, inventory management |
 | Wall | 0 | Passive defense |
 | Turret Mount | 0 | Mechanical, fires with ammo only |
 
@@ -479,7 +479,7 @@ Every structure placed is resources committed, creating opportunity cost decisio
 | Wall | 1 wall_kit | Defense |
 | Turret Mount | 1 turret_core + 2 plate_steel | Defense |
 
-**Bootstrap exception:** The starter structures (1 power plant, 1 miner, 1 smelter, 1 ammo module, 1 turret mount) are placed for free at game start. All subsequent placements require full cost payment.
+**Bootstrap exception:** The starter structures (1 power plant, 1 miner, 1 smelter, 1 ammo module, 2 turret mounts) are placed for free at game start. All subsequent placements require full cost payment.
 
 ### 6.3 Placement Validation
 
@@ -523,10 +523,12 @@ Upgrades are in-place — no demolish-rebuild cycle needed. The upgrade command 
 |--------|--------|
 | `CommandSystem.placeStructure` | Exists — but no cost check (places for free) |
 | Build costs in `BuildMenuViewModel` | Exists (UI-only, not simulation-enforced) |
-| Placement validation (bounds, occupancy) | Gap — no validation at all |
+| Placement validation (bounds, occupancy, path) | Exists — `PlacementValidator` checks bounds, restricted zones, occupancy, and critical path blocking |
+| Cost deduction on placement | Gap — `CommandSystem` calls `spawnStructure` without consuming inventory |
+| Ore patch adjacency check for miners | Gap — miners can be placed anywhere |
+| Assembler in build menu | Gap — no `BuildMenuEntry` for assembler in `productionPreset` |
 | `removeStructure` command | Gap — does not exist in `CommandPayload` |
 | Refund logic | Gap |
-| Ore patch adjacency check for miners | Gap |
 | Structure upgrade system | Gap |
 
 ---
@@ -679,19 +681,21 @@ The economy must produce a tight experience where the player is ALMOST overwhelm
 
 ### 8.2 Bootstrap Analysis
 
-**Starting state:**
-- 1 power plant (12 power), 1 miner (2), 1 smelter (3), 1 ammo module (4), 1 turret mount (0)
+**Starting state** (from `WorldState.bootstrap()`):
+- 1 power plant (12 power), 1 miner (2), 1 smelter (3), 1 ammo module (4), 2 turret mounts (0 each)
 - Power: 12 supply, 9 demand. Efficiency = 1.0, headroom = 3
-- Starting inventory: 10 ore_iron
+- Starting inventory: 10 ore_iron, 80 ammo_light
 - Time until first wave: 400 ticks = 20 seconds
 
-**Pre-wave 1 production (20 seconds at 1.0 throughput):**
-- Miner: 20 ore_iron produced
+**Pre-wave 1 production — with proposed recipe timing (target design):**
+- Miner: 20 ore_iron produced (1 ore/s over 20s)
 - Smelter: 10 plate_iron produced (from 20 ore_iron, 2:1 ratio, 2s per batch = 10 batches)
 - Ammo module: 40 ammo_light produced (from 10 plate_iron, 4:1 output, 2s per batch)
-- Plus starting 10 ore_iron -> 5 more plates -> 20 more ammo_light
+- Plus starting 10 ore_iron > 5 more plates > 20 more ammo_light
 
-**Total ammo at wave 1 start: ~60 ammo_light**
+**Total ammo at wave 1 start (proposed timing): ~140 ammo_light** (80 starting + ~60 produced)
+
+**Current code behavior (instant-per-tick):** The current `EconomySystem` produces 1 ore_iron per tick per miner, smelts every tick ore is available (2:1 ratio), and converts plates to ammo instantly (1 plate > 4 ammo). With 1 miner producing 1 ore/tick and smelting consuming 2 ore/tick, the smelter alternates between running and waiting for ore accumulation. Over 400 ticks, the current code produces significantly more ammo than the proposed timing model — roughly **~800+ ammo_light** on top of the 80 starting. This overshoot is expected to shrink dramatically once recipe timing is implemented (P1 priority).
 
 ### 8.3 Early Game (Waves 1-3)
 
@@ -703,7 +707,7 @@ The economy must produce a tight experience where the player is ALMOST overwhelm
 | 2 | 8 swarmlings + 4 scouts | 160 | ~18 shots |
 | 3 | 6 scouts + 1 raider (45hp) | 165 | ~16 shots |
 
-**Ammo budget:** 60 ammo available at wave 1. 12 shots needed. Comfortable surplus of ~48. This is intentional — early waves teach the player the production system without pressure.
+**Ammo budget (proposed timing):** ~140 ammo available at wave 1 (80 starting + ~60 produced). 12 shots needed per turret, 2 turrets = ~24 shots. Comfortable surplus of ~116. This is intentional — early waves teach the player the production system without pressure. The generous starting ammo (80) provides a safety net while the player learns the production chain.
 
 **Player goals in early game:**
 - Understand the production chain (miner > smelter > ammo module > turret)
@@ -712,7 +716,7 @@ The economy must produce a tight experience where the player is ALMOST overwhelm
 - Accumulate resources for mid-game expansion
 
 **Recommended structure count by wave 3:**
-- 1-2 miners, 1 smelter, 1 ammo module, 1-2 turrets, 1 power plant, 2-4 walls
+- 1-2 miners, 1 smelter, 1 ammo module, 2-3 turrets, 1 power plant, 2-4 walls
 
 ### 8.4 Mid Game (Waves 4-8)
 
@@ -771,7 +775,7 @@ spawnBudget = 30 + (waveIndex x 8) + (waveIndex / 5) x 15  (milestone spike)
 | Assemblers | 0 | 1 | 2-3 |
 | Ammo Modules | 1 | 2 | 3-4 |
 | Power Plants | 1 | 2 | 3-4 |
-| Turrets | 1 | 2-3 | 4-6 |
+| Turrets | 2 | 2-3 | 4-6 |
 | Conveyors | 0-2 | 4-8 | 10-15 |
 | Storages | 0 | 1-2 | 3-5 |
 | Walls | 2-4 | 6-10 | 10-20 |
@@ -886,3 +890,4 @@ spawnBudget = 30 + (waveIndex x 8) + (waveIndex / 5) x 15  (milestone spike)
 ## Changelog
 
 - 2026-02-15: Initial draft — forward-looking v1 design for factory and economy systems.
+- 2026-02-15: Accuracy pass — fixed recipe times (craft_wall_kit 1.2s, craft_turret_core 2.5s, craft_repair_kit 2.0s), corrected bootstrap state (2 turrets, 80 starting ammo), fixed placement validation status (PlacementValidator exists), clarified current vs proposed production rates in balance framework, fixed storage power consumption (1, not 0), corrected balance ratio table turret counts.
