@@ -36,10 +36,10 @@
 | **Throughput multiplier** | `efficiency x logisticsBoost` — the single scalar gating all production |
 | **Recipe time** | Duration in seconds from `recipes.json`; translates to `ceil(seconds x 20)` ticks |
 | **ItemID** | String key matching `items.json` entries (e.g., `"ore_iron"`, `"plate_steel"`) |
-| **Build phase** | Period between waves (default 400 ticks / 20 seconds) |
-| **Wave phase** | Active enemy attack period (default 160 ticks / 8 seconds) |
+| **Build phase** | ~~Period between waves~~ **Superseded:** v1 uses a continuous threat model with no discrete build/wave phases. Building is available at all times. See `wave_threat_system.md`. |
+| **Wave phase** | ~~Active enemy attack period~~ **Superseded:** replaced by continuous trickle pressure + timed surge waves. |
 
-System execution order per tick: Command > Economy > Wave > EnemyMovement > Combat > Projectile.
+System execution order per tick (8 systems): Command > Economy/Production > Conveyor > Tech > Wave > EnemyMovement > Combat > Projectile.
 
 ---
 
@@ -51,15 +51,17 @@ The player is not directly clicking to kill enemies. The player builds and optim
 
 ### 1.2 Minute-to-Minute Loop
 
-**Build Phase** (between waves, default 20 seconds):
-- Factory runs at full speed. Inventory accumulates.
-- Player places structures, adjusts production priorities, expands resource coverage.
-- Key decision each build phase: expand production breadth (more miners, new ore types) vs. deepen existing chains (more smelters) vs. expand defense (turrets, walls).
+> **Note:** v1 uses a continuous threat model (per `wave_threat_system.md` and living PRD). There are no discrete build/wave phase gates. Building remains available at all times. The grace period (Easy 180s / Normal 120s / Hard 60s) provides initial safe build time before trickle pressure begins.
 
-**Wave Phase** (during active attack, default 8 seconds):
-- Factory still runs, but now ammo is being consumed by turrets. The player watches stockpiles drain.
-- Core tension: can the factory produce ammo as fast as turrets consume it?
-- Player can still build during waves but should feel urgency.
+**Grace Period** (run start, difficulty-scaled):
+- Factory runs at full speed. No enemies. Player places initial structures using HQ storage resources.
+- Key decision: prioritize production (miners, smelters) vs. early defenses (walls, turrets) vs. ammo reserves.
+
+**Continuous Play** (after grace period):
+- Trickle scouts arrive constantly. Timed surge waves escalate over time.
+- Factory runs continuously — ammo production must keep pace with turret consumption.
+- Player can build at any time but must balance expansion with immediate defense needs.
+- Core tension: can the factory produce ammo as fast as turrets consume it while also investing in growth?
 
 **The Tension Triangle:**
 
@@ -75,27 +77,26 @@ More turrets demand more ammo, which demands more production buildings, which de
 ### 1.3 Player-Facing Behavior
 
 HUD surfaces at all times:
-- **Ammo stock** — per ammo type, with depletion rate during waves
+- **Ammo stock** — per ammo type, with depletion rate during active combat
 - **Power headroom** — available vs demand, efficiency percentage
-- **Wave timer** — countdown to next wave
-- **Currency** — current bank
-- **Base integrity** — health bar
+- **Wave timer** — countdown to next surge wave
+- **Grace period countdown** — visible during grace period
+- **HQ health** — health bar (run ends when HQ health reaches 0)
 
 Warning banners (non-occluding):
-- `Low Ammo` — < 10 ammo of any type a turret needs during wave phase
-- `Base Critical` — integrity <= 20
-- `Raid Imminent` — raid cooldown about to expire during wave phase
+- `Low Ammo` — < 10 ammo of any type a turret needs
+- `HQ Critical` — HQ health <= 20% (100 HP)
+- `Surge Imminent` — next wave surge approaching
 - `Power Shortage` — efficiency < 0.8
+- `Patch Exhausted` — an ore patch has been depleted
 
 Build menu organized by category: Defense, Production, Logistics, Utility.
 
 ### 1.4 Simulation Rules
 
-- Fixed 20 Hz tick loop. Six systems run sequentially per tick.
-- Economy runs every tick regardless of wave state. Waves add enemies; combat consumes ammo from the same inventory the economy fills.
-- Currency earns +1 per tick during active waves.
-- Milestone rewards: `waveIndex x 10` currency every 5 waves.
-- Game ends when base integrity reaches 0, or player voluntarily extracts.
+- Fixed 20 Hz tick loop. Eight systems run sequentially per tick: Command > Economy/Production > Conveyor > Tech > Wave > EnemyMovement > Combat > Projectile.
+- Economy runs every tick regardless of threat state. Trickle/surge enemies consume ammo from the same production the economy fills.
+- Game ends when HQ entity health reaches 0 (per `wave_threat_system.md`). No win condition in v1.
 
 ### 1.5 Implementation Status
 
@@ -105,14 +106,14 @@ Build menu organized by category: Defense, Production, Logistics, Utility.
 | Economy and Combat in same tick loop | Exists |
 | Ammo truth (turrets check inventory) | Exists |
 | Build cost enforcement | Exists — simulation-enforced (Milestone 0) |
-| Build/wave phase UI distinction | Gap — no visual mode switch |
-| Warning banner system | Partial — `HUDViewModel.build()` generates `baseCritical`, `lowAmmo`, `raidImminent` warnings from `WorldState`; gap: warnings not rendered in gameplay view, `powerShortage` warning type missing |
+| Continuous threat model UI | Gap — no grace period countdown, no surge wave timer |
+| Warning banner system | Partial — `HUDViewModel.build()` generates `baseCritical`, `lowAmmo` warnings from `WorldState`; gap: warnings not rendered in gameplay view, `powerShortage` and `patchExhausted` warning types missing, `raidImminent` to be replaced by `surgeImminent` |
 
 ### 1.6 Open Questions
 
-- Should building be restricted or more expensive during wave phase?
-- Should there be a "planning pause" before wave 1 where the tick clock is frozen?
-- What is the exact extraction reward formula for meta-progression?
+- ~~Should building be restricted or more expensive during wave phase?~~ **Resolved:** v1 uses continuous threat model with no phase gates. Building is always available.
+- ~~Should there be a "planning pause" before wave 1 where the tick clock is frozen?~~ **Resolved:** The difficulty-scaled grace period (60–180s) serves this role. No tick freeze needed.
+- What is the exact extraction reward formula for meta-progression? (Deferred — extraction is out of scope for v1.)
 
 ---
 
@@ -258,7 +259,7 @@ Longer chains = higher tier ammo = more structures required = more power demande
 
 **Effective output rates (per structure, at 1.0 throughput):**
 
-| Recipe | Output/second | Output per 20s build phase |
+| Recipe | Output/second | Output per 20s window |
 |--------|--------------|---------------------------|
 | smelt_iron | 0.5 plate_iron/s | 10 plates |
 | smelt_copper | 0.5 plate_copper/s | 10 plates |
@@ -413,7 +414,7 @@ Every structure placed is resources committed, creating opportunity cost decisio
 | Wall | 1 wall_kit | Defense |
 | Turret Mount | 1 turret_core + 2 plate_steel | Defense |
 
-**Bootstrap exception:** The starter structures (1 power plant, 1 miner, 1 smelter, 1 ammo module, 2 turret mounts) are placed for free at game start. All subsequent placements require full cost payment.
+**No bootstrap exception:** Per the living PRD and `run_bootstrap_session_init.md`, the HQ is the only structure at tick 0. The player places all structures from scratch during the grace period, paying full build costs from HQ storage resources. There are no free starter structures.
 
 ### 6.3 Placement Validation
 
@@ -435,8 +436,8 @@ Players can demolish structures they've placed:
 - **New command:** `removeStructure(entityID)` added to `CommandPayload`
 - **Refund:** 50% of original build cost (rounded down per item)
 - **Deconstruction time:** 20 ticks (1 second) — structure becomes non-functional immediately, entity removed after delay
-- **No refund on starter structures** — the 5 bootstrap structures cannot be demolished (or return 0 if demolished)
-- **During waves:** demolishing is allowed but risky (turrets/walls gone immediately)
+- **HQ cannot be demolished** (per `build_interaction_flow.md`)
+- **During active threat:** demolishing is allowed but risky (turrets/walls gone immediately)
 
 ### 6.5 Structure Upgrades
 
@@ -475,14 +476,9 @@ This is the soul of the game. The factory-defense coupling must be tight enough 
 
 ### 7.2 The Ammo Truth
 
-**Core rule:** A turret can only fire if the global inventory contains at least 1 unit of its required ammo type. If inventory is empty, the turret is silent.
+**Core rule:** A turret can only fire if its wall network's ammo pool contains at least 1 unit of its required ammo type. If the pool is empty, the turret is silent.
 
-This is correctly enforced in the current implementation:
-```
-CombatSystem checks economy.consume(itemID: ammoType, quantity: 1)
-  success -> fire projectile
-  failure -> dry fire event (.notEnoughAmmo), no damage dealt
-```
+> **Note:** Per the living PRD and `wave_threat_system.md`, turrets mount on wall segments (1:1) and draw ammo from per-wall-network shared pools. Conveyors inject ammo into wall networks at any segment. The previous global-inventory-based ammo check is superseded by the wall network pool model. See `building_specifications.md` §4.11 for full details.
 
 The `notEnoughAmmo` event must be surfaced prominently in the HUD — this is the primary signal that the factory needs attention.
 
@@ -559,16 +555,18 @@ This cascade is what makes the game feel tense. The player must maintain redunda
 
 ### 7.6 Structure Targeting by Enemies
 
-To make the cascade real, certain enemy types should target structures:
+> **Note:** Per the living PRD and `wave_threat_system.md`, enemy targeting uses deterministic behavioral conditions, not probability-based selection.
+
+To make the cascade real, certain enemy types target structures:
 
 | Enemy | Targeting Behavior |
 |-------|-------------------|
-| swarmling | Always targets base (shortest path) |
-| drone_scout | Always targets base (shortest path) |
-| raider | 70% base, 30% nearest structure within 4 cells of path |
-| breacher | Targets nearest wall or structure blocking its path; switches to base if path is clear |
-| artillery_bug | Targets highest-value structure within range 6 (power plant > ammo module > smelter > assembler > miner) |
-| overseer | Targets base; buffs nearby enemies (separate combat PRD topic) |
+| swarmling | Follows flow field to HQ (shortest path) |
+| drone_scout | Follows flow field to HQ (shortest path) |
+| raider | Seeks nearest non-wall structure within 4 cells (reachable without crossing a wall); follows flow field to HQ if path is clear |
+| breacher | Targets nearest wall or structure blocking its path; deals 2× damage to walls; follows flow field to HQ if path is clear |
+| overseer | Follows flow field to HQ; buffs nearby enemies (+25% damage, +15% speed within 4 tiles) |
+| ~~artillery_bug~~ | **Deferred to post-v1.** |
 
 **Structure health values:**
 
@@ -597,7 +595,6 @@ When a structure is destroyed:
 |--------|--------|
 | Ammo truth enforcement | Exists |
 | `notEnoughAmmo` event | Exists |
-| Currency reward on enemy kill | Exists |
 | Per-turret type combat (ammo type, range, fire rate, damage) | Exists (Milestone 0) |
 | Fire rate tracking per turret | Exists (Milestone 0) |
 | `ammo_heavy` / `ammo_plasma` consumption | Exists (Milestone 0) |
@@ -615,21 +612,28 @@ The economy must produce a tight experience where the player is ALMOST overwhelm
 
 ### 8.2 Bootstrap Analysis
 
-**Starting state** (from `WorldState.bootstrap()`):
-- 1 power plant (12 power), 1 miner (2), 1 smelter (3), 1 ammo module (4), 2 turret mounts (0 each)
-- Power: 12 supply, 9 demand. Efficiency = 1.0, headroom = 3
-- Starting inventory: 10 ore_iron, 80 ammo_light
-- Time until first wave: 400 ticks = 20 seconds
+> **Note:** Per the living PRD and `run_bootstrap_session_init.md`, the HQ is the only structure at tick 0. The player must place all production and defense structures from scratch using starting resources in HQ storage during the difficulty-scaled grace period.
 
-**Pre-wave 1 production — with proposed recipe timing (target design):**
-- Miner: 20 ore_iron produced (1 ore/s over 20s)
-- Smelter: 10 plate_iron produced (from 20 ore_iron, 2:1 ratio, 2s per batch = 10 batches)
-- Ammo module: 40 ammo_light produced (from 10 plate_iron, 4:1 output, 2s per batch)
-- Plus starting 10 ore_iron > 5 more plates > 20 more ammo_light
+**Starting state** (Normal difficulty, from `run_bootstrap_session_init.md`):
+- HQ only (2×2, 500 HP, 24-slot storage, 0 power)
+- Starting resources in HQ storage: 20 ore_iron, 12 ore_copper, 6 ore_coal, 4 plate_iron, 4 wall_kit, 12 ammo_light
+- Grace period: 120s (2400 ticks) — no enemies
+- Ring 0 ore patches: 5 (with guaranteed iron, copper, and coal)
 
-**Total ammo at wave 1 start (proposed timing): ~140 ammo_light** (80 starting + ~60 produced)
+**Player's first-minute bootstrap sequence (example):**
+1. Place power plant (cost: 2 circuit + 4 plate_copper — **not affordable from starting resources without a smelter**).
+   - **Issue:** Starting resources include only raw ores and 4 plate_iron. Player needs to place a miner + smelter first, then produce plates/circuits to afford a power plant.
+   - Alternative: Starting resources may need to include a small amount of plate_copper and circuit to enable the first power plant placement. This is an open balance question.
+2. Place miner adjacent to iron ore patch, smelter, ammo module.
+3. Build initial wall line with starting wall_kits (4 walls on Normal).
+4. Start producing ammo before grace period ends.
 
-**Current code behavior (instant-per-tick):** The current `EconomySystem` produces 1 ore_iron per tick per miner, smelts every tick ore is available (2:1 ratio), and converts plates to ammo instantly (1 plate > 4 ammo). With 1 miner producing 1 ore/tick and smelting consuming 2 ore/tick, the smelter alternates between running and waiting for ore accumulation. Over 400 ticks, the current code produces significantly more ammo than the proposed timing model — roughly **~800+ ammo_light** on top of the 80 starting. This overshoot is expected to shrink dramatically once recipe timing is implemented (P1 priority).
+**Grace period production potential (Normal, 120s, with recipe timing):**
+- Assumes player places 1 miner + 1 smelter + 1 ammo module within first 30s
+- Remaining 90s of production: ~45 ore_iron → ~22 plate_iron → ~88 ammo_light
+- Plus starting 12 ammo_light = ~100 ammo_light at grace period end
+
+**Starting resource balance is an open question.** The HQ-only bootstrap with current Normal-difficulty starting resources may be too tight for placing a power plant + miner + smelter + initial defenses. Playtesting will determine if starting resources need to be more generous.
 
 ### 8.3 Early Game (Waves 1-3)
 
@@ -641,16 +645,16 @@ The economy must produce a tight experience where the player is ALMOST overwhelm
 | 2 | 8 swarmlings + 4 scouts | 160 | ~18 shots |
 | 3 | 6 scouts + 1 raider (45hp) | 165 | ~16 shots |
 
-**Ammo budget (proposed timing):** ~140 ammo available at wave 1 (80 starting + ~60 produced). 12 shots needed per turret, 2 turrets = ~24 shots. Comfortable surplus of ~116. This is intentional — early waves teach the player the production system without pressure. The generous starting ammo (80) provides a safety net while the player learns the production chain.
+**Ammo budget (Normal difficulty, proposed timing):** ~100 ammo available at grace period end (12 starting + ~88 produced). Trickle scouts (1–2 swarmlings every 12s) begin immediately. Early waves are survivable with modest ammo reserves if the player has at least 1 wall-mounted turret online.
 
 **Player goals in early game:**
-- Understand the production chain (miner > smelter > ammo module > turret)
-- Build 1-2 additional production structures
-- Place walls to channel enemies
+- Use grace period to establish the core production chain (miner > smelter > ammo module)
+- Place initial wall line with turret(s) before trickle pressure begins
+- Expand mining and smelting during trickle phase
 - Accumulate resources for mid-game expansion
 
 **Recommended structure count by wave 3:**
-- 1-2 miners, 1 smelter, 1 ammo module, 2-3 turrets, 1 power plant, 2-4 walls
+- 1-2 miners, 1 smelter, 1 ammo module, 1-2 wall-mounted turrets, 1 power plant, 4-6 walls
 
 ### 8.4 Mid Game (Waves 4-8)
 
@@ -661,8 +665,8 @@ The economy must produce a tight experience where the player is ALMOST overwhelm
 | 4 | 6 scouts + 2 raiders | ~200 | Raiders have 45+ hp, require multiple hits |
 | 5 | 10 swarmlings + 2 raiders + 1 breacher (70hp) | ~230 | First breacher — tests wall integrity |
 | 6 | 8 scouts + 2 raiders + 1 breacher | ~290 | Sustained pressure |
-| 7 | 12 swarmlings + 3 raiders + 1 breacher + 1 artillery (90hp) | ~395 | First artillery — ranged structure damage |
-| 8 | 10 scouts + 3 raiders + 2 breachers + 1 artillery + 1 overseer (140hp) | ~625 | Boss wave — all enemy types present |
+| 7 | 12 swarmlings + 3 raiders + 2 breachers | ~305 | Double breacher — sustained wall pressure |
+| 8 | 10 scouts + 3 raiders + 2 breachers + 1 overseer (140hp) | ~475 | Boss wave — overseer buffs create danger |
 
 **Mid-game production demands:**
 - 2-3 turrets active = 4-6 ammo_light/s consumption
@@ -677,18 +681,18 @@ The economy must produce a tight experience where the player is ALMOST overwhelm
 
 Beyond wave 8, waves are procedurally generated with escalating spawn budgets:
 
-**Proposed procedural generation formula:**
+**Quadratic procedural generation formula** (per `wave_threat_system.md` and living PRD):
 ```
-spawnBudget = 30 + (waveIndex x 8) + (waveIndex / 5) x 15  (milestone spike)
+budget(w) = 10 + 4w + floor(0.5w²)
 ```
 
 | Wave | Budget | Typical Composition |
 |------|--------|-------------------|
-| 9 | 102 | Mixed scouts + raiders + breachers |
-| 10 | 125 (milestone) | Heavy: multiple breachers + artillery + overseer |
-| 12 | 126 | Sustained mixed composition |
-| 15 | 175 (milestone) | Massive: every enemy type, multiple overseers |
-| 20 | 235 (milestone) | Overwhelming: tests maximum factory output |
+| 9 | 86 | Mixed scouts + raiders + breachers |
+| 10 | 100 | Heavy: multiple breachers + artillery |
+| 12 | 130 | Sustained mixed composition |
+| 15 | 183 | Massive: every enemy type, multiple overseers |
+| 20 | 290 | Overwhelming: tests maximum factory output |
 
 **Late-game production demands:**
 - Plasma ammo chain online (full copper > circuit > power_cell > ammo_plasma path)
@@ -797,7 +801,7 @@ spawnBudget = 30 + (waveIndex x 8) + (waveIndex / 5) x 15  (milestone spike)
 | Storage capacity limits | Medium | Low | **P1** | Not started |
 | Structure removal / refund command | Medium | Low | **P1** | Not started |
 | Wave spawning from `waves.json` (replace formula) | High | Medium | **P1** | Not started |
-| Procedural wave generation (wave 9+) | Medium | Medium | **P1** | Not started |
+| Procedural wave generation (wave 9+, quadratic budget) | Medium | Medium | **P1** | Not started |
 | Conveyor-routed logistics (per-building buffers, backpressure) | Medium | High | **P2** | Not started (see `building_specifications.md`) |
 | Power priority system | Low | Medium | **P2** | Not started |
 | Structure upgrade system | Low | Medium | **P2** | Not started |
@@ -826,3 +830,4 @@ spawnBudget = 30 + (waveIndex x 8) + (waveIndex / 5) x 15  (milestone spike)
 - 2026-02-15: Initial draft — forward-looking v1 design for factory and economy systems.
 - 2026-02-15: Accuracy pass — fixed recipe times (craft_wall_kit 1.2s, craft_turret_core 2.5s, craft_repair_kit 2.0s), corrected bootstrap state (2 turrets, 80 starting ammo), fixed placement validation status (PlacementValidator exists), clarified current vs proposed production rates in balance framework, corrected balance ratio table turret counts.
 - 2026-02-16: Post-Milestone-0 status update — marked completed P0 items (build cost enforcement, per-turret combat, recipe-driven production, all production chains). Replaced superseded section 5 (zone-based logistics) with pointer to `building_specifications.md`. Fixed storage power draw from +1 to 0 per building specs. Added status column to Appendix B priority matrix.
+- 2026-02-16: Major cross-PRD alignment pass. Replaced build/wave phase model with continuous threat model (per wave_threat_system.md). Updated system execution order to 8 systems. Updated bootstrap from 6 starter structures to HQ-only (per run_bootstrap_session_init.md). Replaced starting inventory (80 ammo_light) with difficulty-scaled resources from wave_threat. Replaced linear wave formula with quadratic budget. Removed "Raid Imminent" warning (no raid subsystem). Updated turret ammo model from global inventory to wall network pools (per building_specifications.md). Updated enemy targeting from probability-based to deterministic behavioral conditions. Updated HUD requirements for grace period countdown and HQ health.

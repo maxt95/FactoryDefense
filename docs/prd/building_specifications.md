@@ -31,7 +31,7 @@
 | **Buffer** | Local item storage at a port; finite capacity, items queue in FIFO order |
 | **Backpressure** | When a downstream buffer is full, upstream items stall, propagating backward through conveyors |
 | **Starvation** | When an input buffer is empty and the building cannot start its next craft cycle |
-| **Logical ammo pool** | The aggregate of all ammo in ammo module output buffers + storage buffers; turrets draw from this if not directly conveyored |
+| **Wall network ammo pool** | Per-wall-network shared ammo pool (capacity = segmentCount × 12); conveyors inject ammo at any wall segment, turrets draw from their network's pool. Supersedes the previous "logical ammo pool" model. |
 | **Recipe pinning** | Player manually locks a building to a specific recipe, overriding auto-selection |
 
 ---
@@ -367,7 +367,7 @@ W  |AM |  E
 
 **Larger output buffer (8):** Ammo recipes produce multiple units per batch (4 light, 3 heavy, 2 plasma). The larger buffer prevents immediate blocking after a single batch.
 
-**Ammo pool contribution:** Ammo sitting in the output buffer contributes to the logical ammo pool that turrets can draw from.
+**Wall network delivery:** Ammo in the output buffer is delivered to wall networks via conveyors connected to wall segments. Turrets draw ammo from their wall network's shared pool (see §4.11).
 
 ---
 
@@ -540,7 +540,7 @@ W  |STO|  E
 
 **Output priority:** Items are pulled from outputs in FIFO order. When multiple output ports have connected conveyors, each port serves independently from the shared pool.
 
-**Ammo pool contribution:** Ammo stored here contributes to the logical ammo pool.
+**Ammo routing:** Ammo stored here can be routed via conveyors to wall segments for injection into wall network ammo pools.
 
 **4 ports (2 in, 2 out):** Allows storage to serve as a junction — accept items from multiple sources, distribute to multiple destinations. Critical for mid-game logistics.
 
@@ -576,28 +576,29 @@ W  | W |  E
 
 ---
 
-### 4.11 Turret Mount
+### 4.11 Turret Mount (Wall-Mounted)
 
-**Purpose:** Consumes ammunition to fire projectiles at enemies within range.
+> **Superseded model.** This section previously described turrets as standalone 1×1 buildings with an ammo input port. Per the living PRD and `wave_threat_system.md`, turrets now mount on wall segments (1:1) and draw ammo from per-wall-network shared pools. The standalone turret building model is removed.
+
+**Purpose:** Mounts on a wall segment to fire projectiles at enemies within range, consuming ammo from the wall network's shared pool.
 
 ```
-     N
    +---+
-W  | T |  E
-[IN:12 ammo]
+   | W |  ← wall segment
+   | T |  ← turret mounted on wall (same tile)
    +---+
-     S
+   (no ports — ammo from wall network pool)
 ```
 
 | Property | Value |
 |----------|-------|
-| Grid footprint | 1x1 |
-| Input ports | 1 — West, filter: `kind(ammo)`, buffer: **12** |
+| Grid footprint | Shares wall segment's 1×1 tile (turret is an attachment, not a separate entity) |
+| Input ports | None — draws ammo from the wall network's shared pool |
 | Output ports | None |
 | Power draw | 0 |
-| Health | 100 |
-| Build cost | 1 turret_core + 2 plate_steel |
-| Blocks movement | Yes |
+| Health | **100** (independent from wall). Turret is also destroyed if the host wall segment is destroyed, regardless of turret HP. |
+| Build cost | 1 turret_core + 2 plate_steel (placed on an existing wall segment) |
+| Blocks movement | Yes (inherited from wall segment) |
 
 **Turret type stats (determined by `turretDefID` on entity):**
 
@@ -608,11 +609,17 @@ W  | T |  E
 | gattling_tower | ammo_light | 4.2 | 5 | 6.5 | 8 |
 | plasma_sentinel | ammo_plasma | 0.9 | 22 | 11 | 45 |
 
-**Ammo consumption priority:**
-1. Check own input buffer first (direct conveyor feed)
-2. If empty, fall back to logical ammo pool (sum of all ammo module output buffers + storage buffers)
+**Wall network ammo pool model:**
+- Each connected group of wall segments forms a **wall network** (connected components via cardinal adjacency).
+- Each wall network has a **shared ammo pool** with capacity = `segmentCount × 12`.
+- Conveyors inject ammo into the wall network at any segment along the wall line.
+- Turrets draw from their network's shared pool. No ammo in the pool = turret cannot fire.
+- When a wall segment is destroyed, the turret mounted on it is also destroyed. If the segment's destruction splits the network, each resulting sub-network gets its own pool (ammo redistributed proportionally).
 
-This hybrid approach lets players optionally optimize ammo delivery via conveyors while keeping the game playable without routing conveyors to every turret. A turret with a dedicated feed has guaranteed bandwidth; one relying on the pool competes with other turrets.
+**Key design implications:**
+- Players must route conveyors to wall segments to supply ammo — turrets have no direct input ports.
+- Longer wall lines have larger ammo pools, providing more buffer during sustained attacks.
+- A wall breach can destroy both the wall and its turret, and may split the ammo pool.
 
 ---
 
@@ -629,10 +636,10 @@ This hybrid approach lets players optionally optimize ammo delivery via conveyor
 
 ### 5.2 Conveyor System Execution Order
 
-The `ConveyorSystem` runs after `ProductionSystem` and before `CombatSystem`:
+The `ConveyorSystem` runs after `ProductionSystem` and before `TechSystem` (8 systems total):
 
 ```
-Command > Production > Conveyor > Wave > EnemyMovement > Combat > Projectile
+Command > Economy/Production > Conveyor > Tech > Wave > EnemyMovement > Combat > Projectile
 ```
 
 Processing within the ConveyorSystem per tick:
@@ -713,23 +720,31 @@ For each conveyor tile with item progress >= 1.0 (processed **downstream-first**
 
 **Bottleneck:** Smelter A is the constraint — it can only produce 0.5 plates/s, and Smelter B needs 2 per batch. Adding a second iron miner + using parallel smelting would double throughput.
 
-### 6.3 Turret with Direct Feed vs Pool
+### 6.3 Wall Network Ammo Supply
 
-**Direct feed (dedicated conveyor):**
+**Conveyor feeds wall network:**
 ```
-[AMMO MODULE] --> [CONV] --> [CONV] --> [TURRET]
+[AMMO MODULE] --> [CONV] --> [CONV] --> [WALL SEGMENT] ── [WALL+TURRET] ── [WALL+TURRET]
 ```
-- Ammo flows directly into turret's input buffer (cap 12)
-- Turret draws from local buffer first — guaranteed supply
-- 12 ammo buffer = 6 seconds of sustained fire for turret_mk1
+- Ammo flows from ammo module into a wall segment via conveyor
+- Wall segment injects ammo into the wall network's shared pool
+- All turrets mounted on walls in that connected network draw from the shared pool
+- Pool capacity = segmentCount × 12 (e.g., 5 wall segments = 60 ammo capacity)
 
-**Pool fallback (no conveyor to turret):**
+**Storage as intermediate buffer:**
 ```
-[AMMO MODULE] --> [CONV] --> [STORAGE]    [TURRET] (no conveyor)
+[AMMO MODULE] --> [CONV] --> [STORAGE] --> [CONV] --> [WALL SEGMENT]
 ```
-- Ammo sits in ammo module output buffer and/or storage
-- Turret draws from logical ammo pool (aggregate of all accessible ammo)
-- Works fine, but if 3 turrets share the pool and only 2 ammo modules feed it, some turrets will dry fire
+- Storage smooths production/consumption mismatches before ammo enters the wall network
+- Useful when ammo production is bursty but turret consumption is steady
+
+**Split wall network risk:**
+```
+[WALL+TURRET] ── [WALL] ── [WALL+TURRET]    (if middle wall destroyed → 2 separate networks)
+```
+- If the connecting wall segment is destroyed, the network splits into two sub-networks
+- Each sub-network gets its own ammo pool — turrets on each side only draw from their local pool
+- Redundant conveyor feeds to different wall segments mitigate this risk
 
 ---
 
@@ -747,7 +762,7 @@ For each conveyor tile with item progress >= 1.0 (processed **downstream-first**
 | Merger | 30 | +1 | 2x back: any, 1 | front: any, 1 | 1 item | — | No |
 | Storage | 60 | 0 | W: any, 24; N: any, 24 | E: any, 24; S: any, 24 | 48 shared | pass-through | Yes |
 | Wall | 150 | 0 | — | — | — | — | Yes |
-| Turret Mount | 100 | 0 | W: ammo, 12 | — | — | fires projectiles | Yes |
+| Turret Mount | 100 | 0 | — (wall network pool) | — | — | wall-mounted, fires projectiles; also destroyed if wall dies | Yes (wall) |
 
 ---
 
@@ -865,3 +880,4 @@ The key change: items no longer live in a global `EconomyState.inventories` dict
 ## Changelog
 
 - 2026-02-15: Initial draft — conveyor-routed connection model with per-building buffers.
+- 2026-02-16: Cross-PRD alignment: Rewrote Turret Mount section (§4.11) from standalone building with ammo input port to wall-mounted model with wall network shared ammo pools per wave_threat_system.md and living PRD. Updated terminology, quick reference table, ammo pool references in Ammo Module and Storage sections, and worked example §6.3.

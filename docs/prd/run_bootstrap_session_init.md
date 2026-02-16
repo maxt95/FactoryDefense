@@ -61,7 +61,7 @@ All values sourced from linked PRDs. This table is the canonical cross-reference
 | **Trickle spawn interval** | 15s | 12s | 8s | wave_threat |
 | **Trickle enemies/spawn** | 1 | 1–2 | 2–3 | wave_threat |
 | **Trickle composition** | Swarmlings | Swarmlings | Swarmlings + scouts | wave_threat |
-| **Inter-wave gap base** | TBD | TBD | TBD | wave_threat |
+| **Inter-wave gap base** | 120s | 90s | 60s | wave_threat |
 | **HQ health** | 500 | 500 | 500 | wave_threat |
 
 ### 2.2 Data Representation
@@ -78,7 +78,7 @@ Difficulty parameters live in `hq.json` (starting resources, HQ stats) and `wave
 |----------|-------|-----------|
 | Width | 96 tiles | Enough horizontal space for factory + buffer before spawn edge |
 | Height | 64 tiles | Comfortable vertical space for multi-lane layouts |
-| HQ position | (40, 32) | Left-of-center; factory builds left, defenses build right toward spawn |
+| HQ position | (39, 31) | Bottom-left anchor of 2×2 footprint → cells (39–40, 31–32). Straddles factory/defense zone boundary. |
 | Spawn edge X | 56 | 16 tiles east of HQ — room for walls/turrets but close enough for pressure |
 | Spawn Y range | 27–36 | 10-tile corridor centered on HQ row |
 
@@ -93,7 +93,7 @@ The map has three implicit zones that the player discovers through play:
  │  (ore, buildings)│ (walls,turrets)│  (spawn → HQ path)│
  │   x: 0–39       │  x: 40–50     │   x: 50–56+       │
  └──────────────────┴────────────────┴───────────────────┘
-                    ▲ HQ at (40,32)
+                    ▲ HQ at (39,31) — 2×2 footprint: (39–40, 31–32)
 ```
 
 - **Factory Zone** (west of HQ): Where ore patches spawn and production chains are built. Protected by distance from spawn edge.
@@ -109,18 +109,18 @@ Per `ore_patches_resource_nodes.md`, Ring 0 patches are within immediate reach o
 - **Count**: 3 / 5 / 7 by difficulty (hard / normal / easy)
 - **Placement region**: Within 6 tiles of HQ (x: 34–46, y: 26–38), excluding restricted cells
 - **Composition**: Weighted by rarity — iron (1.0), copper (0.6), coal (0.4)
-- **Guarantee**: At least 2 iron patches and 1 copper patch in Ring 0 regardless of difficulty. Coal is not guaranteed.
-- **Richness**: Ring 0 patches are always `normal` richness tier.
+- **Guarantee**: At least one patch each of iron, copper, and coal in Ring 0 regardless of difficulty (per `ore_patches_resource_nodes.md`).
+- **Richness**: Ring 0 patches use varied richness distribution: 40% poor, 50% normal, 10% rich (per `ore_patches_resource_nodes.md`).
 - **Algorithm**: Poisson-disc sampling within the placement region with minimum 3-tile separation between patches. Deterministic from run seed.
 
 ### 3.4 Restricted Cells
 
 The following cells cannot have structures or ore patches placed on them:
 
-- HQ footprint: 2×2 centered at (40, 32) → cells (39–40, 31–32) per `wave_threat_system.md`
+- HQ footprint: 2×2 anchored at (39, 31) → cells (39–40, 31–32) per `wave_threat_system.md`. Anchor = bottom-left corner.
 - Ramp cells: (47, 31), (47, 32), (47, 33) per existing `BoardDef.starter`
 
-> **Note**: The current code has a 5-cell cross pattern for restricted cells around HQ. This should be reconciled with the 2×2 HQ footprint from `wave_threat_system.md`. The PRD-canonical HQ footprint is 2×2.
+> **Note**: The current code has a 5-cell cross pattern for restricted cells around HQ. This should be migrated to the 2×2 HQ footprint (39–40, 31–32) per `wave_threat_system.md`.
 
 ---
 
@@ -133,7 +133,7 @@ This is the ordered list of operations that compose `WorldState.bootstrap(diffic
 - Apply restricted cells and ramp definitions.
 
 ### Step 2: Place HQ Entity
-- Spawn HQ as a 2×2 structure entity at base position (40, 32).
+- Spawn HQ as a 2×2 structure entity at base position (39, 31) — bottom-left anchor, occupying cells (39–40, 31–32).
 - Set HQ health to 500 (from `wave_threat_system.md`).
 - HQ has 24-slot storage capacity and 4 output ports (N/S/E/W).
 - HQ acts as the initial storage hub — starting resources are placed in the HQ's buffer.
@@ -193,7 +193,7 @@ When the grace timer expires:
 Per `wave_threat_system.md` §2.3: **the run ends when HQ health reaches 0.** This is the only loss condition.
 
 **Damage sources that can destroy the HQ:**
-- Enemy entities that reach the HQ position deal their damage value (varies by type: swarmling ~1, raider ~3).
+- Enemy entities that reach the HQ position deal their `baseDamage` per attack (swarmling=5, drone_scout=8, raider=12, breacher=15, artillery_bug=20, overseer=10; breachers deal 2× to walls). See `wave_threat_system.md` §6.3 for canonical values.
 - No passive repair — only `repair_kit` deliveries via conveyors restore HQ health (per `wave_threat_system.md`).
 
 **When HQ health hits 0:**
@@ -268,7 +268,7 @@ This section describes the intended player experience in the first 30 seconds, s
 
 1. **Camera** centers on HQ. The factory zone is visible to the west, the kill zone to the east.
 2. **HQ** is visible as the largest structure on the map, with a health bar.
-3. **Ore patches** are visible as colored terrain markers (iron = blue-grey, copper = orange, coal = dark) scattered around the HQ.
+3. **Ore patches** are visible as colored terrain markers (iron = rust orange, copper = teal-green, coal = dark charcoal) scattered around the HQ (per `ore_patches_resource_nodes.md`).
 4. **Nothing else is built.** The map is empty except for the HQ and ore patches.
 5. **Resource HUD** shows starting inventory from HQ storage.
 6. **Grace period timer** counts down prominently.
@@ -303,7 +303,7 @@ The current `WorldState.bootstrap()` differs from this PRD in several ways that 
 | `RunState.baseIntegrity = 100` | HQ entity health = 500 | Migrate to entity health |
 | No run seed | Deterministic seed for ore placement | Add seed field |
 | No phase tracking | `RunState.phase` enum | Add phase field |
-| 5-cell cross restricted zone | 2×2 HQ footprint restricted zone | Reconcile geometry |
+| 5-cell cross restricted zone | 2×2 HQ footprint at (39, 31) | Reconcile geometry |
 | No `gameOver` event emitted | `SimEvent.gameOver` with tick count | Add event kind |
 | No end-of-run summary | Stats summary screen on game over | Build summary view |
 | Extract button visible and functional | Extraction deferred — hide or remove | Remove from T0 UI |
@@ -357,3 +357,4 @@ The current `WorldState.bootstrap()` differs from this PRD in several ways that 
 - 2026-02-16: Initial draft. Unified bootstrap details from wave_threat, ore_patches, and factory_economy PRDs.
 - 2026-02-16: Resolved bootstrap structures — HQ only, player builds everything else.
 - 2026-02-16: Added §6 end-of-run conditions: loss (HQ destroyed), no win condition at T0, summary stats, post-summary flow, complete state machine diagram.
+- 2026-02-16: Cross-PRD alignment: Ring 0 coal now guaranteed (per ore_patches), Ring 0 richness now varied (per ore_patches), ore patch colors corrected to match ore_patches canonical definitions.

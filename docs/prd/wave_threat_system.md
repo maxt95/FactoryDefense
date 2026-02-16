@@ -25,7 +25,7 @@ The HQ is the only structure the player begins with. It is both the origin of th
 | Build cost | N/A (placed at game start) |
 | Storage capacity | 24 slots (shared input/output) |
 | Power draw | 0 |
-| Ports | 4 output (one per cardinal face) |
+| Ports | 4 bidirectional (one per cardinal face): each port serves as output for starting resources and input for repair_kit delivery |
 
 ### 2.1 Starting Resources
 
@@ -127,8 +127,8 @@ Waves 1–8 use hand-authored compositions from `waves.json`. These provide a cu
 | 4 | 26 | 6 drone_scout, 2 raider |
 | 5 | 32 | 10 swarmling, 2 raider, 1 breacher |
 | 6 | 38 | 8 drone_scout, 2 raider, 1 breacher |
-| 7 | 50 | 12 swarmling, 3 raider, 1 breacher, 1 artillery_bug |
-| 8 | 82 | 10 drone_scout, 3 raider, 2 breacher, 1 artillery_bug, 1 overseer |
+| 7 | 40 | 12 swarmling, 3 raider, 2 breacher |
+| 8 | 68 | 10 drone_scout, 3 raider, 2 breacher, 1 overseer |
 
 ### 4.2 Procedural Waves (9+)
 
@@ -160,10 +160,10 @@ Enemy types become available for procedural composition once the wave budget exc
 | drone_scout | 2 | 0 | Always |
 | raider | 5 | 20 | Wave 9 (budget 87) — already unlocked |
 | breacher | 8 | 30 | Wave 9 (budget 87) — already unlocked |
-| artillery_bug | 10 | 45 | Wave 9 (budget 87) — already unlocked |
 | overseer | 14 | 60 | Wave 9 (budget 87) — already unlocked |
+| ~~artillery_bug~~ | ~~10~~ | ~~45~~ | **Deferred to post-v1** |
 
-> Note: Since hand-authored waves already introduce all types by wave 8 (budget 82), the budget gates primarily exist as a safety valve and for future enemy types with higher thresholds.
+> Note: artillery_bug is defined in data but deferred to post-v1. The v1 enemy roster is 5 types: swarmling, drone_scout, raider, breacher, overseer.
 
 ### 4.4 Procedural Composition Algorithm
 
@@ -234,8 +234,8 @@ While the default is "attack nearest blocking structure," specific enemy types h
 | drone_scout | None — slightly tougher swarmling. |
 | raider | **Structure seeker**: If a non-wall structure is within 4 cells and reachable without crossing a wall, the raider diverts to attack it instead of following the flow field. Targets the nearest qualifying structure. |
 | breacher | **Wall breaker**: Deals 2× damage to walls. Prioritizes attacking walls even when a gap exists nearby. Bred to create breaches. |
-| artillery_bug | **Ranged attacker**: Stops 6 cells from the nearest structure and fires ranged projectiles. Does not melee. Targets the highest-HP structure in range (typically walls). |
 | overseer | **Aura buffer**: Follows flow field normally but grants nearby enemies (4-cell radius) +25% damage and +15% speed. High priority target for the player. |
+| ~~artillery_bug~~ | **Deferred to post-v1.** Ranged attacker concept: stops at range, fires projectiles at structures. Targeting behavior TBD. |
 
 ### 6.4 Death & Cleanup
 
@@ -355,7 +355,7 @@ Turrets consume ammo from their wall network (§8) at their fire rate when targe
 
 ### 9.3 Turret Destruction
 
-If the wall segment a turret is mounted on is destroyed, **the turret is destroyed with it**. This is the primary risk of wall breaches — losing turrets is expensive and leaves a gap in firepower.
+Turrets have **independent health (100 HP)** and can be damaged separately from their wall. However, if the wall segment a turret is mounted on is destroyed, **the turret is also destroyed regardless of its remaining HP**. This dual-vulnerability is the primary risk of wall breaches — losing turrets is expensive and leaves a gap in firepower.
 
 The turret's build cost is **not refunded** on destruction.
 

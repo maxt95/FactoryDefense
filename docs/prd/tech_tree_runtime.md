@@ -259,7 +259,7 @@ All 19 nodes from `tech_nodes.json` with their assigned effects. Each node falls
 
 | Node | Costs | Prerequisites | Effects |
 |------|-------|---------------|---------|
-| `logistics_1` | 20 plate_iron | root | **Building gate:** unlocks `conveyor` placement (Mk1 conveyors available from start in build menu, but tech gate ensures player has engaged with production first). **Passive bonus:** conveyors draw 0 power (down from 1). |
+| `logistics_1` | 20 plate_iron | root | **Passive bonus:** conveyors draw 0 power (down from 1). (Conveyors are ungated — available from start. This node rewards early logistics investment with free conveyor power.) |
 | `defense_1` | 40 ammo_light | root | **Building gate:** unlocks `gattling_tower` turret type. **Passive bonus:** all turret mounts gain +25 HP (100 -> 125). |
 | `smelting_advanced` | 20 plate_copper | root | **Recipe gate:** unlocks `smelt_steel` recipe. **Upgrade gate:** Smelter Mk2 upgrade (1.3x production speed, cost: 3 plate_steel + 2 gear). **Passive bonus:** smelters gain +15% production speed (craft progress += 1.15x base rate). |
 
@@ -267,12 +267,13 @@ All 19 nodes from `tech_nodes.json` with their assigned effects. Each node falls
 
 | Node | Costs | Prerequisites | Effects |
 |------|-------|---------------|---------|
-| `conveyor_mk2` | 12 gear | logistics_1 | **Building gate:** unlocks `splitter` and `merger` placement. **Upgrade gate:** Miner Mk2 upgrade (1.5x extraction rate, cost: 4 gear + 2 circuit). |
+| `conveyor_mk2` | 12 gear | logistics_1 | **Building gate:** unlocks `splitter` and `merger` placement. **Upgrade gate:** Miner Mk2 upgrade (1.5x extraction rate, cost: 4 gear + 2 circuit). **Building gate:** unlocks `conveyor_mk2` building variant (faster conveyors, 3 ticks/tile instead of 5). |
 | `storage_bins` | 14 plate_steel | logistics_1 | **Building gate:** unlocks `storage` placement. **Passive bonus:** global inventory base capacity +50 (100 -> 150). |
 | `heavy_ammo` | 25 ammo_heavy | defense_1 | **Recipe gate:** unlocks `craft_ammo_heavy` recipe. **Mechanic unlock:** heavy ammo has AoE splash damage (2-cell radius, 40% damage to adjacent enemies). |
-| `fortification` | 16 wall_kit | defense_1 | **Passive bonus:** walls gain +10% HP (150 -> 165). **Building gate:** unlocks `conveyor_mk2` building variant (faster conveyors, 3 ticks/tile instead of 5). |
+| `fortification` | 16 wall_kit | defense_1 | **Passive bonus:** walls gain +10% HP (150 -> 165). |
 | `steel_working` | 25 plate_steel | smelting_advanced | **Recipe gate:** unlocks `craft_turret_core` recipe. **Passive bonus:** power plants generate +3 power each (12 -> 15). |
-| `electronics_1` | 20 circuit | smelting_advanced | **Recipe gate:** unlocks `assemble_power_cell` recipe. **Building gate:** unlocks `assembler` for power_cell production. |
+| `electronics_1` | 20 circuit | smelting_advanced | **Recipe gate:** unlocks `assemble_power_cell` recipe. (Assembler building is ungated — available from start for gear, circuit, and other base recipes.) |
+| `geology_survey_1` | 12 gear | logistics_1 | **Mechanic unlock:** reveals Ring 1 ore patches (distance 7–14 tiles). See `ore_patches_resource_nodes.md` §8. |
 
 #### Tier 3 — Advanced
 
@@ -282,6 +283,7 @@ All 19 nodes from `tech_nodes.json` with their assigned effects. Each node falls
 | `turret_core_fabrication` | 8 turret_core | steel_working | **Building gate:** unlocks `turret_mk2` turret type. **Upgrade gate:** Turret Mk2 upgrade (uses `turret_mk2` stats, cost: 2 turret_core). |
 | `power_cells` | 12 power_cell | electronics_1 | **Recipe gate:** unlocks `craft_ammo_plasma` recipe. **Passive bonus:** ammo module output buffer +4 (8 -> 12). |
 | `plasma_research` | 12 ammo_plasma | electronics_1 | **Building gate:** unlocks `plasma_sentinel` turret type. **Passive bonus:** all turrets gain +1 range. |
+| `geology_survey_2` | 18 plate_steel | geology_survey_1 | **Mechanic unlock:** reveals Ring 2 ore patches (distance 15–22 tiles). See `ore_patches_resource_nodes.md` §8. |
 
 #### Tier 4 — Endgame
 
@@ -292,19 +294,18 @@ All 19 nodes from `tech_nodes.json` with their assigned effects. Each node falls
 | `reactive_walls` | 30 wall_kit | fortification | **Upgrade gate:** Reinforced Wall upgrade (2x health, 150 -> 300, cost: 2 wall_kit). **Mechanic unlock:** walls reflect 10% of melee damage back to attacking enemies. |
 | `automated_repair` | 18 repair_kit | logistics_2 | **Mechanic unlock:** structures adjacent to a storage containing repair_kits auto-repair 2 HP/second. Consumes 1 repair_kit per 20 HP repaired. |
 | `plasma_turrets` | 25 ammo_plasma | power_cells, plasma_research | **Passive bonus:** plasma_sentinel damage +10 (45 -> 55). |
+| `geology_survey_3` | 14 circuit | geology_survey_2 | **Mechanic unlock:** reveals Ring 3 ore patches (distance 23–32 tiles). See `ore_patches_resource_nodes.md` §8. |
 
 ### 4.3 Effect Summary by Category
 
-**Building gates (7 nodes):**
+**Building gates (5 nodes):**
 
 | Node | Unlocked Building/Turret |
 |------|------------------------|
 | `logistics_1` | conveyor (if gated) |
 | `defense_1` | gattling_tower |
-| `conveyor_mk2` | splitter, merger |
+| `conveyor_mk2` | splitter, merger, conveyor_mk2 (faster variant) |
 | `storage_bins` | storage |
-| `fortification` | conveyor_mk2 (faster variant) |
-| `electronics_1` | assembler (for power_cell) |
 | `plasma_research` | plasma_sentinel |
 
 **Recipe gates (5 nodes):**
@@ -345,7 +346,7 @@ All 19 nodes from `tech_nodes.json` with their assigned effects. Each node falls
 | `explosive_payloads` | Heavy ammo: +1 output per batch |
 | `plasma_turrets` | Plasma sentinel: +10 damage |
 
-**Mechanic unlocks (4 nodes):**
+**Mechanic unlocks (7 nodes):**
 
 | Node | Mechanic |
 |------|----------|
@@ -354,6 +355,9 @@ All 19 nodes from `tech_nodes.json` with their assigned effects. Each node falls
 | `explosive_payloads` | Enhanced AoE (3-cell, 60%) |
 | `reactive_walls` | Damage reflect (10% melee) |
 | `automated_repair` | Auto-repair from adjacent storage |
+| `geology_survey_1` | Reveals Ring 1 ore patches |
+| `geology_survey_2` | Reveals Ring 2 ore patches |
+| `geology_survey_3` | Reveals Ring 3 ore patches |
 
 ---
 
@@ -496,13 +500,13 @@ public enum ResearchFailureReason: Codable, Hashable, Sendable {
 
 ### 6.4 TechSystem
 
-New system implementing `SimulationSystem`. Runs **between Economy and Wave** in the execution order:
+New system implementing `SimulationSystem`. Runs **between Conveyor and Wave** in the execution order (8 systems total):
 
 ```
-Command > Economy > Tech > Wave > EnemyMovement > Combat > Projectile
+Command > Economy/Production > Conveyor > Tech > Wave > EnemyMovement > Combat > Projectile
 ```
 
-**Why between Economy and Wave:** Research progress depends on power efficiency (computed by Economy) and should complete before Wave checks enable new wave-phase behaviors that might depend on tech state.
+**Why between Conveyor and Wave:** Research progress depends on power efficiency (computed by Economy) and should complete before Wave checks enable new wave-phase behaviors that might depend on tech state. Conveyor runs before Tech so item deliveries are resolved before research completion checks.
 
 **TechSystem.update() logic:**
 
@@ -756,6 +760,9 @@ Research seconds scale with tier depth, reflecting increasing strategic commitme
 | `reactive_walls` | 4 | 120 | 30 wall_kit |
 | `automated_repair` | 4 | 120 | 18 repair_kit |
 | `plasma_turrets` | 4 | 120 | 25 ammo_plasma |
+| `geology_survey_1` | 2 | 80 | 12 gear |
+| `geology_survey_2` | 3 | 100 | 18 plate_steel |
+| `geology_survey_3` | 4 | 120 | 14 circuit |
 
 ### 9.3 Path-to-Leaf Analysis
 
@@ -768,23 +775,23 @@ Total research time from root to each leaf node (1 Lab, full power):
 | `explosive_payloads` | root > defense_1 > heavy_ammo > explosive_payloads | 60 + 80 + 120 = **260s** | 3 |
 | `reactive_walls` | root > defense_1 > fortification > reactive_walls | 60 + 80 + 120 = **260s** | 3 |
 | `automated_repair` | root > logistics_1 > conveyor_mk2 + storage_bins > logistics_2 > automated_repair | 60 + 80 + 80 + 100 + 120 = **440s** | 5 (bottleneck: both T2 prerequisites) |
+| `geology_survey_3` | root > logistics_1 > geology_survey_1 > geology_survey_2 > geology_survey_3 | 60 + 80 + 100 + 120 = **360s** | 4 |
 
 With 2 Labs (1.5x speed), all times reduce by ~33%. The longest path (plasma_turrets, 460s) becomes ~307s.
 
 ### 9.4 Pacing Against Wave Progression
 
-Cross-referencing with factory_economy.md §8 wave timing (build phase = 20s, wave phase = 8s, cycle = 28s per wave):
+Cross-referencing with the continuous threat model (grace period + inter-wave gaps). On Normal difficulty: 120s grace period, 90s base inter-wave gap compressing by 2s/wave:
 
 | Wave | Approx Game Time | Expected Research Milestone |
 |------|-----------------|---------------------------|
-| 1 | 0-28s | Lab not yet built. Player focuses on starter production. |
-| 2-3 | 28-84s | Lab built during build phase 2-3. First Tier 1 research started. |
-| 3-5 | 76-140s | First Tier 1 node completing (Lab built ~30-60s + 60s research). Player has basic unlocks. |
-| 5-7 | 132-196s | One Tier 2 node completing. Steel or electronics branch opening. |
-| 7-9 | 188-252s | 2-3 Tier 2 nodes done. Gated buildings (gattling, storage) available. |
-| 10-11 | 272-308s | First Tier 3 node completing. Turret Mk2 or plasma ammo unlocking. |
-| 12-14 | 328-392s | Tier 3 complete on primary branch. Tier 4 research starting. |
-| 15+ | 412s+ | Tier 4 nodes unlocking. Full endgame capability. |
+| Grace end | 120s | Lab not yet built. Player focuses on starter production. |
+| 1-2 | 120-300s | Lab built during early play. First Tier 1 research started. |
+| 3-4 | 300-470s | First Tier 1 node completing (Lab built ~180s + 60s research). Player has basic unlocks. |
+| 5-7 | 470-700s | 1-2 Tier 2 nodes completing. Steel or electronics branch opening. |
+| 8-10 | 700-900s | 2-3 Tier 2 nodes done. Gated buildings (gattling, storage) available. |
+| 11-13 | 900-1100s | First Tier 3 node completing. Turret Mk2 or plasma ammo unlocking. |
+| 14+ | 1100s+ | Tier 3/4 nodes unlocking. Advanced capability. |
 
 **Key pacing constraint:** The player should NOT have gattling_tower or turret_mk2 before they face raiders (wave 3-4). With Lab build time (~30-60s) plus research time (60s Tier 1 + 80s Tier 2 = 140s minimum from research start), these are reliably mid-game unlocks (wave 5+), not early-game trivials.
 

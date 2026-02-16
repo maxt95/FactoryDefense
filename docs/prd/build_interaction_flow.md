@@ -133,7 +133,7 @@ During drag-draw (§4), direction is inferred from the drag vector and rotation 
 | Miner | 1 output | Controls which side ore exits |
 | Smelter | 1 input, 1 output | Controls input/output faces |
 | Assembler | 2 inputs, 1 output | Controls which faces accept which inputs |
-| Ammo Module | 1 input, 1 output | Controls input/output faces |
+| Ammo Module | 2 inputs, 1 output | Controls input/output faces (per `building_specifications.md`: West + North inputs) |
 | Conveyor | 1 input, 1 output | Controls flow direction |
 | Splitter | 1 input, 2 outputs | Controls split direction |
 | Merger | 2 inputs, 1 output | Controls merge direction |
@@ -384,3 +384,4 @@ enum Rotation: Int, Codable {
 
 - 2026-02-16: Initial draft. Defines interaction modes, rotation, demolish, conveyor drag-draw, and command flow.
 - 2026-02-16: Resolved all open questions. Conveyor free-removal is intentional. Rotation resets on mode exit. Drag-draw extended to walls. Touch disambiguation rules canonicalized.
+- 2026-02-16: Cross-PRD alignment: Fixed Ammo Module port count from 1 input to 2 inputs (per building_specifications.md).

@@ -282,11 +282,11 @@ Per tick (if miner is active and powered):
 
 At base mining rate (1 ore/sec, no bonuses):
 
-| Ore Type | Total Ore (Normal) | Time to Deplete | Waves Survived (~20s build + ~8s wave) |
-|----------|-------------------|-----------------|----------------------------------------|
-| Iron | 500 | 8 min 20 sec | ~18 wave cycles |
-| Copper | 400 | 6 min 40 sec | ~14 wave cycles |
-| Coal | 300 | 5 min 00 sec | ~11 wave cycles |
+| Ore Type | Total Ore (Normal) | Time to Deplete | Approx Surge Waves (Normal, 90s base gap) |
+|----------|-------------------|-----------------|-------------------------------------------|
+| Iron | 500 | 8 min 20 sec | ~5-6 surge waves |
+| Copper | 400 | 6 min 40 sec | ~4-5 surge waves |
+| Coal | 300 | 5 min 00 sec | ~3-4 surge waves |
 
 ### 5.3 Exhaustion
 
@@ -299,12 +299,12 @@ When `remainingOre` reaches 0:
 
 ### 5.4 Renewal System
 
-Depleted patches are replaced during **build windows** (between waves). This prevents total resource starvation in long runs while maintaining expansion pressure.
+Depleted patches are replaced during **inter-wave gaps** (the period between surge waves in the continuous threat model). This prevents total resource starvation in long runs while maintaining expansion pressure.
 
 **Renewal rules:**
-- **Trigger:** At the start of each build window, the system enqueues every exhausted patch where `renewalProcessed == false`
+- **Trigger:** At the start of each inter-wave gap (when a surge wave is cleared), the system enqueues every exhausted patch where `renewalProcessed == false`
 - **Count:** One renewal patch spawn request is created per newly processed exhaustion (1:1 replacement)
-- **Timing:** Renewals spawn at the start of the build window, before the player's build phase timer begins
+- **Timing:** Renewals spawn at the start of the inter-wave gap. Trickle pressure continues normally during this period.
 - **Ore type:** Renewal patches match the exhausted patch's ore type (iron replaces iron, etc.)
 - **Richness:** Determined by the current highest-revealed ring's richness distribution
 - **Location:** Weighted toward map edges with a minimum distance from existing active patches (see §5.5)
@@ -640,9 +640,9 @@ EconomySystem.update(state, context):
   ...
 ```
 
-**Renewal logic** runs in the **WaveSystem** (or a new MapSystem) at the start of each build window:
+**Renewal logic** runs in the **WaveSystem** (or a new MapSystem) at the start of each inter-wave gap (when `SimEvent.waveCleared` is emitted):
 ```
-onBuildWindowStart:
+onInterWaveGapStart:
   for patch in orePatches
     .filter({ $0.isExhausted && !$0.renewalProcessed })
     .sorted(by: { $0.id < $1.id }):

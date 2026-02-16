@@ -62,7 +62,7 @@ The current simulation and renderer have fundamental scaling limitations:
 - **Enemy movement** creates a new `Pathfinder()` and rebuilds the full `navigationMap` (6,144+ tiles) every single tick. Each enemy runs independent A*. At 1000 enemies this is catastrophic.
 - **Enemy positions** are integer `GridPosition` — movement appears jerky at 20 Hz with no sub-grid precision.
 - **WhiteboxRenderer** allocates fresh Metal buffers every frame and runs a compute kernel that loops over ALL structures and ALL entities per pixel. At 1920×1080 with 150 entities: 311M iterations per frame.
-- **No interpolation** of entity positions between ticks — `InterpolatedWorldFrame` only blends scalar values (integrity, currency).
+- **No interpolation** of entity positions between ticks — `InterpolatedWorldFrame` only blends scalar values (integrity).
 
 ### 1.2 Target Scale
 
@@ -346,7 +346,6 @@ public struct EnemyRuntime: Codable, Hashable, Sendable {
     public var archetype: EnemyArchetype
     public var moveEveryTicks: UInt64
     public var baseDamage: Int
-    public var rewardCurrency: Int
 
     // Continuous position
     public var position: SimPosition
@@ -382,10 +381,10 @@ Per tick:
 |-----------|-------------------|-------------------|-----|--------|----------|
 | swarmling | 2 | 0.5 | 10 | 5 | Targets base, fast, fragile |
 | drone_scout | 3 | 0.33 | 20 | 8 | Targets base, moderate |
-| raider | 3 | 0.33 | 45 | 12 | 70% base / 30% nearest structure |
+| raider | 3 | 0.33 | 45 | 12 | Seeks nearest non-wall structure; HQ if path clear |
 | breacher | 4 | 0.25 | 70 | 15 | Targets blocking walls/structures |
-| artillery_bug | 5 | 0.2 | 90 | 20 | Targets highest-value structure in range 6 |
 | overseer | 4 | 0.25 | 140 | 10 | Targets base, buffs nearby enemies |
+| ~~artillery_bug~~ | ~~5~~ | ~~0.2~~ | ~~90~~ | ~~20~~ | **Deferred to post-v1** |
 
 See `factory_economy.md` section 7.6 for full structure targeting behavior and enemy-structure interaction.
 
@@ -486,8 +485,8 @@ New event kinds:
 | Aspect | Status |
 |--------|--------|
 | Spatial targeting via grid query | Gap — O(n) full scan per turret |
-| Per-turret type stats | Gap — all turrets use ammo_light, range 8, damage 12 |
-| Fire rate tracking per turret | Gap — all turrets fire once per tick |
+| Per-turret type stats | Exists — per-turret ammo type, range, fire rate, damage (Milestone 0) |
+| Fire rate tracking per turret | Exists — `lastFireTick` per turret entity (Milestone 0) |
 | Projectile spawning with physics | Gap — fire-and-forget model |
 | `projectileImpact` / `projectileMissed` events | Gap |
 | Position/direction on SimEvent | Gap |
@@ -572,7 +571,7 @@ public struct VFXEventQueue {
 
 | Aspect | Status |
 |--------|--------|
-| `InterpolatedWorldFrame` | Exists — but only interpolates scalars (integrity, currency) |
+| `InterpolatedWorldFrame` | Exists — but only interpolates scalars (integrity) |
 | Per-entity position interpolation | Gap |
 | `InterpolatedEntityFrame` type | Gap |
 | `VFXEventQueue` | Gap |
@@ -1217,3 +1216,4 @@ Phase 1 (Spatial + Projectile)
 ## Changelog
 
 - 2026-02-15: Initial draft — full architecture spec for combat physics, rendering pipeline, and VFX system with 9-phase implementation roadmap.
+- 2026-02-16: Cross-PRD alignment: Updated per-turret type stats and fire rate tracking to Exists (Milestone 0). Fixed raider targeting from probability-based (70/30) to deterministic (seeks nearest non-wall structure) per wave_threat_system.md.
