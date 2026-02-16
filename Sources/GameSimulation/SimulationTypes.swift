@@ -50,6 +50,12 @@ public struct GridPosition: Codable, Hashable, Sendable {
     public func translated(byX dx: Int = 0, byY dy: Int = 0, byZ dz: Int = 0) -> GridPosition {
         GridPosition(x: x + dx, y: y + dy, z: z + dz)
     }
+
+    public func translated(by direction: CardinalDirection, steps: Int = 1) -> GridPosition {
+        let stepCount = max(0, steps)
+        let delta = direction.delta
+        return translated(byX: delta.x * stepCount, byY: delta.y * stepCount)
+    }
 }
 
 public enum CardinalDirection: String, Codable, CaseIterable, Sendable {
@@ -68,6 +74,45 @@ public enum CardinalDirection: String, Codable, CaseIterable, Sendable {
             return (0, 1)
         case .west:
             return (-1, 0)
+        }
+    }
+
+    public var opposite: CardinalDirection {
+        switch self {
+        case .north:
+            return .south
+        case .east:
+            return .west
+        case .south:
+            return .north
+        case .west:
+            return .east
+        }
+    }
+
+    public var left: CardinalDirection {
+        switch self {
+        case .north:
+            return .west
+        case .east:
+            return .north
+        case .south:
+            return .east
+        case .west:
+            return .south
+        }
+    }
+
+    public var right: CardinalDirection {
+        switch self {
+        case .north:
+            return .east
+        case .east:
+            return .south
+        case .south:
+            return .west
+        case .west:
+            return .north
         }
     }
 }
@@ -633,6 +678,8 @@ public struct EconomyState: Codable, Hashable, Sendable {
     public var structureInputBuffers: [EntityID: [ItemID: Int]]
     public var structureOutputBuffers: [EntityID: [ItemID: Int]]
     public var conveyorPayloadByEntity: [EntityID: ConveyorPayload]
+    public var splitterOutputToggleByEntity: [EntityID: Int]
+    public var mergerInputToggleByEntity: [EntityID: Int]
     public var powerAvailable: Int
     public var powerDemand: Int
     public var currency: Int
@@ -647,6 +694,8 @@ public struct EconomyState: Codable, Hashable, Sendable {
         structureInputBuffers: [EntityID: [ItemID: Int]] = [:],
         structureOutputBuffers: [EntityID: [ItemID: Int]] = [:],
         conveyorPayloadByEntity: [EntityID: ConveyorPayload] = [:],
+        splitterOutputToggleByEntity: [EntityID: Int] = [:],
+        mergerInputToggleByEntity: [EntityID: Int] = [:],
         powerAvailable: Int = 0,
         powerDemand: Int = 0,
         currency: Int = 0,
@@ -660,10 +709,44 @@ public struct EconomyState: Codable, Hashable, Sendable {
         self.structureInputBuffers = structureInputBuffers
         self.structureOutputBuffers = structureOutputBuffers
         self.conveyorPayloadByEntity = conveyorPayloadByEntity
+        self.splitterOutputToggleByEntity = splitterOutputToggleByEntity
+        self.mergerInputToggleByEntity = mergerInputToggleByEntity
         self.powerAvailable = powerAvailable
         self.powerDemand = powerDemand
         self.currency = currency
         self.telemetry = telemetry
+    }
+
+    public init(
+        inventories: [ItemID: Int],
+        activeRecipeByStructure: [EntityID: String],
+        pinnedRecipeByStructure: [EntityID: String],
+        productionProgressByStructure: [EntityID: Double],
+        fractionalProductionRemainders: [ItemID: Double],
+        structureInputBuffers: [EntityID: [ItemID: Int]],
+        structureOutputBuffers: [EntityID: [ItemID: Int]],
+        conveyorPayloadByEntity: [EntityID: ConveyorPayload],
+        powerAvailable: Int,
+        powerDemand: Int,
+        currency: Int,
+        telemetry: EconomyTelemetry
+    ) {
+        self.init(
+            inventories: inventories,
+            activeRecipeByStructure: activeRecipeByStructure,
+            pinnedRecipeByStructure: pinnedRecipeByStructure,
+            productionProgressByStructure: productionProgressByStructure,
+            fractionalProductionRemainders: fractionalProductionRemainders,
+            structureInputBuffers: structureInputBuffers,
+            structureOutputBuffers: structureOutputBuffers,
+            conveyorPayloadByEntity: conveyorPayloadByEntity,
+            splitterOutputToggleByEntity: [:],
+            mergerInputToggleByEntity: [:],
+            powerAvailable: powerAvailable,
+            powerDemand: powerDemand,
+            currency: currency,
+            telemetry: telemetry
+        )
     }
 
     public init(
@@ -674,6 +757,8 @@ public struct EconomyState: Codable, Hashable, Sendable {
         structureInputBuffers: [EntityID: [ItemID: Int]],
         structureOutputBuffers: [EntityID: [ItemID: Int]],
         conveyorPayloadByEntity: [EntityID: ConveyorPayload],
+        splitterOutputToggleByEntity: [EntityID: Int] = [:],
+        mergerInputToggleByEntity: [EntityID: Int] = [:],
         powerAvailable: Int,
         powerDemand: Int,
         currency: Int,
@@ -688,6 +773,8 @@ public struct EconomyState: Codable, Hashable, Sendable {
             structureInputBuffers: structureInputBuffers,
             structureOutputBuffers: structureOutputBuffers,
             conveyorPayloadByEntity: conveyorPayloadByEntity,
+            splitterOutputToggleByEntity: splitterOutputToggleByEntity,
+            mergerInputToggleByEntity: mergerInputToggleByEntity,
             powerAvailable: powerAvailable,
             powerDemand: powerDemand,
             currency: currency,

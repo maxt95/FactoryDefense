@@ -650,8 +650,14 @@ public struct EconomySystem: SimulationSystem {
                 state.economy.structureOutputBuffers.removeValue(forKey: structureID)
             }
 
-            if structureType != .conveyor {
+            if !isBeltNode(structureType) {
                 state.economy.conveyorPayloadByEntity.removeValue(forKey: structureID)
+            }
+            if structureType != .splitter {
+                state.economy.splitterOutputToggleByEntity.removeValue(forKey: structureID)
+            }
+            if structureType != .merger {
+                state.economy.mergerInputToggleByEntity.removeValue(forKey: structureID)
             }
         }
 
@@ -659,7 +665,14 @@ public struct EconomySystem: SimulationSystem {
         state.economy.structureInputBuffers = state.economy.structureInputBuffers.filter { validStructureIDs.contains($0.key) }
         state.economy.structureOutputBuffers = state.economy.structureOutputBuffers.filter { validStructureIDs.contains($0.key) }
         state.economy.conveyorPayloadByEntity = state.economy.conveyorPayloadByEntity.filter {
-            structureTypesByID[$0.key] == .conveyor
+            guard let type = structureTypesByID[$0.key] else { return false }
+            return isBeltNode(type)
+        }
+        state.economy.splitterOutputToggleByEntity = state.economy.splitterOutputToggleByEntity.filter {
+            structureTypesByID[$0.key] == .splitter
+        }
+        state.economy.mergerInputToggleByEntity = state.economy.mergerInputToggleByEntity.filter {
+            structureTypesByID[$0.key] == .merger
         }
     }
 
@@ -720,23 +733,17 @@ public struct EconomySystem: SimulationSystem {
     }
 
     private func advanceConveyors(structures: [Entity], state: inout WorldState) {
-        let conveyors = structures
-            .filter { $0.structureType == .conveyor }
-            .sorted { lhs, rhs in
-                if lhs.position.x != rhs.position.x { return lhs.position.x > rhs.position.x }
-                if lhs.position.y != rhs.position.y { return lhs.position.y < rhs.position.y }
-                return lhs.id < rhs.id
+        let beltNodes = structures
+            .filter { structure in
+                guard let type = structure.structureType else { return false }
+                return isBeltNode(type)
             }
+            .sorted(by: { $0.id < $1.id })
 
-        guard !conveyors.isEmpty else { return }
+        guard !beltNodes.isEmpty else { return }
 
-        var conveyorsByPosition: [GridPosition: EntityID] = [:]
-        for conveyor in conveyors {
-            if conveyorsByPosition[conveyor.position] == nil {
-                conveyorsByPosition[conveyor.position] = conveyor.id
-            }
-        }
-
+        let beltNodesByID = Dictionary(uniqueKeysWithValues: beltNodes.map { ($0.id, $0) })
+        let beltNodeIDByPosition = Dictionary(uniqueKeysWithValues: beltNodes.map { ($0.position, $0.id) })
         var structuresByPosition: [GridPosition: Entity] = [:]
         var wallsByPosition: [GridPosition: EntityID] = [:]
         for structure in structures.sorted(by: { $0.id < $1.id }) {
@@ -748,49 +755,88 @@ public struct EconomySystem: SimulationSystem {
             }
         }
 
-        for conveyor in conveyors {
-            guard var payload = state.economy.conveyorPayloadByEntity[conveyor.id] else { continue }
+        for node in beltNodes {
+            guard var payload = state.economy.conveyorPayloadByEntity[node.id] else { continue }
             payload.progressTicks = min(conveyorTicksPerTile, payload.progressTicks + 1)
-            state.economy.conveyorPayloadByEntity[conveyor.id] = payload
+            state.economy.conveyorPayloadByEntity[node.id] = payload
         }
 
-        for conveyor in conveyors {
-            guard let payload = state.economy.conveyorPayloadByEntity[conveyor.id] else { continue }
+        let readySourcePositions = Set(
+            beltNodes.compactMap { node -> GridPosition? in
+                guard let payload = state.economy.conveyorPayloadByEntity[node.id],
+                      payload.progressTicks >= conveyorTicksPerTile else {
+                    return nil
+                }
+                return node.position
+            }
+        )
+
+        for node in beltNodes {
+            guard let payload = state.economy.conveyorPayloadByEntity[node.id] else { continue }
             guard payload.progressTicks >= conveyorTicksPerTile else { continue }
+            guard let nodeType = node.structureType else { continue }
 
-            let targetPosition = conveyor.position.translated(byX: 1)
+            var delivered = false
+            let targetPositions = transferTargets(for: node, structureType: nodeType, state: state)
+            for targetPosition in targetPositions {
+                if let targetBeltID = beltNodeIDByPosition[targetPosition],
+                   state.economy.conveyorPayloadByEntity[targetBeltID] == nil,
+                   enqueueBeltPayload(
+                    itemID: payload.itemID,
+                    targetStructureID: targetBeltID,
+                    sourcePosition: node.position,
+                    readySourcePositions: readySourcePositions,
+                    nodesByID: beltNodesByID,
+                    state: &state
+                   ) {
+                    if nodeType == .splitter {
+                        state.economy.splitterOutputToggleByEntity[node.id, default: 0] += 1
+                    }
+                    state.economy.conveyorPayloadByEntity.removeValue(forKey: node.id)
+                    delivered = true
+                    break
+                }
 
-            if let targetConveyorID = conveyorsByPosition[targetPosition],
-               state.economy.conveyorPayloadByEntity[targetConveyorID] == nil {
-                state.economy.conveyorPayloadByEntity[targetConveyorID] = ConveyorPayload(itemID: payload.itemID, progressTicks: 0)
-                state.economy.conveyorPayloadByEntity.removeValue(forKey: conveyor.id)
-                continue
+                if let targetStructure = structuresByPosition[targetPosition],
+                   let targetType = targetStructure.structureType,
+                   enqueueInputItem(itemID: payload.itemID, structureID: targetStructure.id, structureType: targetType, state: &state) {
+                    if nodeType == .splitter {
+                        state.economy.splitterOutputToggleByEntity[node.id, default: 0] += 1
+                    }
+                    state.economy.conveyorPayloadByEntity.removeValue(forKey: node.id)
+                    delivered = true
+                    break
+                }
+
+                if let wallID = wallsByPosition[targetPosition],
+                   injectWallNetwork(itemID: payload.itemID, wallID: wallID, state: &state) {
+                    if nodeType == .splitter {
+                        state.economy.splitterOutputToggleByEntity[node.id, default: 0] += 1
+                    }
+                    state.economy.conveyorPayloadByEntity.removeValue(forKey: node.id)
+                    delivered = true
+                    break
+                }
             }
 
-            if let targetStructure = structuresByPosition[targetPosition],
-               let targetType = targetStructure.structureType,
-               enqueueInputItem(itemID: payload.itemID, structureID: targetStructure.id, structureType: targetType, state: &state) {
-                state.economy.conveyorPayloadByEntity.removeValue(forKey: conveyor.id)
+            if !delivered {
                 continue
-            }
-
-            if let wallID = wallsByPosition[targetPosition],
-               injectWallNetwork(itemID: payload.itemID, wallID: wallID, state: &state) {
-                state.economy.conveyorPayloadByEntity.removeValue(forKey: conveyor.id)
             }
         }
     }
 
     private func drainStructureOutputBuffers(structures: [Entity], state: inout WorldState) {
-        var conveyorsByPosition: [GridPosition: EntityID] = [:]
+        var beltNodesByPosition: [GridPosition: EntityID] = [:]
+        var beltNodesByID: [EntityID: Entity] = [:]
         var structuresByPosition: [GridPosition: Entity] = [:]
         var wallsByPosition: [GridPosition: EntityID] = [:]
         for structure in structures.sorted(by: { $0.id < $1.id }) {
             if structuresByPosition[structure.position] == nil {
                 structuresByPosition[structure.position] = structure
             }
-            if structure.structureType == .conveyor, conveyorsByPosition[structure.position] == nil {
-                conveyorsByPosition[structure.position] = structure.id
+            if let type = structure.structureType, isBeltNode(type), beltNodesByPosition[structure.position] == nil {
+                beltNodesByPosition[structure.position] = structure.id
+                beltNodesByID[structure.id] = structure
             }
             if structure.structureType == .wall {
                 wallsByPosition[structure.position] = structure.id
@@ -804,10 +850,22 @@ public struct EconomySystem: SimulationSystem {
 
             let outputTarget = structure.position.translated(byX: 1)
 
-            if let conveyorID = conveyorsByPosition[outputTarget] {
-                guard state.economy.conveyorPayloadByEntity[conveyorID] == nil else { continue }
+            if let beltNodeID = beltNodesByPosition[outputTarget] {
+                guard state.economy.conveyorPayloadByEntity[beltNodeID] == nil else { continue }
                 guard let itemID = popFirstOutputItem(structureID: structure.id, state: &state) else { continue }
-                state.economy.conveyorPayloadByEntity[conveyorID] = ConveyorPayload(itemID: itemID, progressTicks: 0)
+                if enqueueBeltPayload(
+                    itemID: itemID,
+                    targetStructureID: beltNodeID,
+                    sourcePosition: structure.position,
+                    readySourcePositions: [],
+                    nodesByID: beltNodesByID,
+                    state: &state
+                ) {
+                    continue
+                }
+                var outputBuffer = state.economy.structureOutputBuffers[structure.id, default: [:]]
+                outputBuffer[itemID, default: 0] += 1
+                state.economy.structureOutputBuffers[structure.id] = outputBuffer
                 continue
             }
 
@@ -830,6 +888,56 @@ public struct EconomySystem: SimulationSystem {
 
             flushAllOutputToGlobalInventory(structureID: structure.id, state: &state)
         }
+    }
+
+    private func transferTargets(for node: Entity, structureType: StructureType, state: WorldState) -> [GridPosition] {
+        let facing = node.rotation.direction
+        switch structureType {
+        case .conveyor, .merger:
+            return [node.position.translated(by: facing)]
+        case .splitter:
+            let toggle = state.economy.splitterOutputToggleByEntity[node.id, default: 0]
+            let first = toggle % 2 == 0 ? facing.left : facing.right
+            let second = first == facing.left ? facing.right : facing.left
+            return [node.position.translated(by: first), node.position.translated(by: second)]
+        default:
+            return []
+        }
+    }
+
+    @discardableResult
+    private func enqueueBeltPayload(
+        itemID: ItemID,
+        targetStructureID: EntityID,
+        sourcePosition: GridPosition,
+        readySourcePositions: Set<GridPosition>,
+        nodesByID: [EntityID: Entity],
+        state: inout WorldState
+    ) -> Bool {
+        guard state.economy.conveyorPayloadByEntity[targetStructureID] == nil else { return false }
+        guard let targetNode = nodesByID[targetStructureID], let targetType = targetNode.structureType else { return false }
+        guard isBeltNode(targetType) else { return false }
+
+        if targetType == .merger {
+            let facing = targetNode.rotation.direction
+            let leftInput = targetNode.position.translated(by: facing.left)
+            let rightInput = targetNode.position.translated(by: facing.right)
+            guard sourcePosition == leftInput || sourcePosition == rightInput else { return false }
+
+            let toggle = state.economy.mergerInputToggleByEntity[targetStructureID, default: 0]
+            let preferredInput = toggle % 2 == 0 ? leftInput : rightInput
+            if sourcePosition != preferredInput && readySourcePositions.contains(preferredInput) {
+                return false
+            }
+            state.economy.mergerInputToggleByEntity[targetStructureID] = toggle + 1
+        }
+
+        state.economy.conveyorPayloadByEntity[targetStructureID] = ConveyorPayload(itemID: itemID, progressTicks: 0)
+        return true
+    }
+
+    private func isBeltNode(_ structureType: StructureType) -> Bool {
+        structureType == .conveyor || structureType == .splitter || structureType == .merger
     }
 
     private func flushAllOutputToGlobalInventory(structureID: EntityID, state: inout WorldState) {
@@ -1096,6 +1204,8 @@ public struct EconomySystem: SimulationSystem {
         state.economy.structureInputBuffers = state.economy.structureInputBuffers.filter { validStructureIDs.contains($0.key) }
         state.economy.structureOutputBuffers = state.economy.structureOutputBuffers.filter { validStructureIDs.contains($0.key) }
         state.economy.conveyorPayloadByEntity = state.economy.conveyorPayloadByEntity.filter { validStructureIDs.contains($0.key) }
+        state.economy.splitterOutputToggleByEntity = state.economy.splitterOutputToggleByEntity.filter { validStructureIDs.contains($0.key) }
+        state.economy.mergerInputToggleByEntity = state.economy.mergerInputToggleByEntity.filter { validStructureIDs.contains($0.key) }
     }
 
     public static var defaultRecipes: [RecipeDef] {

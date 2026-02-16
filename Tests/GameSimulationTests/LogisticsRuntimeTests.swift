@@ -2,11 +2,80 @@ import XCTest
 @testable import GameSimulation
 
 final class LogisticsRuntimeTests: XCTestCase {
+    func testConveyorTransfersByRotationDirection() {
+        var entities = EntityStore()
+        let northTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 3, y: 2))
+        let eastTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 5, y: 4))
+        let southTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 3, y: 6))
+        let westTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 1, y: 4))
+
+        let northConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 3), rotation: .north)
+        let eastConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 4, y: 4), rotation: .east)
+        let southConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 5), rotation: .south)
+        let westConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 2, y: 4), rotation: .west)
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(
+                conveyorPayloadByEntity: [
+                    northConveyor: ConveyorPayload(itemID: "plate_iron", progressTicks: 5),
+                    eastConveyor: ConveyorPayload(itemID: "plate_copper", progressTicks: 5),
+                    southConveyor: ConveyorPayload(itemID: "plate_steel", progressTicks: 5),
+                    westConveyor: ConveyorPayload(itemID: "gear", progressTicks: 5)
+                ]
+            ),
+            threat: ThreatState(),
+            run: RunState()
+        )
+
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+        _ = engine.step()
+
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[northTarget]?["plate_iron", default: 0], 1)
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[eastTarget]?["plate_copper", default: 0], 1)
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[southTarget]?["plate_steel", default: 0], 1)
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[westTarget]?["gear", default: 0], 1)
+    }
+
+    func testSplitterAlternatesOutputs() {
+        var entities = EntityStore()
+        let splitterID = entities.spawnStructure(.splitter, at: GridPosition(x: 3, y: 3), rotation: .east)
+        let northTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 3, y: 2))
+        let southTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 3, y: 4))
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState()
+        )
+
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+
+        engine.worldState.economy.conveyorPayloadByEntity[splitterID] = ConveyorPayload(itemID: "plate_iron", progressTicks: 5)
+        _ = engine.step()
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[northTarget]?["plate_iron", default: 0], 1)
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[southTarget]?["plate_iron", default: 0] ?? 0, 0)
+
+        engine.worldState.economy.conveyorPayloadByEntity[splitterID] = ConveyorPayload(itemID: "plate_iron", progressTicks: 5)
+        _ = engine.step()
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[northTarget]?["plate_iron", default: 0], 1)
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[southTarget]?["plate_iron", default: 0], 1)
+    }
+
     func testConveyorCarriesOutputToNeighborInputBuffer() {
         var entities = EntityStore()
         _ = entities.spawnStructure(.powerPlant, at: GridPosition(x: 0, y: 1))
         _ = entities.spawnStructure(.smelter, at: GridPosition(x: 0, y: 0))
-        _ = entities.spawnStructure(.conveyor, at: GridPosition(x: 1, y: 0))
+        _ = entities.spawnStructure(.conveyor, at: GridPosition(x: 1, y: 0), rotation: .east)
         let assemblerID = entities.spawnStructure(.assembler, at: GridPosition(x: 2, y: 0))
 
         let world = WorldState(
