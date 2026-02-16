@@ -24,9 +24,9 @@ This plan tracks implementation status against the canonical v1 product directio
 
 ### Gameplay truth
 - `[x]` Ammo truth exists (`no ammo -> no shot`) with per-turret ammo/range/fire-rate/damage differentiation.
-- `[~]` Economy loop is recipe-driven with per-structure timing/progress for smelter/assembler/ammo-module; miner/resource-node realism and conveyor buffers remain follow-up.
+- `[~]` Economy loop is recipe-driven with per-structure timing/progress for smelter/assembler/ammo-module, plus first-pass structure buffers/conveyor backpressure; miner/resource-node realism and full port/filter model remain follow-up.
 - `[x]` Build cost enforcement is simulation-authoritative.
-- `[ ]` Ore patch adjacency/depletion, full conveyor buffer model, and structure-targeting threat pressure are not complete.
+- `[ ]` Ore patch adjacency/depletion and structure-targeting threat pressure are not complete.
 
 ### Rendering truth
 - `[~]` Render graph scaffolding exists, but whitebox geometry draw path is still incomplete.
@@ -51,11 +51,11 @@ Goal: complete the first fully legible factory-defense vertical slice.
 
 - [ ] Add ore patch/resource node entities and miner adjacency requirements.
 - [ ] Add ore depletion tracking and related simulation events/telemetry.
-- [ ] Implement per-structure recipe timing/progress (remove instant conversions).
+- [~] Implement per-structure recipe timing/progress (remove instant conversions).
 - [ ] Implement wave composition from `waves.json` for authored waves.
 - [ ] Add procedural wave generation policy for post-authored endless waves.
 - [ ] Add enemy structure-targeting behaviors (raider/breacher/artillery priorities).
-- [ ] Add storage capacity limits and output-blocked behavior.
+- [~] Add storage capacity limits and output-blocked behavior.
 - [ ] Add remove/refund command flow.
 
 Exit criteria:
@@ -66,12 +66,12 @@ Exit criteria:
 ### Milestone 2 - P1/P2 Logistics Model Completion
 Goal: align runtime logistics with `docs/prd/building_specifications.md`.
 
-- [ ] Add building port definitions and runtime input/output buffers.
-- [ ] Add directed conveyor runtime with progress, transfer, and backpressure.
+- [~] Add building port definitions and runtime input/output buffers.
+- [~] Add directed conveyor runtime with progress, transfer, and backpressure.
 - [ ] Add splitter and merger runtime behavior.
 - [ ] Add storage as shared-pool logistics hub with multi-port behavior.
 - [ ] Add recipe pinning and building rotation command support.
-- [ ] Update combat ammo draw order (local turret buffer first, logical pool fallback).
+- [~] Update combat ammo draw order (local turret buffer first, logical pool fallback).
 
 Exit criteria:
 - Item movement is visible and physically constrained by conveyor network design.
@@ -115,8 +115,8 @@ Exit criteria:
 
 ### Workstream C - Factory Economy and Logistics
 - [~] Starter production loop and power scaling exist.
-- [~] Recipe-timed, per-structure production model exists on global inventory; buffer-based routing remains.
-- [ ] Conveyor-routed runtime with splitter/merger/storage hub behavior.
+- [~] Recipe-timed, per-structure production model exists; output buffering and local-input consumption are now partially wired.
+- [~] Conveyor-routed runtime exists for directed transfer + backpressure on standard conveyors; splitter/merger/storage hub behavior remains.
 
 ### Workstream D - Combat, Waves, AI
 - [~] Base wave cadence exists.
@@ -161,6 +161,7 @@ Exit criteria:
   - `FactoryDefense_iPadOS` (`CODE_SIGNING_ALLOWED=NO`)
 
 ## Immediate Next Actions
-- [ ] Begin Milestone 1 implementation: ore patch/resource node entities + miner adjacency/depletion.
+- [ ] Implement ore patch/resource node entities with miner adjacency + depletion tied to miner output buffers.
+- [ ] Expand logistics from first-pass eastward lanes to full port model (filters, orientation/rotation, storage hub semantics).
 - [ ] Move WaveSystem from formula spawning to `waves.json` authored waves (1-8) with deterministic scheduling.
 - [ ] Implement structure-targeting enemy behaviors to create production-line cascade pressure.

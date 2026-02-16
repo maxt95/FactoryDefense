@@ -1,0 +1,83 @@
+# Logistics Runtime Worklog (2026-02-16)
+
+Owner: Engineering
+Status: In progress (iterative)
+Scope: First production-grade slice of conveyor-routed logistics in deterministic simulation.
+
+## Goals for this session
+- Implement a real runtime foundation for PRD-aligned logistics.
+- Keep determinism + test quality intact.
+- Update docs as implementation truth changes.
+
+## Implemented in code
+
+### 1) Deterministic logistics state in snapshots
+File: `Sources/GameSimulation/SimulationTypes.swift`
+- Added `ConveyorPayload` to represent in-flight conveyor items with tick progress.
+- Extended `EconomyState` with:
+  - `structureInputBuffers`
+  - `structureOutputBuffers`
+  - `conveyorPayloadByEntity`
+- These fields are `Codable/Hashable/Sendable`, so they are included in replay/snapshot determinism and persistence.
+
+### 2) First-pass runtime buffer + conveyor behavior
+File: `Sources/GameSimulation/Systems.swift` (`EconomySystem`)
+- Added runtime sync/prune logic for logistics state per live structure entity.
+- Added output buffering for production buildings (smelter/assembler/ammo module/miner/storage capacities by type).
+- Added directed conveyor movement with deterministic transfer order and per-item progress (`conveyorTicksPerTile`, default 5).
+- Added output-drain logic:
+  - Building output -> adjacent conveyor (east) when free.
+  - Building output -> adjacent building input when valid.
+  - Fallback to global inventory only when no routed consumer exists.
+- Added local input consumption for crafting (input buffers consumed before global inventory).
+- Added structure-type input filtering (smelter/assembler/ammo-module/turret/storage), preventing invalid conveyor routing into production consumers.
+- Preserved existing power efficiency and recipe timing behavior.
+
+### 3) Turret ammo coupling improvement
+File: `Sources/GameSimulation/Systems.swift` (`CombatSystem`)
+- Turrets now consume ammo from local turret input buffer first.
+- If local buffer is empty, they fall back to global inventory.
+- This aligns with PRD direction: direct-feed can sustain turrets with global fallback still available.
+
+### 4) iPad build hygiene
+File: `Apps/iPadOS/Info.plist`
+- Added supported interface orientations to remove iPad validation warning.
+
+## Test coverage added
+File: `Tests/GameSimulationTests/LogisticsRuntimeTests.swift`
+- `testConveyorCarriesOutputToNeighborInputBuffer`
+- `testConnectedConveyorBackpressureBlocksOutputDrain`
+- `testTurretConsumesLocalBufferAmmoBeforeGlobalInventory`
+
+Also updated deterministic golden hash:
+- `Tests/GameSimulationTests/GoldenReplayTests.swift`
+
+## Validation executed
+- `swift test` -> pass (46/46)
+- `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_macOS -configuration Debug build` -> success
+- `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_iOS -configuration Debug CODE_SIGNING_ALLOWED=NO build` -> success
+- `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_iPadOS -configuration Debug CODE_SIGNING_ALLOWED=NO build` -> success
+
+## PRD alignment notes
+Aligned with `docs/prd/building_specifications.md` in this session:
+- Per-building input/output buffers: partial runtime implementation complete.
+- Directed conveyor progress/transfer/backpressure: first-pass implementation complete for standard conveyors.
+- Turret local ammo before global fallback: implemented.
+
+Not yet complete vs PRD:
+- Full multi-port model + directional rotation semantics.
+- Splitter/merger behaviors.
+- Storage hub semantics as shared logistics pool.
+- Strict item filter model per port type beyond initial turret ammo filtering.
+- Ore patch adjacency/depletion and miner extraction realism.
+
+## Key learnings
+- Preserving deterministic sort/transfer order is straightforward and stable when conveyor movement is processed in a fixed positional order.
+- Introducing snapshot-visible logistics state early avoids replay migration pain later.
+- A compatibility fallback to global inventory allows incremental migration without destabilizing existing gameplay/tests.
+
+## Next high-value iteration
+1. Ore patch entity model + miner adjacency/depletion tied to miner output buffers.
+2. Port definition runtime (input/output sides + filters) and building rotation in placement.
+3. Splitter/merger runtime and storage hub pull/push semantics.
+4. WaveSystem authored-wave consumption from `waves.json` with deterministic schedule.
