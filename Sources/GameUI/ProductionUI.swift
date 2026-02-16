@@ -93,6 +93,20 @@ public struct BuildMenuViewModel: Sendable {
             costs: [ItemStack(itemID: "plate_iron", quantity: 1)]
         ),
         BuildMenuEntry(
+            id: "splitter",
+            title: "Splitter",
+            structure: .splitter,
+            category: .logistics,
+            costs: [ItemStack(itemID: "plate_iron", quantity: 1)]
+        ),
+        BuildMenuEntry(
+            id: "merger",
+            title: "Merger",
+            structure: .merger,
+            category: .logistics,
+            costs: [ItemStack(itemID: "plate_iron", quantity: 1)]
+        ),
+        BuildMenuEntry(
             id: "storage",
             title: "Storage",
             structure: .storage,
