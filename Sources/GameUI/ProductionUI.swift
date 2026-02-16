@@ -618,6 +618,34 @@ public struct TileLegendPanel: View {
                 .clipShape(RoundedRectangle(cornerRadius: 7))
             }
 
+            Text("Ore Deposits")
+                .font(.subheadline.weight(.semibold))
+                .padding(.top, 4)
+
+            ForEach(oreRows) { row in
+                HStack(alignment: .top, spacing: 8) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(row.color)
+                        .frame(width: 14, height: 14)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 4)
+                                .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                        }
+                        .padding(.top, 3)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.label)
+                            .font(.subheadline.weight(.semibold))
+                        Text(row.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(6)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+            }
+
             Text(
                 "Order: walkable -> spawn blend -> blocked override -> restricted blend -> ramp boost -> base override -> border darken (x0.68 near edges) -> preview blend."
             )
@@ -718,6 +746,34 @@ public struct TileLegendPanel: View {
         )
     }
 
+    private var oreRows: [OreLegendRow] {
+        [
+            OreLegendRow(
+                id: "ore_iron",
+                label: "Iron Ore",
+                detail: "Rust-orange deposit.",
+                color: oreColor("ore_iron")
+            ),
+            OreLegendRow(
+                id: "ore_copper",
+                label: "Copper Ore",
+                detail: "Teal-green deposit.",
+                color: oreColor("ore_copper")
+            ),
+            OreLegendRow(
+                id: "ore_coal",
+                label: "Coal",
+                detail: "Dark-charcoal deposit.",
+                color: oreColor("ore_coal")
+            )
+        ]
+    }
+
+    private func oreColor(_ oreType: ItemID) -> Color {
+        let color = OrePresentation.color(for: oreType)
+        return Color(red: Double(color.x), green: Double(color.y), blue: Double(color.z))
+    }
+
     private struct TileLegendSampleColors {
         var walkable: RGBColor
         var spawnLane: RGBColor
@@ -768,6 +824,13 @@ public struct TileLegendPanel: View {
         var label: String
         var detail: String
         var formula: String
+        var color: Color
+    }
+
+    private struct OreLegendRow: Identifiable {
+        var id: String
+        var label: String
+        var detail: String
         var color: Color
     }
 }

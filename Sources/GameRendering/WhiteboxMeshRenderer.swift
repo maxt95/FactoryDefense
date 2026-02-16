@@ -304,7 +304,7 @@ public final class WhiteboxMeshRenderer {
                 InstanceUniforms(
                     modelViewProjection: viewProjection * model,
                     modelMatrix: model,
-                    tintColor: SIMD4<Float>(WhiteboxColors.color(for: meshID), 1)
+                    tintColor: SIMD4<Float>(tintColor(for: marker, meshID: meshID), 1)
                 )
             )
         }
@@ -322,6 +322,10 @@ public final class WhiteboxMeshRenderer {
     }
 
     private func meshID(for marker: WhiteboxEntityMarker) -> MeshID {
+        if marker.category == WhiteboxEntityCategory.resourceNode.rawValue {
+            return .resourceNode
+        }
+
         if marker.category == WhiteboxEntityCategory.enemy.rawValue {
             switch marker.subtypeRaw {
             case WhiteboxEnemyTypeID.swarmling.rawValue:
@@ -353,6 +357,14 @@ public final class WhiteboxMeshRenderer {
         }
 
         return .gridTile
+    }
+
+    private func tintColor(for marker: WhiteboxEntityMarker, meshID: MeshID) -> SIMD3<Float> {
+        if marker.category == WhiteboxEntityCategory.resourceNode.rawValue {
+            let resourceType = WhiteboxResourceTypeID(rawValue: marker.subtypeRaw) ?? .unknown
+            return OrePresentation.color(for: resourceType.oreType)
+        }
+        return WhiteboxColors.color(for: meshID)
     }
 
     private func makeWhiteboxVertexDescriptor() -> MTLVertexDescriptor {

@@ -187,6 +187,7 @@ public enum WhiteboxEntityCategory: UInt32, Sendable {
     case structure = 1
     case enemy = 2
     case projectile = 3
+    case resourceNode = 4
 }
 
 public enum WhiteboxStructureTypeID: UInt32, Sendable {
@@ -255,6 +256,39 @@ public enum WhiteboxProjectileTypeID: UInt32, Sendable {
     case lightBallistic = 1
     case heavyBallistic = 2
     case plasma = 3
+}
+
+public enum WhiteboxResourceTypeID: UInt32, Sendable {
+    case iron = 1
+    case copper = 2
+    case coal = 3
+    case unknown = 255
+
+    init(oreType: String) {
+        switch oreType {
+        case "ore_iron":
+            self = .iron
+        case "ore_copper":
+            self = .copper
+        case "ore_coal":
+            self = .coal
+        default:
+            self = .unknown
+        }
+    }
+
+    var oreType: String {
+        switch self {
+        case .iron:
+            return "ore_iron"
+        case .copper:
+            return "ore_copper"
+        case .coal:
+            return "ore_coal"
+        case .unknown:
+            return "ore_unknown"
+        }
+    }
 }
 
 public struct WhiteboxPoint: Hashable, Sendable {
@@ -353,7 +387,7 @@ public struct WhiteboxSceneBuilder {
         var structures: [WhiteboxStructureMarker] = []
         var entities: [WhiteboxEntityMarker] = []
         structures.reserveCapacity(world.entities.all.count)
-        entities.reserveCapacity(world.entities.all.count)
+        entities.reserveCapacity(world.entities.all.count + world.orePatches.count)
 
         for entity in world.entities.all {
             switch entity.category {
@@ -394,6 +428,27 @@ public struct WhiteboxSceneBuilder {
                 )
             }
         }
+
+        let oreMarkers = world.orePatches
+            .sorted { lhs, rhs in
+                if lhs.position.x != rhs.position.x {
+                    return lhs.position.x < rhs.position.x
+                }
+                if lhs.position.y != rhs.position.y {
+                    return lhs.position.y < rhs.position.y
+                }
+                return lhs.id < rhs.id
+            }
+            .map { patch in
+                WhiteboxEntityMarker(
+                    id: Int64(-patch.id),
+                    x: Int32(patch.position.x),
+                    y: Int32(patch.position.y),
+                    category: WhiteboxEntityCategory.resourceNode.rawValue,
+                    subtypeRaw: WhiteboxResourceTypeID(oreType: patch.oreType).rawValue
+                )
+            }
+        entities.append(contentsOf: oreMarkers)
 
         let summary = WhiteboxSceneSummary(
             boardCellCount: world.board.width * world.board.height,
