@@ -207,10 +207,18 @@ private struct FactoryDefenseRunSummaryView: View {
 }
 
 private struct FactoryDefenseGameplayView: View {
+    private enum InteractionMode: String, CaseIterable, Identifiable {
+        case interact = "Interact"
+        case build = "Build"
+
+        var id: Self { self }
+    }
+
     @StateObject private var runtime: GameRuntimeController
     @State private var buildMenu = BuildMenuViewModel.productionPreset
     @State private var techTree = TechTreeViewModel.productionPreset
     @State private var onboarding = OnboardingGuideViewModel.starter
+    @State private var interactionMode: InteractionMode = .interact
     @State private var overlayLayout = GameplayOverlayLayoutState.defaultLayout(
         viewportSize: CGSize(width: 1280, height: 720)
     )
@@ -243,7 +251,7 @@ private struct FactoryDefenseGameplayView: View {
                     world: runtime.world,
                     cameraState: cameraState,
                     highlightedCell: runtime.highlightedCell,
-                    highlightedStructure: runtime.highlightedCell == nil ? nil : selectedStructure,
+                    highlightedStructure: interactionMode == .build && runtime.highlightedCell != nil ? selectedStructure : nil,
                     placementResult: runtime.placementResult,
                     onKeyboardPan: { dx, dy, viewport in
                         handleKeyboardPan(deltaX: dx, deltaY: dy, viewport: viewport)
@@ -318,8 +326,20 @@ private struct FactoryDefenseGameplayView: View {
                 reconcileCameraForBoardChange(from: oldBoard, to: newBoard, viewport: proxy.size)
             }
             .onChange(of: buildMenu.selectedEntryID) { _, _ in
-                if let highlighted = runtime.highlightedCell {
+                if interactionMode == .build, let highlighted = runtime.highlightedCell {
                     runtime.previewPlacement(structure: selectedStructure, at: highlighted)
+                } else {
+                    runtime.clearPlacementPreview()
+                }
+            }
+            .onChange(of: interactionMode) { _, mode in
+                switch mode {
+                case .build:
+                    if let highlighted = runtime.highlightedCell {
+                        runtime.previewPlacement(structure: selectedStructure, at: highlighted)
+                    }
+                case .interact:
+                    runtime.clearPlacementPreview()
                 }
             }
             .onChange(of: proxy.size) { _, _ in
@@ -359,6 +379,14 @@ private struct FactoryDefenseGameplayView: View {
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
+                Picker("Mode", selection: $interactionMode) {
+                    ForEach(InteractionMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 210)
+
                 Spacer(minLength: 8)
 
                 Button("Wave") { runtime.triggerWave() }
@@ -374,6 +402,7 @@ private struct FactoryDefenseGameplayView: View {
         case .buildMenu:
             BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in
                 buildMenu.select(entryID: entry.id)
+                interactionMode = .build
             }
 
         case .buildingReference:
@@ -452,6 +481,8 @@ private struct FactoryDefenseGameplayView: View {
             return "Insufficient resources"
         case .invalidMinerPlacement:
             return "Needs adjacent ore patch"
+        case .invalidTurretMountPlacement:
+            return "Requires wall segment"
         }
     }
 
@@ -460,10 +491,24 @@ private struct FactoryDefenseGameplayView: View {
             runtime.clearPlacementPreview()
             return
         }
+
+        guard interactionMode == .build else {
+            runtime.clearPlacementPreview()
+            return
+        }
+
         runtime.placeStructure(selectedStructure, at: position)
+        if runtime.placementResult == .ok {
+            interactionMode = .interact
+            runtime.clearPlacementPreview()
+        }
     }
 
     private func previewPlacement(at location: CGPoint, viewport: CGSize) {
+        guard interactionMode == .build else {
+            runtime.clearPlacementPreview()
+            return
+        }
         guard let position = pickGrid(at: location, viewport: viewport) else {
             runtime.clearPlacementPreview()
             return

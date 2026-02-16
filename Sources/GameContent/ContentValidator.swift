@@ -4,6 +4,7 @@ public enum ContentValidationError: Error, Equatable, Sendable {
     case missingReference(owner: String, reference: String)
     case circularRecipeDependency([String])
     case invalidWaveComposition(waveIndex: Int, reason: String)
+    case invalidWaveConfig(reason: String)
     case unreachableTechNode(String)
     case invalidBoard(reason: String)
     case invalidHQ(reason: String)
@@ -16,6 +17,7 @@ public struct ContentValidator {
     public func validate(bundle: GameContentBundle) -> [ContentValidationError] {
         var errors: [ContentValidationError] = []
         errors += validateReferences(bundle: bundle)
+        errors += validateEnemies(bundle: bundle)
         errors += validateWaves(bundle: bundle)
         errors += validateRecipeCycles(bundle: bundle)
         errors += validateTechReachability(bundle: bundle)
@@ -37,7 +39,7 @@ public struct ContentValidator {
             }
         }
 
-        for wave in bundle.waves {
+        for wave in bundle.waveContent.handAuthoredWaves {
             for group in wave.composition where !bundle.enemyIDs.contains(group.enemyID) {
                 errors.append(.missingReference(owner: "wave:\(wave.index)", reference: group.enemyID))
             }
@@ -58,11 +60,48 @@ public struct ContentValidator {
         return errors
     }
 
+    private func validateEnemies(bundle: GameContentBundle) -> [ContentValidationError] {
+        var errors: [ContentValidationError] = []
+        for enemy in bundle.enemies {
+            if enemy.health <= 0 {
+                errors.append(.invalidWaveConfig(reason: "enemy:\(enemy.id): health must be positive"))
+            }
+            if enemy.speed <= 0 {
+                errors.append(.invalidWaveConfig(reason: "enemy:\(enemy.id): speed must be positive"))
+            }
+            if enemy.threatCost <= 0 {
+                errors.append(.invalidWaveConfig(reason: "enemy:\(enemy.id): threatCost must be positive"))
+            }
+            if enemy.baseDamage <= 0 {
+                errors.append(.invalidWaveConfig(reason: "enemy:\(enemy.id): baseDamage must be positive"))
+            }
+            if enemy.minBudgetToSpawn < 0 {
+                errors.append(.invalidWaveConfig(reason: "enemy:\(enemy.id): minBudgetToSpawn cannot be negative"))
+            }
+            if let multiplier = enemy.wallDamageMultiplier, multiplier <= 0 {
+                errors.append(.invalidWaveConfig(reason: "enemy:\(enemy.id): wallDamageMultiplier must be positive"))
+            }
+        }
+        return errors
+    }
+
     private func validateWaves(bundle: GameContentBundle) -> [ContentValidationError] {
         var errors: [ContentValidationError] = []
         let enemyByID = Dictionary(uniqueKeysWithValues: bundle.enemies.map { ($0.id, $0) })
+        let waves = bundle.waveContent.handAuthoredWaves.sorted { $0.index < $1.index }
 
-        for wave in bundle.waves {
+        if let first = waves.first, first.index != 1 {
+            errors.append(.invalidWaveConfig(reason: "hand-authored waves must start at index 1"))
+        }
+
+        for (offset, wave) in waves.enumerated() {
+            let expectedIndex = offset + 1
+            if wave.index != expectedIndex {
+                errors.append(.invalidWaveConfig(reason: "hand-authored waves must be contiguous; expected \(expectedIndex), got \(wave.index)"))
+            }
+        }
+
+        for wave in waves {
             if wave.composition.isEmpty {
                 errors.append(.invalidWaveComposition(waveIndex: wave.index, reason: "empty composition"))
                 continue
@@ -70,8 +109,14 @@ public struct ContentValidator {
 
             var totalThreat = 0
             for group in wave.composition {
+                if group.count <= 0 {
+                    errors.append(.invalidWaveComposition(waveIndex: wave.index, reason: "enemy group count must be positive"))
+                }
                 guard let enemy = enemyByID[group.enemyID] else {
                     continue
+                }
+                if group.enemyID == "artillery_bug" {
+                    errors.append(.invalidWaveComposition(waveIndex: wave.index, reason: "artillery_bug is deferred for v1"))
                 }
                 totalThreat += enemy.threatCost * group.count
             }
@@ -84,6 +129,23 @@ public struct ContentValidator {
                     )
                 )
             }
+        }
+
+        let config = bundle.waveContent.proceduralConfig
+        if config.budgetFormula.base <= 0 {
+            errors.append(.invalidWaveConfig(reason: "procedural budget formula base must be positive"))
+        }
+        if config.budgetFormula.linear < 0 {
+            errors.append(.invalidWaveConfig(reason: "procedural budget formula linear cannot be negative"))
+        }
+        if config.budgetFormula.quadratic <= 0 {
+            errors.append(.invalidWaveConfig(reason: "procedural budget formula quadratic must be positive"))
+        }
+        if !(0...1).contains(config.swarmlingReserveRatio) {
+            errors.append(.invalidWaveConfig(reason: "swarmlingReserveRatio must be within 0...1"))
+        }
+        if config.difficultyMultipliers.easy <= 0 || config.difficultyMultipliers.normal <= 0 || config.difficultyMultipliers.hard <= 0 {
+            errors.append(.invalidWaveConfig(reason: "all procedural difficulty multipliers must be positive"))
         }
 
         return errors

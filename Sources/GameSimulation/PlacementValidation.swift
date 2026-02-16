@@ -8,6 +8,7 @@ public enum PlacementResult: Int, Codable, Hashable, Sendable {
     case restrictedZone = 4
     case insufficientResources = 5
     case invalidMinerPlacement = 6
+    case invalidTurretMountPlacement = 7
 }
 
 public struct PlacementValidator {
@@ -23,7 +24,11 @@ public struct PlacementValidator {
         guard coveredCells.allSatisfy(world.board.contains(_:)) else { return .outOfBounds }
         guard !coveredCells.contains(where: world.board.isRestricted(_:)) else { return .restrictedZone }
 
-        if hasOccupiedCell(in: coveredCells, entities: world.entities) {
+        if structure == .turretMount {
+            guard resolvedTurretHostWallID(forTurretAt: position, in: world.entities) != nil else {
+                return .invalidTurretMountPlacement
+            }
+        } else if hasOccupiedCell(in: coveredCells, entities: world.entities) {
             return .occupied
         }
 
@@ -37,6 +42,28 @@ public struct PlacementValidator {
         }
 
         return blocksPath(coveredCells: coveredCells, atElevation: position.z, in: world) ? .blocksCriticalPath : .ok
+    }
+
+    public func resolvedTurretHostWallID(forTurretAt turretPosition: GridPosition, in entities: EntityStore) -> EntityID? {
+        let normalized = GridPosition(x: turretPosition.x, y: turretPosition.y, z: 0)
+
+        let wallID = entities.all
+            .filter { $0.category == .structure && $0.structureType == .wall }
+            .first(where: { wall in
+                guard let structureType = wall.structureType else { return false }
+                return structureType.coveredCells(anchor: wall.position).contains(where: {
+                    GridPosition(x: $0.x, y: $0.y, z: 0) == normalized
+                })
+            })?.id
+
+        guard let wallID else { return nil }
+
+        let hasExistingTurret = entities.all.contains { entity in
+            entity.category == .structure
+                && entity.structureType == .turretMount
+                && GridPosition(x: entity.position.x, y: entity.position.y, z: 0) == normalized
+        }
+        return hasExistingTurret ? nil : wallID
     }
 
     private func hasOccupiedCell(in coveredCells: [GridPosition], entities: EntityStore) -> Bool {
@@ -68,7 +95,7 @@ public struct PlacementValidator {
         let spawns = world.board.spawnPositions()
         guard !spawns.isEmpty else { return true }
 
-        for spawn in spawns {
+        for spawn in spawns where spawn != base {
             guard let spawnTile = map.tile(at: spawn), spawnTile.walkable else {
                 continue
             }

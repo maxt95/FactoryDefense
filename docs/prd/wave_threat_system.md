@@ -2,6 +2,9 @@
 
 > Authoritative specification for wave spawning, enemy behavior, wall fortifications, and the ammo distribution network. Companion to `factory_economy.md` (production/balance), `combat_rendering_vfx.md` (rendering/physics), and `building_specifications.md` (logistics).
 
+Last updated: 2026-02-16
+Implementation status: v1-first runtime slice landed (artillery_bug deferred post-v1)
+
 ---
 
 ## 1. Design Pillars
@@ -53,7 +56,7 @@ The HQ begins pre-loaded with enough resources to bootstrap the first production
 
 ### 2.3 Loss Condition
 
-**The game ends when the HQ is destroyed.** There is no grace period. If HQ health reaches 0, the run is over.
+**The game ends when the HQ is destroyed.** A difficulty-scaled grace period still applies at run start (no enemies during grace). If HQ health reaches 0, the run is over.
 
 The HQ cannot be repaired by passive means — only repair_kit deliveries via conveyors restore its health. This makes HQ damage a serious event that demands immediate logistical response.
 
@@ -132,7 +135,7 @@ Waves 1–8 use hand-authored compositions from `waves.json`. These provide a cu
 | 4 | 26 | 6 drone_scout, 2 raider |
 | 5 | 32 | 10 swarmling, 2 raider, 1 breacher |
 | 6 | 38 | 8 drone_scout, 2 raider, 1 breacher |
-| 7 | 40 | 12 swarmling, 3 raider, 2 breacher |
+| 7 | 43 | 12 swarmling, 3 raider, 2 breacher |
 | 8 | 68 | 10 drone_scout, 3 raider, 2 breacher, 1 overseer |
 
 ### 4.2 Procedural Waves (9+)
@@ -189,10 +192,10 @@ This produces varied compositions where every wave has a swarmling screen and a 
 
 For each wave surge, the system picks **2–4 spawn clusters** along the map edge:
 
-1. Generate a random angle (0–360°) for each cluster.
-2. Map the angle to a position on the map border.
-3. Ensure clusters are separated by at least 60° of arc to prevent stacking.
-4. Distribute the wave's enemies across clusters (roughly even split, ±20% random variance).
+1. Build an ordered perimeter list from current board dimensions.
+2. Select cluster entry indices with at least ~60° separation (`>= perimeterCount / 6` circular distance).
+3. If random sampling cannot satisfy spacing, fall back to deterministic stride picks.
+4. Distribute enemies round-robin across clusters, with deterministic ±20% adjacent-cluster variance.
 
 ### 5.2 Spawn Stagger
 
@@ -246,7 +249,7 @@ While the default is "attack nearest blocking structure," specific enemy types h
 
 When an enemy dies:
 - It is removed from the entity store.
-- A death event (`SimEvent.enemyDied`) is emitted for VFX/audio.
+- A death event (`SimEvent.enemyDestroyed`) is emitted for VFX/audio.
 - No resource drops in v1. (Future: scrap/currency drops.)
 
 ---
@@ -480,11 +483,12 @@ Add fields to each enemy definition:
 
 New fields: `baseDamage`, `behaviorModifier`, `wallDamageMultiplier` (optional), `minBudgetToSpawn`.
 
-Behavior modifiers: `none`, `structureSeeker`, `wallBreaker`, `rangedAttacker`, `auraBuffer`.
+Behavior modifiers (v1): `none`, `structureSeeker`, `wallBreaker`, `auraBuffer`.
+Post-v1 reserved modifier: `rangedAttacker` (`artillery_bug`).
 
-### 12.3 Extend: `waves.json`
+### 12.3 Extend: `waves.json` (with legacy compatibility)
 
-Add procedural generation parameters:
+Preferred structured format:
 
 ```json
 {
@@ -496,6 +500,10 @@ Add procedural generation parameters:
   }
 }
 ```
+
+Runtime compatibility path:
+- Loader accepts both structured `WaveContentDef` and legacy array `[WaveDef]`.
+- Current bootstrap content remains valid in legacy array format while migration is in progress.
 
 ### 12.4 New: `difficulty.json`
 
@@ -533,50 +541,45 @@ Add procedural generation parameters:
 
 ---
 
-## 13. Implementation Sequencing
+## 13. Implementation Status
 
 ### Phase 1 — Wave Timer & Budget Spawning
-- Implement `WaveSystem` that runs on a continuous timer (no phase gates).
-- Read hand-authored waves from `waves.json` for waves 1–8.
-- Implement budget formula for wave 9+ with procedural composition algorithm (§4.4).
-- Add grace period timer before first trickle/wave.
-- Add trickle spawn logic between surges.
-- Emit `SimEvent.waveStarted`, `SimEvent.waveCleared` events.
+- `Status: Complete`
+- `WaveSystem` runs continuous grace -> trickle -> surge cadence.
+- Hand-authored waves 1–8 are loaded from `waves.json`.
+- Wave 9+ uses quadratic procedural budgets + swarmling reserve algorithm.
+- Emits `waveStarted`, `waveCleared`, and `waveEnded`.
 
 ### Phase 2 — Spawn Point Selection
-- Implement perimeter spawn point selection (§5.1): 2–4 clusters per surge, 60°+ separation.
-- Add stagger delay for within-cluster spawning.
-- Add edge buffer (enemies spawn 2 cells outside map border).
+- `Status: Complete`
+- Full-perimeter 2–4 cluster surge spawning with deterministic separation and fallback stride logic.
+- Cluster stagger: 3 ticks intra-cluster, 0–40 ticks inter-cluster activation delay.
+- Enemies spawn 2 cells outside bounds and march to entry point before normal pathing.
 
 ### Phase 3 — HQ Building
-- Define HQ entity type (2×2, 500 HP, storage I/O).
-- Place HQ at map center on game start.
-- Load starting resources per difficulty.
-- Implement loss condition: HQ health ≤ 0 → `RunState.lost`.
+- `Status: Complete`
+- HQ entity/bootstrap lifecycle and difficulty-scaled resources are runtime-backed.
+- Loss condition uses run phase transition to `.gameOver`.
 
 ### Phase 4 — Wall Network & Turret Mounting
-- Extend wall entity with network membership tracking (connected component ID).
-- Implement wall network auto-detection (recalculate on wall place/destroy).
-- Implement shared ammo pool per wall network (v1 model, §8.1).
-- Change turret placement to require a wall segment host.
-- Turret destruction on wall destruction.
+- `Status: Complete`
+- Wall connected components rebuild deterministically into network IDs.
+- Shared network ammo pools with capacity `segmentCount × 12`.
+- Network split/rebuild events emitted; ammo pools proportionally reallocated on split.
+- Turret placement requires host wall; host wall destruction destroys mounted turret entities.
 
 ### Phase 5 — Enemy Behavior Modifiers
-- Implement raider structure-seeking (§6.3).
-- Implement breacher wall-damage multiplier.
-- Implement artillery_bug ranged attack behavior.
-- Implement overseer aura buff.
+- `Status: Complete for v1 roster`
+- Raider structure-seeking, breacher wall-priority + 2× wall damage, and overseer non-stacking aura are implemented.
+- `artillery_bug` ranged behavior is deferred to post-v1.
 
 ### Phase 6 — Difficulty Scaling
-- Load `difficulty.json` configuration.
-- Apply difficulty multipliers to: grace period, wave gaps, trickle rate, budgets, starting resources.
-- Integrate with ore patch counts from `ore_patches_resource_nodes.md`.
+- `Status: Complete`
+- Runtime difficulty parameters apply to grace, inter-wave gaps, trickle interval/size, and procedural budget multiplier.
 
 ### Phase 7 — Wall Ammo Network v2 (Post-v1)
-- Replace shared pool with per-segment buffers.
-- Implement ammo flow propagation along wall segments.
-- Implement breach-induced network splits with buffer isolation.
-- Add flow rate bottleneck for long wall runs.
+- `Status: Deferred`
+- Per-segment propagation model remains a planned post-v1 upgrade.
 
 ---
 
@@ -588,4 +591,4 @@ Add procedural generation parameters:
 | Can enemies damage conveyors that are outside walls? | Yes — conveyors have 30 HP (see `building_specifications.md`). Trickle scouts will nibble exposed logistics. | Recommended |
 | Should the overseer buff stack from multiple overseers? | No — aura should be non-stacking. Multiple overseers add threat through their own HP, not compounding buffs. | Recommended |
 | Should there be a "wave survived" reward (currency/resources)? | Deferred to extraction/meta-progression design. | Open |
-| Maximum number of concurrent enemies? | Cap at 500 for v1 (performance budget). Budget formula naturally limits this through enemy cost. | Recommended |
+| Maximum number of concurrent enemies? | Fixed at 500 for v1 runtime (enforced cap). Revisit by platform tier post-v1. | Locked v1 |

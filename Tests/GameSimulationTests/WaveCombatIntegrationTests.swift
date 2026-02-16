@@ -24,12 +24,12 @@ final class WaveCombatIntegrationTests: XCTestCase {
             systems: [
                 WaveSystem(enableRaids: false),
                 EnemyMovementSystem(),
-                CombatSystem(turretRange: 14, projectileDamage: 30),
+                CombatSystem(turretRange: 200, projectileDamage: 30),
                 ProjectileSystem()
             ]
         )
 
-        let events = engine.run(ticks: 220)
+        let events = engine.run(ticks: 500)
 
         XCTAssertTrue(events.contains(where: { $0.kind == .enemySpawned }))
         XCTAssertTrue(events.contains(where: { $0.kind == .projectileFired }))
@@ -64,7 +64,7 @@ final class WaveCombatIntegrationTests: XCTestCase {
                 enemies: [
                     enemyID: EnemyRuntime(
                         id: enemyID,
-                        archetype: .scout,
+                        archetype: .droneScout,
                         moveEveryTicks: 1,
                         baseDamage: 2,
                         rewardCurrency: 1
@@ -112,7 +112,7 @@ final class WaveCombatIntegrationTests: XCTestCase {
                 enemies: [
                     enemyID: EnemyRuntime(
                         id: enemyID,
-                        archetype: .scout,
+                        archetype: .droneScout,
                         moveEveryTicks: 1,
                         baseDamage: 2,
                         rewardCurrency: 1

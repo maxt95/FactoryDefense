@@ -63,6 +63,7 @@ public struct EntityStore: Codable, Hashable, Sendable {
         _ structure: StructureType,
         at position: GridPosition,
         turretDefID: String? = nil,
+        hostWallID: EntityID? = nil,
         boundPatchID: Int? = nil,
         health: Int = 100,
         maxHealth: Int? = nil
@@ -77,6 +78,7 @@ public struct EntityStore: Codable, Hashable, Sendable {
             category: .structure,
             structureType: structure,
             turretDefID: resolvedTurretDefID,
+            hostWallID: hostWallID,
             boundPatchID: boundPatchID,
             position: position,
             health: resolvedHealth,

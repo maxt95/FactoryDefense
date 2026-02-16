@@ -2,11 +2,11 @@ import XCTest
 @testable import GameSimulation
 
 final class EntitySelectionTests: XCTestCase {
-    func testSelectableEntityFindsTwoByTwoStructureFromCoveredCell() {
+    func testSelectableEntityFindsSingleCellTurretMount() {
         var store = EntityStore()
         let turretID = store.spawnStructure(.turretMount, at: GridPosition(x: 10, y: 10))
 
-        let selected = store.selectableEntity(at: GridPosition(x: 9, y: 9))
+        let selected = store.selectableEntity(at: GridPosition(x: 10, y: 10))
 
         XCTAssertEqual(selected?.id, turretID)
         XCTAssertEqual(selected?.structureType, .turretMount)

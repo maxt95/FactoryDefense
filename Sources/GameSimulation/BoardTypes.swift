@@ -217,10 +217,36 @@ public struct BoardState: Codable, Hashable, Sendable {
     }
 
     public func spawnPositions() -> [GridPosition] {
-        guard spawnYMin <= spawnYMax else { return [] }
-        return (spawnYMin...spawnYMax).map { y in
-            GridPosition(x: spawnEdgeX, y: y, z: basePosition.z)
+        guard width > 0 && height > 0 else { return [] }
+
+        var positions: [GridPosition] = []
+        positions.reserveCapacity(max(1, (width * 2) + (height * 2) - 4))
+
+        if height >= 1 {
+            for x in 0..<width {
+                positions.append(GridPosition(x: x, y: 0, z: basePosition.z))
+            }
         }
+
+        if width >= 1, height >= 2 {
+            for y in 1..<height {
+                positions.append(GridPosition(x: width - 1, y: y, z: basePosition.z))
+            }
+        }
+
+        if height >= 2, width >= 2 {
+            for x in stride(from: width - 2, through: 0, by: -1) {
+                positions.append(GridPosition(x: x, y: height - 1, z: basePosition.z))
+            }
+        }
+
+        if width >= 2, height >= 3 {
+            for y in stride(from: height - 2, through: 1, by: -1) {
+                positions.append(GridPosition(x: 0, y: y, z: basePosition.z))
+            }
+        }
+
+        return positions
     }
 
     public func cell(at position: GridPosition, entities: EntityStore) -> BoardCell? {
@@ -269,9 +295,9 @@ private func roundedUp(_ value: Int, toMultipleOf step: Int) -> Int {
 public extension StructureType {
     var blocksMovement: Bool {
         switch self {
-        case .conveyor:
+        case .conveyor, .turretMount:
             return false
-        case .hq, .wall, .turretMount, .miner, .smelter, .assembler, .ammoModule, .powerPlant, .storage:
+        case .hq, .wall, .miner, .smelter, .assembler, .ammoModule, .powerPlant, .storage:
             return true
         }
     }

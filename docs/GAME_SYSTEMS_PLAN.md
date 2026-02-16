@@ -2,7 +2,7 @@
 
 Last updated: 2026-02-16
 Owner: Product + Engineering
-Status: Active execution plan (aligned to living PRD + economy/building PRDs)
+Status: Active execution plan (wave/threat v1 landed; logistics/rendering closure in progress)
 
 ## Summary
 This plan tracks implementation status against the canonical v1 product direction:
@@ -27,7 +27,7 @@ This plan tracks implementation status against the canonical v1 product directio
 - `[~]` Economy loop is recipe-driven with per-structure timing/progress for smelter/assembler/ammo-module/miner, plus first-pass structure buffers/conveyor backpressure and miner->ore-patch extraction/depletion; full ore lifecycle (reveal/renewal) and full port/filter model remain follow-up.
 - `[x]` Build cost enforcement is simulation-authoritative.
 - `[~]` Run bootstrap/session init is partially aligned: HQ-only bootstrap, difficulty+seed params, phase lifecycle events, extraction UI removal, deterministic Ring 0 patch generation, miner adjacency/binding + patch depletion events, and end-of-run summary flow are in; reveal/renewal rings remain follow-up.
-- `[~]` Ore patch adjacency/depletion is now implemented for Ring 0 runtime; structure-targeting threat pressure remains incomplete.
+- `[x]` Wave/threat runtime is now PRD-aligned for v1-first scope: authored 1–8 + procedural 9+, deterministic full-perimeter clustered spawns, structure-targeting enemy modifiers, wall-network ammo pools, and host-wall turret mounts.
 
 ### Rendering truth
 - `[~]` Render graph scaffolding exists, but whitebox geometry draw path is still incomplete.
@@ -47,22 +47,24 @@ Exit criteria:
 - Distinct turret types consume the correct ammo and respect stat differences.
 - Production output matches recipe expectations (including missing chains now active).
 
-### Milestone 1 - P1 Factory and Threat Reality (Current Top Priority)
+### Milestone 1 - P1 Factory and Threat Reality (Completed for v1-first scope)
 Goal: complete the first fully legible factory-defense vertical slice.
 
 - [x] Add ore patch/resource node entities and miner adjacency requirements (Ring 0 generation + miner binding/adjacency + placement validation implemented).
 - [~] Add ore depletion tracking and related simulation events/telemetry (depletion + `patchExhausted`/`minerIdled` events implemented; telemetry/dashboard surfacing remains).
 - [x] Implement per-structure recipe timing/progress (smelter/assembler/ammo module + miner extraction timing implemented).
-- [ ] Implement wave composition from `waves.json` for authored waves.
-- [ ] Add procedural wave generation policy for post-authored endless waves.
-- [ ] Add enemy structure-targeting behaviors (raider/breacher/artillery priorities).
+- [x] Implement wave composition from `waves.json` for authored waves.
+- [x] Add procedural wave generation policy for post-authored endless waves.
+- [x] Add enemy structure-targeting behaviors (raider/breacher/overseer in v1; artillery deferred).
+- [x] Implement full-perimeter spawn clusters with deterministic separation/stagger and outside-border entry marching.
+- [x] Implement wall-network shared ammo pools + split/rebuild handling and host-wall turret mounting constraints.
 - [~] Add storage capacity limits and output-blocked behavior.
 - [ ] Add remove/refund command flow.
 
 Exit criteria:
 - Early waves are data-authored and reproducible from content.
 - Factory bottlenecks (ore, timing, storage, power) materially change combat outcomes.
-- Enemies can break production lines, causing recoverable or fatal cascades.
+- Enemies can break production lines, causing recoverable or fatal cascades. (met in current v1 slice)
 
 ### Milestone 2 - P1/P2 Logistics Model Completion
 Goal: align runtime logistics with `docs/prd/building_specifications.md`.
@@ -120,10 +122,10 @@ Exit criteria:
 - [~] Conveyor-routed runtime exists for directed transfer + backpressure on standard conveyors; splitter/merger/storage hub behavior remains.
 
 ### Workstream D - Combat, Waves, AI
-- [~] Grace period + trickle + compressed wave cadence exists (still formula-spawned; not yet authored-wave driven).
+- [x] Grace period + trickle + compressed wave cadence with deterministic queue draining and wave lifecycle events.
 - [x] Per-turret stat and ammo differentiation.
-- [ ] Authored-wave consumption from `waves.json` + endless procedural continuation.
-- [ ] Structure-targeting enemy behaviors and cascade pressure.
+- [x] Authored-wave consumption from `waves.json` + endless procedural continuation.
+- [x] Structure-targeting enemy behaviors and cascade pressure (v1 set: raider/breacher/overseer; artillery deferred).
 
 ### Workstream E - Metal Renderer
 - [~] Render graph/debug scaffolding exists.
@@ -136,7 +138,7 @@ Exit criteria:
 
 ### Workstream G - Content, Balance, Feel
 - [x] Core content files and validators exist.
-- [~] Runtime systems need to consume JSON as authoritative behavior source.
+- [x] Runtime systems consume JSON as authoritative behavior source for enemies/waves/difficulty with legacy-wave compatibility fallback.
 - [ ] Balance automation and ammo headroom analytics.
 
 ### Workstream H - Quality and Tooling
@@ -154,7 +156,7 @@ Exit criteria:
 - `swift test` passes locally.
 - Deterministic replay remains stable after gameplay-truth refactors.
 - Build costs, ammo truth, and recipe-driven production are simulation-enforced.
-- Author-time data (`recipes.json`, `turrets.json`, `hq.json`, `difficulty.json`) drives runtime behavior for core loops; `waves.json` authored consumption remains in progress.
+- Author-time data (`recipes.json`, `turrets.json`, `enemies.json`, `waves.json`, `hq.json`, `difficulty.json`) drives runtime behavior for core loops.
 - Whitebox rendering displays active simulation entities and supports tuning readability.
 - App targets compile via `xcodebuild -project FactoryDefense.xcodeproj` for:
   - `FactoryDefense_macOS`
@@ -163,6 +165,7 @@ Exit criteria:
 
 ## Immediate Next Actions
 - [ ] Expand logistics from first-pass eastward lanes to full port model (filters, orientation/rotation, storage hub semantics).
-- [ ] Move WaveSystem from formula spawning to `waves.json` authored waves (1-8) with deterministic scheduling.
-- [ ] Implement structure-targeting enemy behaviors to create production-line cascade pressure.
+- [ ] Finish logistics runtime gaps: splitter/merger behaviors and shared-pool storage hub semantics.
+- [ ] Add UI/HUD surfacing for threat telemetry (`spawnedEnemiesByWave`, queued backlog, structure damage count, dry-fire rate).
 - [ ] Implement ore reveal/renewal lifecycle (geology survey unlocks, ring reveal state, renewal spawn policy) on top of current Ring 0 depletion runtime.
+- [ ] Implement remove/refund command flow and associated UX command wiring.

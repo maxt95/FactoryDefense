@@ -70,6 +70,23 @@ public struct CommandSystem: SimulationSystem {
                     targetPatchID = nil
                 }
 
+                let hostWallID: EntityID?
+                if request.structure == .turretMount {
+                    hostWallID = placementValidator.resolvedTurretHostWallID(forTurretAt: placementAnchor, in: previewState.entities)
+                    guard hostWallID != nil else {
+                        context.emit(
+                            SimEvent(
+                                tick: state.tick,
+                                kind: .placementRejected,
+                                value: PlacementResult.invalidTurretMountPlacement.rawValue
+                            )
+                        )
+                        continue
+                    }
+                } else {
+                    hostWallID = nil
+                }
+
                 guard state.economy.consume(costs: request.structure.buildCosts) else {
                     context.emit(
                         SimEvent(
@@ -90,10 +107,14 @@ public struct CommandSystem: SimulationSystem {
                 let structureID = state.entities.spawnStructure(
                     request.structure,
                     at: placementPosition,
+                    hostWallID: hostWallID,
                     boundPatchID: targetPatchID
                 )
                 if let targetPatchID {
                     bindMiner(structureID, toPatchID: targetPatchID, state: &state)
+                }
+                if request.structure == .wall {
+                    state.combat.wallNetworksDirty = true
                 }
                 context.emit(
                     SimEvent(
@@ -140,6 +161,7 @@ public struct EconomySystem: SimulationSystem {
         let structures = state.entities.all.filter { $0.category == .structure }
         syncLogisticsRuntime(structures: structures, state: &state)
         syncOrePatchBindings(state: &state)
+        rebuildWallNetworksIfNeeded(state: &state, context: context)
 
         var powerAvailable = 0
         var powerDemand = 0
@@ -550,9 +572,13 @@ public struct EconomySystem: SimulationSystem {
         }
 
         var structuresByPosition: [GridPosition: Entity] = [:]
+        var wallsByPosition: [GridPosition: EntityID] = [:]
         for structure in structures.sorted(by: { $0.id < $1.id }) {
             if structuresByPosition[structure.position] == nil {
                 structuresByPosition[structure.position] = structure
+            }
+            if structure.structureType == .wall {
+                wallsByPosition[structure.position] = structure.id
             }
         }
 
@@ -579,6 +605,12 @@ public struct EconomySystem: SimulationSystem {
                let targetType = targetStructure.structureType,
                enqueueInputItem(itemID: payload.itemID, structureID: targetStructure.id, structureType: targetType, state: &state) {
                 state.economy.conveyorPayloadByEntity.removeValue(forKey: conveyor.id)
+                continue
+            }
+
+            if let wallID = wallsByPosition[targetPosition],
+               injectWallNetwork(itemID: payload.itemID, wallID: wallID, state: &state) {
+                state.economy.conveyorPayloadByEntity.removeValue(forKey: conveyor.id)
             }
         }
     }
@@ -586,12 +618,16 @@ public struct EconomySystem: SimulationSystem {
     private func drainStructureOutputBuffers(structures: [Entity], state: inout WorldState) {
         var conveyorsByPosition: [GridPosition: EntityID] = [:]
         var structuresByPosition: [GridPosition: Entity] = [:]
+        var wallsByPosition: [GridPosition: EntityID] = [:]
         for structure in structures.sorted(by: { $0.id < $1.id }) {
             if structuresByPosition[structure.position] == nil {
                 structuresByPosition[structure.position] = structure
             }
             if structure.structureType == .conveyor, conveyorsByPosition[structure.position] == nil {
                 conveyorsByPosition[structure.position] = structure.id
+            }
+            if structure.structureType == .wall {
+                wallsByPosition[structure.position] = structure.id
             }
         }
 
@@ -612,6 +648,10 @@ public struct EconomySystem: SimulationSystem {
             if let targetStructure = structuresByPosition[outputTarget],
                let targetType = targetStructure.structureType,
                let itemID = popFirstOutputItem(structureID: structure.id, state: &state) {
+                if let wallID = wallsByPosition[outputTarget],
+                   injectWallNetwork(itemID: itemID, wallID: wallID, state: &state) {
+                    continue
+                }
                 if enqueueInputItem(itemID: itemID, structureID: targetStructure.id, structureType: targetType, state: &state) {
                     continue
                 }
@@ -651,6 +691,156 @@ public struct EconomySystem: SimulationSystem {
         }
         state.economy.structureOutputBuffers[structureID] = outputBuffer
         return itemID
+    }
+
+    private func injectWallNetwork(itemID: ItemID, wallID: EntityID, state: inout WorldState) -> Bool {
+        guard let networkID = state.combat.wallNetworkByWallEntityID[wallID],
+              var network = state.combat.wallNetworks[networkID] else {
+            return false
+        }
+
+        if itemID.hasPrefix("ammo_") {
+            let totalAmmo = network.ammoPoolByItemID.values.reduce(0, +)
+            guard totalAmmo < network.capacity else { return false }
+            network.ammoPoolByItemID[itemID, default: 0] += 1
+            state.combat.wallNetworks[networkID] = network
+            return true
+        }
+
+        if itemID == "repair_kit" {
+            var damagedWalls = network.wallEntityIDs.compactMap { id -> Entity? in
+                state.entities.entity(id: id)
+            }.filter { wall in
+                wall.health < wall.maxHealth
+            }
+            damagedWalls.sort { lhs, rhs in
+                if lhs.health == rhs.health { return lhs.id < rhs.id }
+                return lhs.health < rhs.health
+            }
+            guard let mostDamaged = damagedWalls.first else { return false }
+            let repairedHealth = min(mostDamaged.maxHealth, mostDamaged.health + 50)
+            let delta = repairedHealth - mostDamaged.health
+            guard delta > 0 else { return false }
+            state.entities.damage(mostDamaged.id, amount: -delta)
+            return true
+        }
+
+        return false
+    }
+
+    private func rebuildWallNetworksIfNeeded(state: inout WorldState, context: SystemContext) {
+        guard state.combat.wallNetworksDirty else { return }
+
+        let oldNetworks = state.combat.wallNetworks
+        let walls = state.entities.structures(of: .wall).sorted { $0.id < $1.id }
+
+        guard !walls.isEmpty else {
+            state.combat.wallNetworkByWallEntityID = [:]
+            state.combat.wallNetworks = [:]
+            state.combat.wallNetworksDirty = false
+            context.emit(SimEvent(tick: state.tick, kind: .wallNetworkRebuilt))
+            return
+        }
+
+        let wallsByID = Dictionary(uniqueKeysWithValues: walls.map { ($0.id, $0) })
+        let wallIDsByPosition = Dictionary(uniqueKeysWithValues: walls.map { ($0.position, $0.id) })
+        var visited: Set<EntityID> = []
+        var components: [[EntityID]] = []
+
+        for wall in walls {
+            guard !visited.contains(wall.id) else { continue }
+            var queue: [EntityID] = [wall.id]
+            visited.insert(wall.id)
+            var component: [EntityID] = []
+
+            while !queue.isEmpty {
+                let currentID = queue.removeFirst()
+                component.append(currentID)
+                guard let currentWall = wallsByID[currentID] else { continue }
+
+                let neighbors = [
+                    currentWall.position.translated(byX: 1),
+                    currentWall.position.translated(byX: -1),
+                    currentWall.position.translated(byY: 1),
+                    currentWall.position.translated(byY: -1)
+                ]
+                for neighbor in neighbors {
+                    guard let neighborID = wallIDsByPosition[neighbor] else { continue }
+                    guard !visited.contains(neighborID) else { continue }
+                    visited.insert(neighborID)
+                    queue.append(neighborID)
+                }
+            }
+
+            components.append(component.sorted())
+        }
+
+        var newWallNetworkByWallEntityID: [EntityID: Int] = [:]
+        var newWallNetworks: [Int: WallNetworkState] = [:]
+
+        for (index, component) in components.enumerated() {
+            let networkID = index + 1
+            let capacity = component.count * 12
+            var ammoPool: [ItemID: Int] = [:]
+
+            // Proportional pool carry-over by overlap count from old networks.
+            for oldNetwork in oldNetworks.values {
+                let overlapCount = oldNetwork.wallEntityIDs.filter { component.contains($0) }.count
+                guard overlapCount > 0 else { continue }
+                let oldWallCount = max(1, oldNetwork.wallEntityIDs.count)
+                for (itemID, quantity) in oldNetwork.ammoPoolByItemID {
+                    let allocated = (quantity * overlapCount) / oldWallCount
+                    if allocated > 0 {
+                        ammoPool[itemID, default: 0] += allocated
+                    }
+                }
+            }
+
+            trimAmmoPoolToCapacity(&ammoPool, capacity: capacity)
+            newWallNetworks[networkID] = WallNetworkState(
+                id: networkID,
+                wallEntityIDs: component,
+                ammoPoolByItemID: ammoPool,
+                capacity: capacity
+            )
+            for wallID in component {
+                newWallNetworkByWallEntityID[wallID] = networkID
+            }
+        }
+
+        state.combat.wallNetworkByWallEntityID = newWallNetworkByWallEntityID
+        state.combat.wallNetworks = newWallNetworks
+        state.combat.wallNetworksDirty = false
+
+        if !oldNetworks.isEmpty && oldNetworks.count != newWallNetworks.count {
+            context.emit(SimEvent(tick: state.tick, kind: .wallNetworkSplit, value: newWallNetworks.count))
+        }
+        context.emit(SimEvent(tick: state.tick, kind: .wallNetworkRebuilt))
+    }
+
+    private func trimAmmoPoolToCapacity(_ ammoPool: inout [ItemID: Int], capacity: Int) {
+        guard capacity >= 0 else {
+            ammoPool = [:]
+            return
+        }
+
+        var total = ammoPool.values.reduce(0, +)
+        guard total > capacity else { return }
+
+        for itemID in ammoPool.keys.sorted() {
+            guard total > capacity else { break }
+            let overflow = total - capacity
+            let quantity = ammoPool[itemID, default: 0]
+            guard quantity > 0 else { continue }
+            let reduction = min(quantity, overflow)
+            let updated = quantity - reduction
+            if updated > 0 {
+                ammoPool[itemID] = updated
+            } else {
+                ammoPool.removeValue(forKey: itemID)
+            }
+            total -= reduction
+        }
     }
 
     @discardableResult
@@ -829,17 +1019,35 @@ public struct WaveSystem: SimulationSystem {
     public var raidRollTrigger: UInt64
     public var raidCooldownTicks: UInt64
     public var enableRaids: Bool
+    private let enemyDefsByID: [EnemyID: EnemyDef]
+    private let handAuthoredByIndex: [Int: WaveDef]
+    private let proceduralConfig: ProceduralWaveConfigDef
+    private let maxConcurrentEnemies: Int
+
+    private struct SpawnCluster {
+        var id: Int
+        var entryPoint: GridPosition
+        var spawnPoint: GridPosition
+        var activationDelay: UInt64
+    }
 
     public init(
         raidRollModulus: UInt64 = 97,
         raidRollTrigger: UInt64 = 3,
         raidCooldownTicks: UInt64 = 220,
-        enableRaids: Bool = true
+        enableRaids: Bool = true,
+        enemyDefinitions: [EnemyDef] = WaveSystem.defaultEnemyDefinitions,
+        waveContent: WaveContentDef = WaveSystem.defaultWaveContent,
+        maxConcurrentEnemies: Int = 500
     ) {
         self.raidRollModulus = raidRollModulus
         self.raidRollTrigger = raidRollTrigger
         self.raidCooldownTicks = raidCooldownTicks
         self.enableRaids = enableRaids
+        self.enemyDefsByID = Dictionary(uniqueKeysWithValues: enemyDefinitions.map { ($0.id, $0) })
+        self.handAuthoredByIndex = Dictionary(uniqueKeysWithValues: waveContent.handAuthoredWaves.map { ($0.index, $0) })
+        self.proceduralConfig = waveContent.proceduralConfig
+        self.maxConcurrentEnemies = max(1, maxConcurrentEnemies)
     }
 
     public func update(state: inout WorldState, context: SystemContext) {
@@ -858,9 +1066,10 @@ public struct WaveSystem: SimulationSystem {
         }
 
         guard state.run.phase == .playing else { return }
+        drainPendingSpawns(state: &state, context: context)
 
         if state.tick >= state.threat.nextTrickleTick {
-            spawnTrickleEnemies(state: &state, context: context)
+            scheduleTrickleSpawns(state: &state)
             state.threat.nextTrickleTick = state.tick + state.threat.trickleIntervalTicks
         }
 
@@ -869,7 +1078,7 @@ public struct WaveSystem: SimulationSystem {
             state.threat.waveIndex += 1
             state.threat.waveEndsAtTick = state.tick + state.threat.waveDurationTicks
             context.emit(SimEvent(tick: state.tick, kind: .waveStarted, value: state.threat.waveIndex))
-            spawnWaveEnemies(state: &state, context: context)
+            scheduleWaveSurgeSpawns(state: &state)
         }
 
         if state.threat.isWaveActive,
@@ -878,6 +1087,7 @@ public struct WaveSystem: SimulationSystem {
             state.threat.isWaveActive = false
             state.threat.waveEndsAtTick = nil
             state.threat.nextWaveTick = state.tick + nextWaveGapTicks(state: state)
+            context.emit(SimEvent(tick: state.tick, kind: .waveCleared, value: state.threat.waveIndex))
             context.emit(SimEvent(tick: state.tick, kind: .waveEnded, value: state.threat.waveIndex))
 
             if state.threat.waveIndex % state.threat.milestoneEvery == 0,
@@ -888,92 +1098,115 @@ public struct WaveSystem: SimulationSystem {
                 context.emit(SimEvent(tick: state.tick, kind: .milestoneReached, value: state.threat.waveIndex))
             }
         }
+
+        state.threat.telemetry.queuedSpawnBacklog = state.threat.pendingSpawns.count
     }
 
-    private func spawnWaveEnemies(state: inout WorldState, context: SystemContext) {
-        let wave = state.threat.waveIndex
-        let spawnCount = min(24, max(3, 2 + wave * 2))
+    private func drainPendingSpawns(state: inout WorldState, context: SystemContext) {
+        guard !state.threat.pendingSpawns.isEmpty else { return }
 
-        for offset in 0..<spawnCount {
-            let isRaider = wave >= 4 && offset % 4 == 0
-            let archetype: EnemyArchetype = isRaider ? .raider : .scout
-            let health = isRaider ? (45 + wave * 5) : (20 + wave * 3)
-            let moveEvery = isRaider ? max(4, 10 - wave / 3) : max(3, 8 - wave / 4)
-            let damage = isRaider ? 12 : 8
-            let reward = isRaider ? (4 + wave / 2) : (2 + wave / 3)
+        state.threat.pendingSpawns.sort { lhs, rhs in
+            if lhs.spawnTick != rhs.spawnTick { return lhs.spawnTick < rhs.spawnTick }
+            if lhs.clusterID != rhs.clusterID { return lhs.clusterID < rhs.clusterID }
+            if lhs.waveIndex != rhs.waveIndex { return lhs.waveIndex < rhs.waveIndex }
+            return lhs.enemyID < rhs.enemyID
+        }
 
-            spawnEnemy(
-                state: &state,
-                context: context,
-                wave: wave,
-                index: offset,
-                archetype: archetype,
-                health: health,
-                moveEveryTicks: UInt64(moveEvery),
-                baseDamage: damage,
-                rewardCurrency: reward
-            )
+        while let next = state.threat.pendingSpawns.first {
+            guard next.spawnTick <= state.tick else { break }
+            guard state.combat.enemies.count < maxConcurrentEnemies else { break }
+            _ = state.threat.pendingSpawns.removeFirst()
+            spawnEnemy(from: next, state: &state, context: context)
         }
     }
 
-    private func spawnTrickleEnemies(state: inout WorldState, context: SystemContext) {
+    private func scheduleTrickleSpawns(state: inout WorldState) {
         let minCount = max(1, state.threat.trickleMinCount)
         let maxCount = max(minCount, state.threat.trickleMaxCount)
-        let span = maxCount - minCount + 1
-        let count = minCount + deterministicRoll(tick: state.tick, wave: state.threat.waveIndex, modulus: UInt64(span))
+        let count = minCount + Int(nextRandom(modulus: UInt64(maxCount - minCount + 1), state: &state))
+
+        let trickleEnemyIDs: [EnemyID]
+        switch state.run.difficulty {
+        case .hard:
+            trickleEnemyIDs = ["swarmling", "drone_scout"]
+        case .easy, .normal:
+            trickleEnemyIDs = ["swarmling"]
+        }
 
         for offset in 0..<count {
-            let roll = deterministicRoll(
-                tick: state.tick + UInt64(offset),
-                wave: state.threat.waveIndex + offset,
-                modulus: 4
-            )
-            let spawnRaiderOnHard = state.run.difficulty == .hard && roll == 0
-            let archetype: EnemyArchetype = spawnRaiderOnHard ? .raider : .scout
-            let health = spawnRaiderOnHard ? 45 : 20
-            let moveEveryTicks: UInt64 = spawnRaiderOnHard ? 6 : 8
-            let damage = spawnRaiderOnHard ? 12 : 8
-            let reward = spawnRaiderOnHard ? 3 : 1
-
-            spawnEnemy(
-                state: &state,
-                context: context,
-                wave: state.threat.waveIndex,
-                index: offset + 100,
-                archetype: archetype,
-                health: health,
-                moveEveryTicks: moveEveryTicks,
-                baseDamage: damage,
-                rewardCurrency: reward
+            guard let entry = randomPerimeterEntryPoint(state: &state) else { continue }
+            let enemyID = trickleEnemyIDs[Int(nextRandom(modulus: UInt64(trickleEnemyIDs.count), state: &state))]
+            state.threat.pendingSpawns.append(
+                PendingEnemySpawn(
+                    spawnTick: state.tick + UInt64(offset * 3),
+                    enemyID: enemyID,
+                    waveIndex: state.threat.waveIndex,
+                    clusterID: 0,
+                    entryPoint: entry,
+                    spawnPosition: outsideSpawnPosition(for: entry, board: state.board)
+                )
             )
         }
     }
 
-    private func spawnEnemy(
-        state: inout WorldState,
-        context: SystemContext,
-        wave: Int,
-        index: Int,
-        archetype: EnemyArchetype,
-        health: Int,
-        moveEveryTicks: UInt64,
-        baseDamage: Int,
-        rewardCurrency: Int
-    ) {
-        let span = max(1, state.combat.spawnYMax - state.combat.spawnYMin + 1)
-        let y = state.combat.spawnYMin + ((wave * 7 + index * 5) % span)
-        let position = GridPosition(x: state.combat.spawnEdgeX, y: y)
+    private func scheduleWaveSurgeSpawns(state: inout WorldState) {
+        let waveIndex = state.threat.waveIndex
+        let groups = groupsForWave(index: waveIndex, state: &state)
+        guard !groups.isEmpty else { return }
+        guard let clusters = makeSpawnClusters(state: &state), !clusters.isEmpty else { return }
 
-        let enemyID = state.entities.spawnEnemy(at: position, health: health)
+        var clusterSpawnIndices = Array(repeating: 0, count: clusters.count)
+        var ordering = 0
+
+        for group in groups {
+            for _ in 0..<group.count {
+                let baseCluster = ordering % clusters.count
+                var clusterIndex = baseCluster
+                if clusters.count > 1 && nextRandom(modulus: 100, state: &state) < 20 {
+                    let direction = nextRandom(modulus: 2, state: &state) == 0 ? -1 : 1
+                    clusterIndex = (baseCluster + direction + clusters.count) % clusters.count
+                }
+
+                let cluster = clusters[clusterIndex]
+                let spawnTick = state.tick
+                    + group.delayTicks
+                    + cluster.activationDelay
+                    + UInt64(clusterSpawnIndices[clusterIndex] * 3)
+                clusterSpawnIndices[clusterIndex] += 1
+
+                state.threat.pendingSpawns.append(
+                    PendingEnemySpawn(
+                        spawnTick: spawnTick,
+                        enemyID: group.enemyID,
+                        waveIndex: waveIndex,
+                        clusterID: cluster.id,
+                        entryPoint: cluster.entryPoint,
+                        spawnPosition: cluster.spawnPoint
+                    )
+                )
+                ordering += 1
+            }
+        }
+    }
+
+    private func spawnEnemy(from spawn: PendingEnemySpawn, state: inout WorldState, context: SystemContext) {
+        guard let enemyDef = enemyDefsByID[spawn.enemyID] else { return }
+
+        let enemyID = state.entities.spawnEnemy(at: spawn.spawnPosition, health: enemyDef.health)
         state.combat.enemies[enemyID] = EnemyRuntime(
             id: enemyID,
-            archetype: archetype,
-            moveEveryTicks: max(1, moveEveryTicks),
-            baseDamage: baseDamage,
-            rewardCurrency: rewardCurrency
+            enemyID: enemyDef.id,
+            archetype: enemyArchetype(for: enemyDef.id),
+            moveEveryTicks: ticksPerMovement(speed: enemyDef.speed),
+            baseDamage: enemyDef.baseDamage,
+            rewardCurrency: max(1, enemyDef.threatCost / 2),
+            behaviorModifier: enemyDef.behaviorModifier,
+            wallDamageMultiplier: enemyDef.wallDamageMultiplier ?? 1.0,
+            entryPoint: spawn.entryPoint
         )
 
-        context.emit(SimEvent(tick: state.tick, kind: .enemySpawned, entity: enemyID, value: health))
+        state.threat.telemetry.spawnedEnemiesByWave[spawn.waveIndex, default: 0] += 1
+        context.emit(SimEvent(tick: state.tick, kind: .enemySpawned, entity: enemyID, value: enemyDef.health))
     }
 
     private func emitLifecycleEvents(state: inout WorldState, context: SystemContext) {
@@ -991,9 +1224,170 @@ public struct WaveSystem: SimulationSystem {
         return max(state.threat.waveGapFloorTicks, compressed)
     }
 
-    private func deterministicRoll(tick: UInt64, wave: Int, modulus: UInt64) -> Int {
-        let seed = tick &* 1_103_515_245 &+ UInt64(max(0, wave) &* 12_345) &+ 0x9E3779B97F4A7C15
-        return Int(seed % max(1, modulus))
+    private func groupsForWave(index: Int, state: inout WorldState) -> [EnemyGroup] {
+        if let authored = handAuthoredByIndex[index] {
+            return authored.composition
+        }
+        return proceduralGroups(forWave: index, state: &state)
+    }
+
+    private func proceduralGroups(forWave index: Int, state: inout WorldState) -> [EnemyGroup] {
+        let difficultyID = DifficultyID(rawValue: state.run.difficulty.rawValue) ?? .normal
+        let difficultyMultiplier = proceduralConfig.difficultyMultipliers.value(for: difficultyID)
+
+        let formula = proceduralConfig.budgetFormula
+        let rawBudget = Double(formula.base)
+            + (Double(formula.linear) * Double(index))
+            + floor(formula.quadratic * Double(index * index))
+        let budget = max(1, Int(floor(rawBudget * difficultyMultiplier)))
+
+        guard let swarmling = enemyDefsByID["swarmling"] else { return [] }
+        var counts: [EnemyID: Int] = [:]
+        let swarmlingReserve = max(0, Int(Double(budget) * proceduralConfig.swarmlingReserveRatio))
+        counts[swarmling.id] = swarmlingReserve / max(1, swarmling.threatCost)
+
+        var remaining = budget - (counts[swarmling.id, default: 0] * swarmling.threatCost)
+        let candidates = enemyDefsByID.values
+            .filter { $0.id != "artillery_bug" && $0.id != swarmling.id && $0.minBudgetToSpawn <= budget }
+            .sorted { $0.id < $1.id }
+
+        var guardCounter = 0
+        while remaining > 0, guardCounter < 4_096 {
+            guardCounter += 1
+            let affordable = candidates.filter { $0.threatCost <= remaining }
+            guard !affordable.isEmpty else { break }
+            let picked = affordable[Int(nextRandom(modulus: UInt64(affordable.count), state: &state))]
+            counts[picked.id, default: 0] += 1
+            remaining -= picked.threatCost
+        }
+
+        if remaining > 0 {
+            counts[swarmling.id, default: 0] += remaining / max(1, swarmling.threatCost)
+        }
+
+        let idsInOrder = counts.keys.sorted { lhs, rhs in
+            if lhs == swarmling.id { return true }
+            if rhs == swarmling.id { return false }
+            return lhs < rhs
+        }
+
+        return idsInOrder.compactMap { enemyID in
+            let count = counts[enemyID, default: 0]
+            guard count > 0 else { return nil }
+            return EnemyGroup(enemyID: enemyID, count: count, delayTicks: 0)
+        }
+    }
+
+    private func makeSpawnClusters(state: inout WorldState) -> [SpawnCluster]? {
+        let perimeter = state.board.spawnPositions()
+        guard !perimeter.isEmpty else { return nil }
+
+        let desiredCount = 2 + Int(nextRandom(modulus: 3, state: &state))
+        let clusterCount = max(1, min(desiredCount, perimeter.count))
+        let minimumSeparation = max(1, perimeter.count / 6)
+
+        var pickedIndices: [Int] = []
+        var attempts = 0
+        while pickedIndices.count < clusterCount && attempts < perimeter.count * 8 {
+            attempts += 1
+            let idx = Int(nextRandom(modulus: UInt64(perimeter.count), state: &state))
+            let isFarEnough = pickedIndices.allSatisfy { chosen in
+                circularIndexDistance(lhs: idx, rhs: chosen, count: perimeter.count) >= minimumSeparation
+            }
+            if isFarEnough {
+                pickedIndices.append(idx)
+            }
+        }
+
+        if pickedIndices.count < clusterCount {
+            pickedIndices = stride(from: 0, to: perimeter.count, by: max(1, perimeter.count / clusterCount)).map { $0 }
+            pickedIndices = Array(pickedIndices.prefix(clusterCount))
+        }
+
+        return pickedIndices.enumerated().map { clusterID, index in
+            let entry = perimeter[index]
+            return SpawnCluster(
+                id: clusterID,
+                entryPoint: entry,
+                spawnPoint: outsideSpawnPosition(for: entry, board: state.board),
+                activationDelay: nextRandom(modulus: 41, state: &state)
+            )
+        }
+    }
+
+    private func circularIndexDistance(lhs: Int, rhs: Int, count: Int) -> Int {
+        let direct = abs(lhs - rhs)
+        return min(direct, max(0, count - direct))
+    }
+
+    private func randomPerimeterEntryPoint(state: inout WorldState) -> GridPosition? {
+        let perimeter = state.board.spawnPositions()
+        guard !perimeter.isEmpty else { return nil }
+        let index = Int(nextRandom(modulus: UInt64(perimeter.count), state: &state))
+        return perimeter[index]
+    }
+
+    private func outsideSpawnPosition(for entryPoint: GridPosition, board: BoardState) -> GridPosition {
+        let centerX = board.width / 2
+        let centerY = board.height / 2
+        let dx = entryPoint.x - centerX
+        let dy = entryPoint.y - centerY
+
+        if abs(dx) >= abs(dy) {
+            let x = dx >= 0 ? board.width + 1 : -2
+            return GridPosition(x: x, y: entryPoint.y, z: entryPoint.z)
+        }
+
+        let y = dy >= 0 ? board.height + 1 : -2
+        return GridPosition(x: entryPoint.x, y: y, z: entryPoint.z)
+    }
+
+    private func nextRandom(modulus: UInt64, state: inout WorldState) -> UInt64 {
+        let value = state.threat.deterministicRandomState == 0
+            ? (state.run.seed ^ 0x9E37_79B9_7F4A_7C15)
+            : state.threat.deterministicRandomState
+        state.threat.deterministicRandomState = value &* 6364136223846793005 &+ 1442695040888963407
+        return state.threat.deterministicRandomState % max(1, modulus)
+    }
+
+    private func ticksPerMovement(speed: Float) -> UInt64 {
+        let clampedSpeed = max(0.05, Double(speed))
+        let ticks = (20.0 / clampedSpeed).rounded()
+        return UInt64(max(1, Int(ticks)))
+    }
+
+    private func enemyArchetype(for enemyID: EnemyID) -> EnemyArchetype {
+        switch enemyID {
+        case "swarmling":
+            return .swarmling
+        case "drone_scout":
+            return .droneScout
+        case "raider":
+            return .raider
+        case "breacher":
+            return .breacher
+        case "overseer":
+            return .overseer
+        default:
+            return .droneScout
+        }
+    }
+
+    public static var defaultEnemyDefinitions: [EnemyDef] {
+        if let loaded = CanonicalBootstrapContent.bundle?.enemies, !loaded.isEmpty {
+            return loaded
+        }
+        return [
+            EnemyDef(id: "swarmling", health: 10, speed: 1.8, threatCost: 1, baseDamage: 5),
+            EnemyDef(id: "drone_scout", health: 20, speed: 1.4, threatCost: 2, baseDamage: 8),
+            EnemyDef(id: "raider", health: 45, speed: 1.0, threatCost: 5, baseDamage: 12, behaviorModifier: .structureSeeker, minBudgetToSpawn: 20),
+            EnemyDef(id: "breacher", health: 70, speed: 0.9, threatCost: 8, baseDamage: 15, behaviorModifier: .wallBreaker, wallDamageMultiplier: 2.0, minBudgetToSpawn: 30),
+            EnemyDef(id: "overseer", health: 140, speed: 0.65, threatCost: 14, baseDamage: 10, behaviorModifier: .auraBuffer, minBudgetToSpawn: 60)
+        ]
+    }
+
+    public static var defaultWaveContent: WaveContentDef {
+        CanonicalBootstrapContent.bundle?.waveContent ?? WaveContentDef(handAuthoredWaves: [])
     }
 }
 
@@ -1006,6 +1400,7 @@ public struct EnemyMovementSystem: SimulationSystem {
         let pathfinder = Pathfinder()
         let map = buildNavigationMap(state: state)
         let sortedEnemyIDs = state.combat.enemies.keys.sorted()
+        let occupiedStructures = structureOccupancy(state: state)
 
         for enemyID in sortedEnemyIDs {
             guard let runtime = state.combat.enemies[enemyID] else { continue }
@@ -1014,32 +1409,272 @@ public struct EnemyMovementSystem: SimulationSystem {
                 continue
             }
 
-            guard state.tick % max(1, runtime.moveEveryTicks) == 0 else { continue }
+            let auraBuffed = hasOverseerAura(for: enemyID, state: state)
+            let effectiveMoveEvery = adjustedMoveEvery(runtime.moveEveryTicks, auraBuffed: auraBuffed)
+            guard state.tick % max(1, effectiveMoveEvery) == 0 else { continue }
+
+            if !state.board.contains(enemy.position), let entryPoint = runtime.entryPoint {
+                let nextOutsideStep = stepToward(from: enemy.position, to: entryPoint)
+                state.entities.updatePosition(enemyID, to: nextOutsideStep)
+                if nextOutsideStep == entryPoint {
+                    var updated = runtime
+                    updated.entryPoint = nil
+                    state.combat.enemies[enemyID] = updated
+                }
+                context.emit(SimEvent(tick: state.tick, kind: .enemyMoved, entity: enemyID))
+                continue
+            }
 
             if enemy.position == state.combat.basePosition {
-                applyBaseHit(state: &state, context: context, enemyID: enemyID, damage: runtime.baseDamage)
+                applyBaseHit(state: &state, context: context, enemyID: enemyID, damage: effectiveDamage(for: runtime, againstWall: false, auraBuffed: auraBuffed))
                 continue
             }
 
-            guard let path = pathfinder.findPath(on: map, from: enemy.position, to: state.combat.basePosition),
-                  path.count > 1 else {
-                // If no valid path exists, treat this as a breach pressure tick.
-                applyBaseHit(state: &state, context: context, enemyID: enemyID, damage: 1)
+            if runtime.behaviorModifier == .structureSeeker,
+               let raiderTarget = nearestReachableRaiderTarget(enemy: enemy, map: map, pathfinder: pathfinder, state: state) {
+                if isAdjacent(enemy.position, to: raiderTarget.position) {
+                    attackStructure(targetID: raiderTarget.id, runtime: runtime, auraBuffed: auraBuffed, state: &state, context: context)
+                    continue
+                }
+                if let approach = nextStepTowardStructure(enemy: enemy, structure: raiderTarget, map: map, pathfinder: pathfinder) {
+                    state.entities.updatePosition(enemyID, to: approach.step)
+                    context.emit(SimEvent(tick: state.tick, kind: .enemyMoved, entity: enemyID))
+                    continue
+                }
+            }
+
+            if let path = pathfinder.findPath(on: map, from: enemy.position, to: state.combat.basePosition),
+               path.count > 1 {
+                let next = path[1]
+                state.entities.updatePosition(enemyID, to: next)
+                context.emit(SimEvent(tick: state.tick, kind: .enemyMoved, entity: enemyID))
+
+                if next == state.combat.basePosition {
+                    applyBaseHit(
+                        state: &state,
+                        context: context,
+                        enemyID: enemyID,
+                        damage: effectiveDamage(for: runtime, againstWall: false, auraBuffed: auraBuffed)
+                    )
+                }
                 continue
             }
 
-            let next = path[1]
-            state.entities.updatePosition(enemyID, to: next)
-            context.emit(SimEvent(tick: state.tick, kind: .enemyMoved, entity: enemyID))
-
-            if next == state.combat.basePosition {
-                applyBaseHit(state: &state, context: context, enemyID: enemyID, damage: runtime.baseDamage)
+            if let adjacentTarget = preferredAdjacentTarget(enemy: enemy, runtime: runtime, occupancy: occupiedStructures, state: state) {
+                attackStructure(targetID: adjacentTarget.id, runtime: runtime, auraBuffed: auraBuffed, state: &state, context: context)
             }
         }
     }
 
     private func buildNavigationMap(state: WorldState) -> GridMap {
         PlacementValidator().navigationMap(for: state)
+    }
+
+    private func structureOccupancy(state: WorldState) -> [GridPosition: EntityID] {
+        var occupancy: [GridPosition: EntityID] = [:]
+        let structures = state.entities.all.filter { $0.category == .structure }.sorted { $0.id < $1.id }
+        for structure in structures {
+            guard let structureType = structure.structureType else { continue }
+            for cell in structureType.coveredCells(anchor: structure.position) {
+                let key = GridPosition(x: cell.x, y: cell.y, z: 0)
+                if let existingID = occupancy[key],
+                   let existing = state.entities.entity(id: existingID),
+                   existing.structureType == .wall {
+                    continue
+                }
+                if structureType == .wall || occupancy[key] == nil {
+                    occupancy[key] = structure.id
+                }
+            }
+        }
+        return occupancy
+    }
+
+    private func nearestReachableRaiderTarget(
+        enemy: Entity,
+        map: GridMap,
+        pathfinder: Pathfinder,
+        state: WorldState
+    ) -> Entity? {
+        let candidates = state.entities.all.filter { entity in
+            guard entity.category == .structure else { return false }
+            guard let type = entity.structureType else { return false }
+            guard type != .wall else { return false }
+            return enemy.position.manhattanDistance(to: entity.position) <= 4
+        }
+
+        var best: (entity: Entity, pathLength: Int)?
+        for candidate in candidates {
+            guard let approach = nextStepTowardStructure(enemy: enemy, structure: candidate, map: map, pathfinder: pathfinder, returnPathLength: true) else {
+                continue
+            }
+            let pathLength = approach.pathLength
+            if let current = best {
+                if pathLength < current.pathLength || (pathLength == current.pathLength && candidate.id < current.entity.id) {
+                    best = (candidate, pathLength)
+                }
+            } else {
+                best = (candidate, pathLength)
+            }
+        }
+        return best?.entity
+    }
+
+    private func nextStepTowardStructure(
+        enemy: Entity,
+        structure: Entity,
+        map: GridMap,
+        pathfinder: Pathfinder,
+        returnPathLength: Bool = false
+    ) -> (step: GridPosition, pathLength: Int)? {
+        guard let structureType = structure.structureType else { return nil }
+
+        var best: (step: GridPosition, pathLength: Int)?
+        let footprintCells = structureType.coveredCells(anchor: structure.position)
+        for footprintCell in footprintCells {
+            let neighbors = [
+                GridPosition(x: footprintCell.x + 1, y: footprintCell.y),
+                GridPosition(x: footprintCell.x - 1, y: footprintCell.y),
+                GridPosition(x: footprintCell.x, y: footprintCell.y + 1),
+                GridPosition(x: footprintCell.x, y: footprintCell.y - 1)
+            ]
+            for neighbor in neighbors {
+                guard let tile = map.tile(at: neighbor), tile.walkable else { continue }
+                guard let path = pathfinder.findPath(on: map, from: enemy.position, to: neighbor), path.count > 1 else { continue }
+                let candidate = (path[1], path.count)
+                if let current = best {
+                    if candidate.1 < current.pathLength {
+                        best = candidate
+                    }
+                } else {
+                    best = candidate
+                }
+            }
+        }
+
+        guard let best else { return nil }
+        return returnPathLength ? best : (best.step, 0)
+    }
+
+    private func preferredAdjacentTarget(
+        enemy: Entity,
+        runtime: EnemyRuntime,
+        occupancy: [GridPosition: EntityID],
+        state: WorldState
+    ) -> Entity? {
+        let adjacentCells = [
+            enemy.position.translated(byX: 1),
+            enemy.position.translated(byX: -1),
+            enemy.position.translated(byY: 1),
+            enemy.position.translated(byY: -1)
+        ]
+
+        let adjacentStructures = adjacentCells.compactMap { cell -> Entity? in
+            let key = GridPosition(x: cell.x, y: cell.y, z: 0)
+            guard let structureID = occupancy[key] else { return nil }
+            return state.entities.entity(id: structureID)
+        }
+
+        guard !adjacentStructures.isEmpty else { return nil }
+
+        if runtime.behaviorModifier == .wallBreaker,
+           let wall = adjacentStructures.first(where: { $0.structureType == .wall }) {
+            return wall
+        }
+
+        return adjacentStructures.min { lhs, rhs in
+            let lDist = enemy.position.manhattanDistance(to: lhs.position)
+            let rDist = enemy.position.manhattanDistance(to: rhs.position)
+            if lDist == rDist {
+                return lhs.id < rhs.id
+            }
+            return lDist < rDist
+        }
+    }
+
+    private func isAdjacent(_ lhs: GridPosition, to rhs: GridPosition) -> Bool {
+        abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y) == 1
+    }
+
+    private func hasOverseerAura(for enemyID: EntityID, state: WorldState) -> Bool {
+        guard let enemy = state.entities.entity(id: enemyID) else { return false }
+        return state.combat.enemies.values.contains { runtime in
+            guard runtime.id != enemyID else { return false }
+            guard runtime.behaviorModifier == .auraBuffer else { return false }
+            guard let source = state.entities.entity(id: runtime.id) else { return false }
+            return source.position.manhattanDistance(to: enemy.position) <= 4
+        }
+    }
+
+    private func adjustedMoveEvery(_ moveEveryTicks: UInt64, auraBuffed: Bool) -> UInt64 {
+        guard auraBuffed else { return max(1, moveEveryTicks) }
+        let adjusted = Double(max(1, moveEveryTicks)) / 1.15
+        return UInt64(max(1, Int(adjusted.rounded(.down))))
+    }
+
+    private func effectiveDamage(for runtime: EnemyRuntime, againstWall: Bool, auraBuffed: Bool) -> Int {
+        var base = Double(max(1, runtime.baseDamage))
+        if againstWall {
+            base *= runtime.wallDamageMultiplier
+        }
+        if auraBuffed {
+            base *= 1.25
+        }
+        return max(1, Int(base.rounded(.toNearestOrAwayFromZero)))
+    }
+
+    private func stepToward(from: GridPosition, to: GridPosition) -> GridPosition {
+        let dx = to.x - from.x
+        let dy = to.y - from.y
+        let stepX = dx == 0 ? 0 : (dx > 0 ? 1 : -1)
+        let stepY = dy == 0 ? 0 : (dy > 0 ? 1 : -1)
+        if abs(dx) >= abs(dy) {
+            return from.translated(byX: stepX)
+        }
+        return from.translated(byY: stepY)
+    }
+
+    private func attackStructure(
+        targetID: EntityID,
+        runtime: EnemyRuntime,
+        auraBuffed: Bool,
+        state: inout WorldState,
+        context: SystemContext
+    ) {
+        guard let target = state.entities.entity(id: targetID) else { return }
+        let againstWall = target.structureType == .wall
+        let damage = effectiveDamage(for: runtime, againstWall: againstWall, auraBuffed: auraBuffed)
+
+        context.emit(SimEvent(tick: state.tick, kind: .structureDamaged, entity: targetID, value: damage))
+        state.threat.telemetry.structureDamageEvents += 1
+
+        state.entities.damage(targetID, amount: damage)
+        let stillExists = state.entities.entity(id: targetID) != nil
+        guard !stillExists else { return }
+
+        context.emit(SimEvent(tick: state.tick, kind: .structureDestroyed, entity: targetID, value: damage))
+        if target.structureType == .wall {
+            destroyMountedTurrets(onWallID: targetID, state: &state)
+            state.combat.wallNetworksDirty = true
+        }
+
+        if state.run.hqEntityID == targetID {
+            state.run.phase = .gameOver
+            if !state.run.gameOverEmitted {
+                state.run.gameOverEmitted = true
+                context.emit(SimEvent(tick: state.tick, kind: .gameOver, value: Int(min(state.tick, UInt64(Int.max)))))
+            }
+        }
+    }
+
+    private func destroyMountedTurrets(onWallID wallID: EntityID, state: inout WorldState) {
+        let mountedTurrets = state.entities.structures(of: .turretMount).filter { $0.hostWallID == wallID }
+        for turret in mountedTurrets {
+            state.entities.remove(turret.id)
+            state.combat.lastFireTickByTurret.removeValue(forKey: turret.id)
+            state.economy.structureInputBuffers.removeValue(forKey: turret.id)
+            state.economy.structureOutputBuffers.removeValue(forKey: turret.id)
+        }
     }
 
     private func applyBaseHit(state: inout WorldState, context: SystemContext, enemyID: EntityID, damage: Int) {
@@ -1131,11 +1766,27 @@ public struct CombatSystem: SimulationSystem {
         for itemID in dryFiresByItem.keys.sorted() {
             let dryFires = dryFiresByItem[itemID, default: 0]
             guard dryFires > 0 else { continue }
+            state.threat.telemetry.dryFireEvents += dryFires
             context.emit(SimEvent(tick: state.tick, kind: .notEnoughAmmo, value: dryFires, itemID: itemID))
         }
     }
 
     private func consumeAmmo(for turretID: EntityID, itemID: ItemID, state: inout WorldState) -> Bool {
+        if let turret = state.entities.entity(id: turretID),
+           let hostWallID = turret.hostWallID {
+            guard let networkID = state.combat.wallNetworkByWallEntityID[hostWallID],
+                  var network = state.combat.wallNetworks[networkID] else {
+                return false
+            }
+
+            let available = network.ammoPoolByItemID[itemID, default: 0]
+            guard available > 0 else { return false }
+
+            network.ammoPoolByItemID[itemID] = available - 1
+            state.combat.wallNetworks[networkID] = network
+            return true
+        }
+
         if var localBuffer = state.economy.structureInputBuffers[turretID],
            let localAmmo = localBuffer[itemID],
            localAmmo > 0 {

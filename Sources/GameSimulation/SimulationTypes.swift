@@ -94,9 +94,9 @@ public struct StructureFootprint: Codable, Hashable, Sendable {
 public extension StructureType {
     var footprint: StructureFootprint {
         switch self {
-        case .hq, .turretMount, .powerPlant, .storage:
+        case .hq, .powerPlant, .storage:
             return StructureFootprint(width: 2, height: 2)
-        case .wall, .miner, .smelter, .assembler, .ammoModule, .conveyor:
+        case .wall, .turretMount, .miner, .smelter, .assembler, .ammoModule, .conveyor:
             return StructureFootprint(width: 1, height: 1)
         }
     }
@@ -243,10 +243,13 @@ public enum EventKind: String, Codable, Sendable {
     case gameOver
     case structurePlaced
     case waveStarted
+    case waveCleared
     case waveEnded
     case raidTriggered
     case enemySpawned
     case enemyMoved
+    case structureDamaged
+    case structureDestroyed
     case enemyReachedBase
     case enemyDestroyed
     case projectileFired
@@ -257,6 +260,8 @@ public enum EventKind: String, Codable, Sendable {
     case placementRejected
     case patchExhausted
     case minerIdled
+    case wallNetworkSplit
+    case wallNetworkRebuilt
 }
 
 public struct SimEvent: Codable, Hashable, Sendable {
@@ -286,6 +291,7 @@ public struct Entity: Codable, Hashable, Sendable {
     public var category: EntityCategory
     public var structureType: StructureType?
     public var turretDefID: String?
+    public var hostWallID: EntityID?
     public var boundPatchID: Int?
     public var position: GridPosition
     public var health: Int
@@ -296,6 +302,7 @@ public struct Entity: Codable, Hashable, Sendable {
         category: EntityCategory,
         structureType: StructureType? = nil,
         turretDefID: String? = nil,
+        hostWallID: EntityID? = nil,
         boundPatchID: Int? = nil,
         position: GridPosition,
         health: Int,
@@ -305,6 +312,7 @@ public struct Entity: Codable, Hashable, Sendable {
         self.category = category
         self.structureType = structureType
         self.turretDefID = turretDefID
+        self.hostWallID = hostWallID
         self.boundPatchID = boundPatchID
         self.position = position
         self.health = health
@@ -313,29 +321,107 @@ public struct Entity: Codable, Hashable, Sendable {
 }
 
 public enum EnemyArchetype: String, Codable, Sendable {
-    case scout
+    case swarmling
+    case droneScout
     case raider
+    case breacher
+    case overseer
 }
 
 public struct EnemyRuntime: Codable, Hashable, Sendable {
     public var id: EntityID
+    public var enemyID: EnemyID
     public var archetype: EnemyArchetype
     public var moveEveryTicks: UInt64
     public var baseDamage: Int
     public var rewardCurrency: Int
+    public var behaviorModifier: EnemyBehaviorModifier
+    public var wallDamageMultiplier: Double
+    public var entryPoint: GridPosition?
 
     public init(
         id: EntityID,
+        enemyID: EnemyID = "drone_scout",
         archetype: EnemyArchetype,
         moveEveryTicks: UInt64,
         baseDamage: Int,
-        rewardCurrency: Int
+        rewardCurrency: Int,
+        behaviorModifier: EnemyBehaviorModifier = .none,
+        wallDamageMultiplier: Double = 1.0,
+        entryPoint: GridPosition? = nil
     ) {
         self.id = id
+        self.enemyID = enemyID
         self.archetype = archetype
         self.moveEveryTicks = moveEveryTicks
         self.baseDamage = baseDamage
         self.rewardCurrency = rewardCurrency
+        self.behaviorModifier = behaviorModifier
+        self.wallDamageMultiplier = wallDamageMultiplier
+        self.entryPoint = entryPoint
+    }
+}
+
+public struct WallNetworkState: Codable, Hashable, Sendable {
+    public var id: Int
+    public var wallEntityIDs: [EntityID]
+    public var ammoPoolByItemID: [ItemID: Int]
+    public var capacity: Int
+
+    public init(
+        id: Int,
+        wallEntityIDs: [EntityID],
+        ammoPoolByItemID: [ItemID: Int] = [:],
+        capacity: Int
+    ) {
+        self.id = id
+        self.wallEntityIDs = wallEntityIDs
+        self.ammoPoolByItemID = ammoPoolByItemID
+        self.capacity = max(0, capacity)
+    }
+}
+
+public struct PendingEnemySpawn: Codable, Hashable, Sendable {
+    public var spawnTick: UInt64
+    public var enemyID: EnemyID
+    public var waveIndex: Int
+    public var clusterID: Int
+    public var entryPoint: GridPosition
+    public var spawnPosition: GridPosition
+
+    public init(
+        spawnTick: UInt64,
+        enemyID: EnemyID,
+        waveIndex: Int,
+        clusterID: Int,
+        entryPoint: GridPosition,
+        spawnPosition: GridPosition
+    ) {
+        self.spawnTick = spawnTick
+        self.enemyID = enemyID
+        self.waveIndex = waveIndex
+        self.clusterID = clusterID
+        self.entryPoint = entryPoint
+        self.spawnPosition = spawnPosition
+    }
+}
+
+public struct ThreatTelemetry: Codable, Hashable, Sendable {
+    public var spawnedEnemiesByWave: [Int: Int]
+    public var queuedSpawnBacklog: Int
+    public var structureDamageEvents: Int
+    public var dryFireEvents: Int
+
+    public init(
+        spawnedEnemiesByWave: [Int: Int] = [:],
+        queuedSpawnBacklog: Int = 0,
+        structureDamageEvents: Int = 0,
+        dryFireEvents: Int = 0
+    ) {
+        self.spawnedEnemiesByWave = spawnedEnemiesByWave
+        self.queuedSpawnBacklog = max(0, queuedSpawnBacklog)
+        self.structureDamageEvents = max(0, structureDamageEvents)
+        self.dryFireEvents = max(0, dryFireEvents)
     }
 }
 
@@ -363,6 +449,9 @@ public struct CombatState: Codable, Hashable, Sendable {
     public var spawnEdgeX: Int
     public var spawnYMin: Int
     public var spawnYMax: Int
+    public var wallNetworkByWallEntityID: [EntityID: Int]
+    public var wallNetworks: [Int: WallNetworkState]
+    public var wallNetworksDirty: Bool
 
     public init(
         enemies: [EntityID: EnemyRuntime] = [:],
@@ -371,7 +460,10 @@ public struct CombatState: Codable, Hashable, Sendable {
         basePosition: GridPosition = .zero,
         spawnEdgeX: Int = 56,
         spawnYMin: Int = 27,
-        spawnYMax: Int = 36
+        spawnYMax: Int = 36,
+        wallNetworkByWallEntityID: [EntityID: Int] = [:],
+        wallNetworks: [Int: WallNetworkState] = [:],
+        wallNetworksDirty: Bool = true
     ) {
         self.enemies = enemies
         self.projectiles = projectiles
@@ -380,6 +472,9 @@ public struct CombatState: Codable, Hashable, Sendable {
         self.spawnEdgeX = spawnEdgeX
         self.spawnYMin = spawnYMin
         self.spawnYMax = spawnYMax
+        self.wallNetworkByWallEntityID = wallNetworkByWallEntityID
+        self.wallNetworks = wallNetworks
+        self.wallNetworksDirty = wallNetworksDirty
     }
 }
 
@@ -509,6 +604,9 @@ public struct ThreatState: Codable, Hashable, Sendable {
     public var raidCooldownUntilTick: UInt64
     public var milestoneEvery: Int
     public var lastMilestoneWave: Int
+    public var pendingSpawns: [PendingEnemySpawn]
+    public var deterministicRandomState: UInt64
+    public var telemetry: ThreatTelemetry
 
     public init(
         waveIndex: Int = 0,
@@ -528,7 +626,10 @@ public struct ThreatState: Codable, Hashable, Sendable {
         nextTrickleTick: UInt64 = 0,
         raidCooldownUntilTick: UInt64 = 0,
         milestoneEvery: Int = 5,
-        lastMilestoneWave: Int = 0
+        lastMilestoneWave: Int = 0,
+        pendingSpawns: [PendingEnemySpawn] = [],
+        deterministicRandomState: UInt64 = 0xC0FFEE,
+        telemetry: ThreatTelemetry = ThreatTelemetry()
     ) {
         self.waveIndex = waveIndex
         self.nextWaveTick = nextWaveTick
@@ -548,6 +649,9 @@ public struct ThreatState: Codable, Hashable, Sendable {
         self.raidCooldownUntilTick = raidCooldownUntilTick
         self.milestoneEvery = milestoneEvery
         self.lastMilestoneWave = lastMilestoneWave
+        self.pendingSpawns = pendingSpawns
+        self.deterministicRandomState = deterministicRandomState
+        self.telemetry = telemetry
     }
 }
 
@@ -726,7 +830,9 @@ public struct WorldState: Codable, Hashable, Sendable {
                 nextTrickleTick: graceTicks,
                 raidCooldownUntilTick: 0,
                 milestoneEvery: 5,
-                lastMilestoneWave: 0
+                lastMilestoneWave: 0,
+                pendingSpawns: [],
+                deterministicRandomState: seed
             ),
             run: RunState(
                 phase: .gracePeriod,
