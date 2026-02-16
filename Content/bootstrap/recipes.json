@@ -1,0 +1,99 @@
+[
+  {
+    "id": "smelt_iron",
+    "inputs": [{ "itemID": "ore_iron", "quantity": 2 }],
+    "outputs": [{ "itemID": "plate_iron", "quantity": 1 }],
+    "seconds": 2.0
+  },
+  {
+    "id": "smelt_copper",
+    "inputs": [{ "itemID": "ore_copper", "quantity": 2 }],
+    "outputs": [{ "itemID": "plate_copper", "quantity": 1 }],
+    "seconds": 2.0
+  },
+  {
+    "id": "smelt_steel",
+    "inputs": [
+      { "itemID": "plate_iron", "quantity": 2 },
+      { "itemID": "ore_coal", "quantity": 1 }
+    ],
+    "outputs": [{ "itemID": "plate_steel", "quantity": 1 }],
+    "seconds": 4.0
+  },
+  {
+    "id": "forge_gear",
+    "inputs": [{ "itemID": "plate_iron", "quantity": 2 }],
+    "outputs": [{ "itemID": "gear", "quantity": 1 }],
+    "seconds": 1.5
+  },
+  {
+    "id": "etch_circuit",
+    "inputs": [
+      { "itemID": "plate_copper", "quantity": 2 },
+      { "itemID": "ore_coal", "quantity": 1 }
+    ],
+    "outputs": [{ "itemID": "circuit", "quantity": 1 }],
+    "seconds": 2.0
+  },
+  {
+    "id": "assemble_power_cell",
+    "inputs": [
+      { "itemID": "plate_copper", "quantity": 1 },
+      { "itemID": "circuit", "quantity": 1 }
+    ],
+    "outputs": [{ "itemID": "power_cell", "quantity": 1 }],
+    "seconds": 2.5
+  },
+  {
+    "id": "craft_wall_kit",
+    "inputs": [
+      { "itemID": "plate_steel", "quantity": 1 },
+      { "itemID": "gear", "quantity": 1 }
+    ],
+    "outputs": [{ "itemID": "wall_kit", "quantity": 1 }],
+    "seconds": 1.2
+  },
+  {
+    "id": "craft_turret_core",
+    "inputs": [
+      { "itemID": "plate_steel", "quantity": 1 },
+      { "itemID": "circuit", "quantity": 1 },
+      { "itemID": "gear", "quantity": 1 }
+    ],
+    "outputs": [{ "itemID": "turret_core", "quantity": 1 }],
+    "seconds": 2.5
+  },
+  {
+    "id": "craft_ammo_light",
+    "inputs": [{ "itemID": "plate_iron", "quantity": 1 }],
+    "outputs": [{ "itemID": "ammo_light", "quantity": 4 }],
+    "seconds": 2.0
+  },
+  {
+    "id": "craft_ammo_heavy",
+    "inputs": [
+      { "itemID": "plate_steel", "quantity": 1 },
+      { "itemID": "ammo_light", "quantity": 2 }
+    ],
+    "outputs": [{ "itemID": "ammo_heavy", "quantity": 3 }],
+    "seconds": 2.6
+  },
+  {
+    "id": "craft_ammo_plasma",
+    "inputs": [
+      { "itemID": "power_cell", "quantity": 1 },
+      { "itemID": "circuit", "quantity": 1 }
+    ],
+    "outputs": [{ "itemID": "ammo_plasma", "quantity": 2 }],
+    "seconds": 3.0
+  },
+  {
+    "id": "craft_repair_kit",
+    "inputs": [
+      { "itemID": "plate_steel", "quantity": 1 },
+      { "itemID": "circuit", "quantity": 1 }
+    ],
+    "outputs": [{ "itemID": "repair_kit", "quantity": 1 }],
+    "seconds": 2.0
+  }
+]

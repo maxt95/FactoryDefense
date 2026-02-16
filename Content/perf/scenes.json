@@ -1,0 +1,17 @@
+[
+  {
+    "id": "base_bootstrap",
+    "description": "Starter base with one wave and no raids",
+    "ticks": 1200
+  },
+  {
+    "id": "high_pressure_wave",
+    "description": "Multiple turret lines under heavy enemy spawn",
+    "ticks": 2400
+  },
+  {
+    "id": "logistics_stress",
+    "description": "Large conveyor/storage footprint with mixed ammo production",
+    "ticks": 3000
+  }
+]

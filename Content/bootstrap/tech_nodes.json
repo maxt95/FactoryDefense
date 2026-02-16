@@ -1,0 +1,116 @@
+[
+  {
+    "id": "root",
+    "costs": [],
+    "prerequisites": [],
+    "unlocks": ["logistics_1", "defense_1", "smelting_advanced"]
+  },
+  {
+    "id": "logistics_1",
+    "costs": [{ "itemID": "plate_iron", "quantity": 20 }],
+    "prerequisites": ["root"],
+    "unlocks": ["conveyor_mk2", "storage_bins"]
+  },
+  {
+    "id": "defense_1",
+    "costs": [{ "itemID": "ammo_light", "quantity": 40 }],
+    "prerequisites": ["root"],
+    "unlocks": ["heavy_ammo", "fortification"]
+  },
+  {
+    "id": "smelting_advanced",
+    "costs": [{ "itemID": "plate_copper", "quantity": 20 }],
+    "prerequisites": ["root"],
+    "unlocks": ["steel_working", "electronics_1"]
+  },
+  {
+    "id": "conveyor_mk2",
+    "costs": [{ "itemID": "gear", "quantity": 12 }],
+    "prerequisites": ["logistics_1"],
+    "unlocks": ["logistics_2"]
+  },
+  {
+    "id": "storage_bins",
+    "costs": [{ "itemID": "plate_steel", "quantity": 14 }],
+    "prerequisites": ["logistics_1"],
+    "unlocks": ["logistics_2"]
+  },
+  {
+    "id": "heavy_ammo",
+    "costs": [{ "itemID": "ammo_heavy", "quantity": 25 }],
+    "prerequisites": ["defense_1"],
+    "unlocks": ["explosive_payloads"]
+  },
+  {
+    "id": "fortification",
+    "costs": [{ "itemID": "wall_kit", "quantity": 16 }],
+    "prerequisites": ["defense_1"],
+    "unlocks": ["reactive_walls"]
+  },
+  {
+    "id": "steel_working",
+    "costs": [{ "itemID": "plate_steel", "quantity": 25 }],
+    "prerequisites": ["smelting_advanced"],
+    "unlocks": ["turret_core_fabrication"]
+  },
+  {
+    "id": "electronics_1",
+    "costs": [{ "itemID": "circuit", "quantity": 20 }],
+    "prerequisites": ["smelting_advanced"],
+    "unlocks": ["power_cells", "plasma_research"]
+  },
+  {
+    "id": "logistics_2",
+    "costs": [{ "itemID": "plate_steel", "quantity": 22 }],
+    "prerequisites": ["conveyor_mk2", "storage_bins"],
+    "unlocks": ["automated_repair"]
+  },
+  {
+    "id": "turret_core_fabrication",
+    "costs": [{ "itemID": "turret_core", "quantity": 8 }],
+    "prerequisites": ["steel_working"],
+    "unlocks": ["mk2_turrets"]
+  },
+  {
+    "id": "power_cells",
+    "costs": [{ "itemID": "power_cell", "quantity": 12 }],
+    "prerequisites": ["electronics_1"],
+    "unlocks": ["plasma_turrets"]
+  },
+  {
+    "id": "plasma_research",
+    "costs": [{ "itemID": "ammo_plasma", "quantity": 12 }],
+    "prerequisites": ["electronics_1"],
+    "unlocks": ["plasma_turrets"]
+  },
+  {
+    "id": "mk2_turrets",
+    "costs": [{ "itemID": "turret_core", "quantity": 12 }],
+    "prerequisites": ["turret_core_fabrication"],
+    "unlocks": []
+  },
+  {
+    "id": "explosive_payloads",
+    "costs": [{ "itemID": "ammo_heavy", "quantity": 35 }],
+    "prerequisites": ["heavy_ammo"],
+    "unlocks": []
+  },
+  {
+    "id": "reactive_walls",
+    "costs": [{ "itemID": "wall_kit", "quantity": 30 }],
+    "prerequisites": ["fortification"],
+    "unlocks": []
+  },
+  {
+    "id": "automated_repair",
+    "costs": [{ "itemID": "repair_kit", "quantity": 18 }],
+    "prerequisites": ["logistics_2"],
+    "unlocks": []
+  },
+  {
+    "id": "plasma_turrets",
+    "costs": [{ "itemID": "ammo_plasma", "quantity": 25 }],
+    "prerequisites": ["power_cells", "plasma_research"],
+    "unlocks": []
+  }
+]

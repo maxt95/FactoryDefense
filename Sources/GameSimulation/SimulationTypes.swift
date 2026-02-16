@@ -1,0 +1,422 @@
+import Foundation
+import GameContent
+
+public typealias EntityID = Int
+
+public struct PlayerID: Codable, Hashable, Sendable, Comparable {
+    public var rawValue: Int
+
+    public init(_ rawValue: Int) {
+        self.rawValue = rawValue
+    }
+
+    public static func < (lhs: PlayerID, rhs: PlayerID) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
+
+public struct GridPosition: Codable, Hashable, Sendable {
+    public var x: Int
+    public var y: Int
+    public var z: Int
+
+    public init(x: Int, y: Int, z: Int = 0) {
+        self.x = x
+        self.y = y
+        self.z = z
+    }
+
+    public static let zero = GridPosition(x: 0, y: 0, z: 0)
+
+    public func manhattanDistance(to other: GridPosition) -> Int {
+        abs(x - other.x) + abs(y - other.y) + abs(z - other.z)
+    }
+}
+
+public enum StructureType: String, Codable, CaseIterable, Sendable {
+    case wall
+    case turretMount
+    case miner
+    case smelter
+    case assembler
+    case ammoModule
+    case powerPlant
+    case conveyor
+    case storage
+}
+
+public struct BuildRequest: Codable, Hashable, Sendable {
+    public var structure: StructureType
+    public var position: GridPosition
+
+    public init(structure: StructureType, position: GridPosition) {
+        self.structure = structure
+        self.position = position
+    }
+}
+
+public enum CommandPayload: Codable, Hashable, Sendable {
+    case placeStructure(BuildRequest)
+    case extract
+    case triggerWave
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case build
+    }
+
+    private enum Kind: String, Codable {
+        case placeStructure
+        case extract
+        case triggerWave
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try container.decode(Kind.self, forKey: .kind)
+        switch kind {
+        case .placeStructure:
+            self = .placeStructure(try container.decode(BuildRequest.self, forKey: .build))
+        case .extract:
+            self = .extract
+        case .triggerWave:
+            self = .triggerWave
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .placeStructure(let build):
+            try container.encode(Kind.placeStructure, forKey: .kind)
+            try container.encode(build, forKey: .build)
+        case .extract:
+            try container.encode(Kind.extract, forKey: .kind)
+        case .triggerWave:
+            try container.encode(Kind.triggerWave, forKey: .kind)
+        }
+    }
+
+    var sortToken: String {
+        switch self {
+        case .placeStructure(let build):
+            return "place:\(build.structure.rawValue):\(build.position.x):\(build.position.y):\(build.position.z)"
+        case .extract:
+            return "extract"
+        case .triggerWave:
+            return "triggerWave"
+        }
+    }
+}
+
+public struct PlayerCommand: Codable, Hashable, Sendable {
+    public var tick: UInt64
+    public var actor: PlayerID
+    public var payload: CommandPayload
+
+    public init(tick: UInt64, actor: PlayerID, payload: CommandPayload) {
+        self.tick = tick
+        self.actor = actor
+        self.payload = payload
+    }
+
+    var deterministicSortToken: String {
+        "\(actor.rawValue):\(payload.sortToken)"
+    }
+}
+
+public enum EventKind: String, Codable, Sendable {
+    case waveStarted
+    case waveEnded
+    case raidTriggered
+    case enemySpawned
+    case enemyMoved
+    case enemyReachedBase
+    case enemyDestroyed
+    case projectileFired
+    case ammoSpent
+    case notEnoughAmmo
+    case milestoneReached
+    case extracted
+}
+
+public struct SimEvent: Codable, Hashable, Sendable {
+    public var tick: UInt64
+    public var kind: EventKind
+    public var entity: EntityID?
+    public var value: Int?
+    public var itemID: ItemID?
+
+    public init(tick: UInt64, kind: EventKind, entity: EntityID? = nil, value: Int? = nil, itemID: ItemID? = nil) {
+        self.tick = tick
+        self.kind = kind
+        self.entity = entity
+        self.value = value
+        self.itemID = itemID
+    }
+}
+
+public enum EntityCategory: String, Codable, Sendable {
+    case structure
+    case enemy
+    case projectile
+}
+
+public struct Entity: Codable, Hashable, Sendable {
+    public var id: EntityID
+    public var category: EntityCategory
+    public var structureType: StructureType?
+    public var position: GridPosition
+    public var health: Int
+    public var maxHealth: Int
+
+    public init(
+        id: EntityID,
+        category: EntityCategory,
+        structureType: StructureType? = nil,
+        position: GridPosition,
+        health: Int,
+        maxHealth: Int
+    ) {
+        self.id = id
+        self.category = category
+        self.structureType = structureType
+        self.position = position
+        self.health = health
+        self.maxHealth = maxHealth
+    }
+}
+
+public enum EnemyArchetype: String, Codable, Sendable {
+    case scout
+    case raider
+}
+
+public struct EnemyRuntime: Codable, Hashable, Sendable {
+    public var id: EntityID
+    public var archetype: EnemyArchetype
+    public var moveEveryTicks: UInt64
+    public var baseDamage: Int
+    public var rewardCurrency: Int
+
+    public init(
+        id: EntityID,
+        archetype: EnemyArchetype,
+        moveEveryTicks: UInt64,
+        baseDamage: Int,
+        rewardCurrency: Int
+    ) {
+        self.id = id
+        self.archetype = archetype
+        self.moveEveryTicks = moveEveryTicks
+        self.baseDamage = baseDamage
+        self.rewardCurrency = rewardCurrency
+    }
+}
+
+public struct ProjectileRuntime: Codable, Hashable, Sendable {
+    public var id: EntityID
+    public var sourceTurretID: EntityID
+    public var targetEnemyID: EntityID
+    public var damage: Int
+    public var impactTick: UInt64
+
+    public init(id: EntityID, sourceTurretID: EntityID, targetEnemyID: EntityID, damage: Int, impactTick: UInt64) {
+        self.id = id
+        self.sourceTurretID = sourceTurretID
+        self.targetEnemyID = targetEnemyID
+        self.damage = damage
+        self.impactTick = impactTick
+    }
+}
+
+public struct CombatState: Codable, Hashable, Sendable {
+    public var enemies: [EntityID: EnemyRuntime]
+    public var projectiles: [EntityID: ProjectileRuntime]
+    public var basePosition: GridPosition
+    public var spawnEdgeX: Int
+    public var spawnYMin: Int
+    public var spawnYMax: Int
+
+    public init(
+        enemies: [EntityID: EnemyRuntime] = [:],
+        projectiles: [EntityID: ProjectileRuntime] = [:],
+        basePosition: GridPosition = .zero,
+        spawnEdgeX: Int = 18,
+        spawnYMin: Int = 1,
+        spawnYMax: Int = 12
+    ) {
+        self.enemies = enemies
+        self.projectiles = projectiles
+        self.basePosition = basePosition
+        self.spawnEdgeX = spawnEdgeX
+        self.spawnYMin = spawnYMin
+        self.spawnYMax = spawnYMax
+    }
+}
+
+public struct EconomyTelemetry: Codable, Hashable, Sendable {
+    public var produced: [ItemID: Int]
+    public var consumed: [ItemID: Int]
+
+    public init(produced: [ItemID: Int] = [:], consumed: [ItemID: Int] = [:]) {
+        self.produced = produced
+        self.consumed = consumed
+    }
+
+    mutating func recordProduction(itemID: ItemID, quantity: Int) {
+        produced[itemID, default: 0] += quantity
+    }
+
+    mutating func recordConsumption(itemID: ItemID, quantity: Int) {
+        consumed[itemID, default: 0] += quantity
+    }
+}
+
+public struct EconomyState: Codable, Hashable, Sendable {
+    public var inventories: [ItemID: Int]
+    public var powerAvailable: Int
+    public var powerDemand: Int
+    public var currency: Int
+    public var telemetry: EconomyTelemetry
+
+    public init(
+        inventories: [ItemID: Int] = [:],
+        powerAvailable: Int = 0,
+        powerDemand: Int = 0,
+        currency: Int = 0,
+        telemetry: EconomyTelemetry = .init()
+    ) {
+        self.inventories = inventories
+        self.powerAvailable = powerAvailable
+        self.powerDemand = powerDemand
+        self.currency = currency
+        self.telemetry = telemetry
+    }
+
+    @discardableResult
+    public mutating func consume(itemID: ItemID, quantity: Int) -> Bool {
+        guard quantity > 0 else { return true }
+        let current = inventories[itemID, default: 0]
+        guard current >= quantity else { return false }
+        inventories[itemID] = current - quantity
+        telemetry.recordConsumption(itemID: itemID, quantity: quantity)
+        return true
+    }
+
+    public mutating func add(itemID: ItemID, quantity: Int) {
+        guard quantity > 0 else { return }
+        inventories[itemID, default: 0] += quantity
+        telemetry.recordProduction(itemID: itemID, quantity: quantity)
+    }
+}
+
+public struct ThreatState: Codable, Hashable, Sendable {
+    public var waveIndex: Int
+    public var nextWaveTick: UInt64
+    public var waveIntervalTicks: UInt64
+    public var waveDurationTicks: UInt64
+    public var waveEndsAtTick: UInt64?
+    public var isWaveActive: Bool
+    public var raidCooldownUntilTick: UInt64
+    public var milestoneEvery: Int
+    public var lastMilestoneWave: Int
+
+    public init(
+        waveIndex: Int = 0,
+        nextWaveTick: UInt64 = 400,
+        waveIntervalTicks: UInt64 = 400,
+        waveDurationTicks: UInt64 = 160,
+        waveEndsAtTick: UInt64? = nil,
+        isWaveActive: Bool = false,
+        raidCooldownUntilTick: UInt64 = 0,
+        milestoneEvery: Int = 5,
+        lastMilestoneWave: Int = 0
+    ) {
+        self.waveIndex = waveIndex
+        self.nextWaveTick = nextWaveTick
+        self.waveIntervalTicks = waveIntervalTicks
+        self.waveDurationTicks = waveDurationTicks
+        self.waveEndsAtTick = waveEndsAtTick
+        self.isWaveActive = isWaveActive
+        self.raidCooldownUntilTick = raidCooldownUntilTick
+        self.milestoneEvery = milestoneEvery
+        self.lastMilestoneWave = lastMilestoneWave
+    }
+}
+
+public struct RunState: Codable, Hashable, Sendable {
+    public var baseIntegrity: Int
+    public var extracted: Bool
+    public var gameOver: Bool
+
+    public init(baseIntegrity: Int = 100, extracted: Bool = false, gameOver: Bool = false) {
+        self.baseIntegrity = baseIntegrity
+        self.extracted = extracted
+        self.gameOver = gameOver
+    }
+}
+
+public struct WorldState: Codable, Hashable, Sendable {
+    public var tick: UInt64
+    public var entities: EntityStore
+    public var economy: EconomyState
+    public var threat: ThreatState
+    public var run: RunState
+    public var combat: CombatState
+
+    public init(
+        tick: UInt64,
+        entities: EntityStore,
+        economy: EconomyState,
+        threat: ThreatState,
+        run: RunState,
+        combat: CombatState = CombatState()
+    ) {
+        self.tick = tick
+        self.entities = entities
+        self.economy = economy
+        self.threat = threat
+        self.run = run
+        self.combat = combat
+    }
+
+    public static func bootstrap() -> WorldState {
+        var store = EntityStore()
+        _ = store.spawnStructure(.powerPlant, at: GridPosition(x: 0, y: 0))
+        _ = store.spawnStructure(.miner, at: GridPosition(x: 1, y: 0))
+        _ = store.spawnStructure(.smelter, at: GridPosition(x: 2, y: 0))
+        _ = store.spawnStructure(.ammoModule, at: GridPosition(x: 3, y: 0))
+        _ = store.spawnStructure(.turretMount, at: GridPosition(x: 4, y: 0))
+
+        return WorldState(
+            tick: 0,
+            entities: store,
+            economy: EconomyState(inventories: ["ore_iron": 10]),
+            threat: ThreatState(),
+            run: RunState(),
+            combat: CombatState(basePosition: GridPosition(x: 0, y: 0), spawnEdgeX: 18, spawnYMin: 1, spawnYMax: 12)
+        )
+    }
+}
+
+public struct SystemContext {
+    public var tickDurationSeconds: Double
+    public var commands: [PlayerCommand]
+
+    private let emitEvent: (SimEvent) -> Void
+
+    public init(tickDurationSeconds: Double, commands: [PlayerCommand], emitEvent: @escaping (SimEvent) -> Void) {
+        self.tickDurationSeconds = tickDurationSeconds
+        self.commands = commands
+        self.emitEvent = emitEvent
+    }
+
+    public func emit(_ event: SimEvent) {
+        emitEvent(event)
+    }
+}
+
+public protocol SimulationSystem {
+    func update(state: inout WorldState, context: SystemContext)
+}

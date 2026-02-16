@@ -1,0 +1,26 @@
+[
+  {
+    "id": "turret_mk1",
+    "ammoType": "lightBallistic",
+    "fireRate": 2.0,
+    "range": 8.0
+  },
+  {
+    "id": "turret_mk2",
+    "ammoType": "heavyBallistic",
+    "fireRate": 1.4,
+    "range": 10.0
+  },
+  {
+    "id": "gattling_tower",
+    "ammoType": "lightBallistic",
+    "fireRate": 4.2,
+    "range": 6.5
+  },
+  {
+    "id": "plasma_sentinel",
+    "ammoType": "plasma",
+    "fireRate": 0.9,
+    "range": 11.0
+  }
+]

@@ -1,0 +1,17 @@
+[
+  { "id": "ore_iron", "name": "Iron Ore", "kind": "raw" },
+  { "id": "ore_copper", "name": "Copper Ore", "kind": "raw" },
+  { "id": "ore_coal", "name": "Coal", "kind": "raw" },
+  { "id": "plate_iron", "name": "Iron Plate", "kind": "processed" },
+  { "id": "plate_copper", "name": "Copper Plate", "kind": "processed" },
+  { "id": "plate_steel", "name": "Steel Plate", "kind": "processed" },
+  { "id": "gear", "name": "Gear", "kind": "processed" },
+  { "id": "circuit", "name": "Circuit", "kind": "processed" },
+  { "id": "power_cell", "name": "Power Cell", "kind": "utility" },
+  { "id": "wall_kit", "name": "Wall Kit", "kind": "processed" },
+  { "id": "turret_core", "name": "Turret Core", "kind": "processed" },
+  { "id": "repair_kit", "name": "Repair Kit", "kind": "utility" },
+  { "id": "ammo_light", "name": "Light Ammo", "kind": "ammo" },
+  { "id": "ammo_heavy", "name": "Heavy Ammo", "kind": "ammo" },
+  { "id": "ammo_plasma", "name": "Plasma Ammo", "kind": "ammo" }
+]

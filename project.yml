@@ -1,0 +1,137 @@
+name: FactoryDefense
+options:
+  minimumXcodeGenVersion: 2.38.0
+  deploymentTarget:
+    iOS: 18.0
+    macOS: 15.0
+  xcodeVersion: "26.0"
+packages:
+  FactoryDefenseCore:
+    path: .
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+configs:
+  Debug: debug
+  Release: release
+targets:
+  FactoryDefense_iOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - Apps/iOS/Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.factorydefense.ios
+        PRODUCT_NAME: FactoryDefense_iOS
+        TARGETED_DEVICE_FAMILY: 1
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIRequiresFullScreen: NO
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+    info:
+      path: Apps/iOS/Info.plist
+      properties:
+        CFBundleName: FactoryDefense_iOS
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: YES
+        UILaunchScreen:
+          UIColorName: ""
+          UIImageName: ""
+    dependencies:
+      - package: FactoryDefenseCore
+        product: GameSimulation
+      - package: FactoryDefenseCore
+        product: GameRendering
+      - package: FactoryDefenseCore
+        product: GameUI
+      - package: FactoryDefenseCore
+        product: GamePlatform
+      - package: FactoryDefenseCore
+        product: GameContent
+
+  FactoryDefense_iPadOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - Apps/iPadOS/Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.factorydefense.ipados
+        PRODUCT_NAME: FactoryDefense_iPadOS
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIRequiresFullScreen: NO
+        TARGETED_DEVICE_FAMILY: 2
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+    info:
+      path: Apps/iPadOS/Info.plist
+      properties:
+        CFBundleName: FactoryDefense_iPadOS
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: YES
+        UILaunchScreen:
+          UIColorName: ""
+          UIImageName: ""
+    dependencies:
+      - package: FactoryDefenseCore
+        product: GameSimulation
+      - package: FactoryDefenseCore
+        product: GameRendering
+      - package: FactoryDefenseCore
+        product: GameUI
+      - package: FactoryDefenseCore
+        product: GamePlatform
+      - package: FactoryDefenseCore
+        product: GameContent
+
+  FactoryDefense_macOS:
+    type: application
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - Apps/macOS/Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.factorydefense.macos
+        PRODUCT_NAME: FactoryDefense_macOS
+        ARCHS: arm64
+        ONLY_ACTIVE_ARCH: YES
+        ALWAYS_SEARCH_USER_PATHS: NO
+    info:
+      path: Apps/macOS/Info.plist
+      properties:
+        CFBundleName: FactoryDefense_macOS
+        LSMinimumSystemVersion: "15.0"
+        NSPrincipalClass: NSApplication
+    dependencies:
+      - package: FactoryDefenseCore
+        product: GameSimulation
+      - package: FactoryDefenseCore
+        product: GameRendering
+      - package: FactoryDefenseCore
+        product: GameUI
+      - package: FactoryDefenseCore
+        product: GamePlatform
+      - package: FactoryDefenseCore
+        product: GameContent
+
+schemes:
+  FactoryDefense_iOS:
+    build:
+      targets:
+        FactoryDefense_iOS: all
+    run:
+      config: Debug
+  FactoryDefense_iPadOS:
+    build:
+      targets:
+        FactoryDefense_iPadOS: all
+    run:
+      config: Debug
+  FactoryDefense_macOS:
+    build:
+      targets:
+        FactoryDefense_macOS: all
+    run:
+      config: Debug
