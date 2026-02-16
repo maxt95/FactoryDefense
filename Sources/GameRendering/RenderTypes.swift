@@ -18,6 +18,9 @@ public enum DebugVisualizationMode: String, Codable, CaseIterable, Sendable {
     case overdraw
     case nanInf
     case wireframe
+    case turretRanges
+    case enemyPaths
+    case tactical
 }
 
 public struct RenderContext {

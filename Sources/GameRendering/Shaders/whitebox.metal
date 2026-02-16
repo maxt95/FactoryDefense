@@ -20,6 +20,9 @@ struct WhiteboxUniforms {
     uint rampCount;
     uint structureCount;
     uint entityCount;
+    uint turretOverlayCount;
+    uint pathSegmentCount;
+    uint debugModeRaw;
     int highlightedX;
     int highlightedY;
     uint highlightedStructureTypeRaw;
@@ -60,6 +63,20 @@ struct WhiteboxEntity {
     int y;
     uint category;
     uint _pad0;
+};
+
+struct WhiteboxTurretOverlay {
+    int x;
+    int y;
+    float rangeTiles;
+    float _pad0;
+};
+
+struct WhiteboxPathSegment {
+    int fromX;
+    int fromY;
+    int toX;
+    int toY;
 };
 
 inline bool in_bounds(int2 cell, constant WhiteboxUniforms& uniforms) {
@@ -168,6 +185,14 @@ inline float contact_shadow_strength(
     return (1.0 - radial) * maxStrength;
 }
 
+inline float distance_to_segment(float2 p, float2 a, float2 b) {
+    const float2 ab = b - a;
+    const float denom = max(dot(ab, ab), 1e-4);
+    const float t = clamp(dot(p - a, ab) / denom, 0.0, 1.0);
+    const float2 closest = a + ab * t;
+    return length(p - closest);
+}
+
 kernel void whitebox_board(
     texture2d<float, access::write> output [[texture(0)]],
     constant WhiteboxUniforms& uniforms [[buffer(0)]],
@@ -176,6 +201,8 @@ kernel void whitebox_board(
     device const WhiteboxRamp* ramps [[buffer(3)]],
     device const WhiteboxStructure* structures [[buffer(4)]],
     device const WhiteboxEntity* entities [[buffer(5)]],
+    device const WhiteboxTurretOverlay* turretOverlays [[buffer(6)]],
+    device const WhiteboxPathSegment* pathSegments [[buffer(7)]],
     uint2 gid [[thread_position_in_grid]]
 ) {
     if (gid.x >= uniforms.viewportPixelWidth || gid.y >= uniforms.viewportPixelHeight) {
@@ -386,6 +413,33 @@ kernel void whitebox_board(
                 } else {
                     color = float3(0.95, 0.88, 0.34);
                 }
+            }
+        }
+    }
+
+    const bool showTurretRanges = uniforms.debugModeRaw == 1u || uniforms.debugModeRaw == 3u;
+    const bool showEnemyPaths = uniforms.debugModeRaw == 2u || uniforms.debugModeRaw == 3u;
+    if (showTurretRanges) {
+        const float ringThickness = max(1.0, tileWidth * 0.045);
+        for (uint i = 0; i < uniforms.turretOverlayCount; ++i) {
+            const WhiteboxTurretOverlay overlay = turretOverlays[i];
+            const float2 center = cell_to_screen(int2(overlay.x, overlay.y), origin, tileWidth, tileHeight);
+            const float radius = overlay.rangeTiles * tileWidth;
+            const float distance = abs(length(pixel - center) - radius);
+            if (distance <= ringThickness) {
+                color = mix(color, float3(0.10, 0.72, 0.95), 0.78);
+            }
+        }
+    }
+
+    if (showEnemyPaths) {
+        const float pathThickness = max(1.0, tileWidth * 0.085);
+        for (uint i = 0; i < uniforms.pathSegmentCount; ++i) {
+            const WhiteboxPathSegment segment = pathSegments[i];
+            const float2 a = cell_to_screen(int2(segment.fromX, segment.fromY), origin, tileWidth, tileHeight);
+            const float2 b = cell_to_screen(int2(segment.toX, segment.toY), origin, tileWidth, tileHeight);
+            if (distance_to_segment(pixel, a, b) <= pathThickness) {
+                color = mix(color, float3(0.96, 0.22, 0.74), 0.82);
             }
         }
     }

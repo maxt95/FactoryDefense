@@ -21,6 +21,9 @@ private struct WhiteboxUniforms {
     var rampCount: UInt32
     var structureCount: UInt32
     var entityCount: UInt32
+    var turretOverlayCount: UInt32
+    var pathSegmentCount: UInt32
+    var debugModeRaw: UInt32
     var highlightedX: Int32
     var highlightedY: Int32
     var highlightedStructureTypeRaw: UInt32
@@ -45,22 +48,24 @@ private struct WhiteboxRampShader {
     var _pad0: Int32 = 0
 }
 
-private struct WhiteboxStructureShader {
-    var anchorX: Int32
-    var anchorY: Int32
-    var typeRaw: UInt32
-    var _pad0: UInt32 = 0
-    var footprintWidth: Int32
-    var footprintHeight: Int32
-    var _pad1: Int32 = 0
-    var _pad2: Int32 = 0
-}
-
-private struct WhiteboxEntityShader {
+private struct WhiteboxTurretOverlayShader {
     var x: Int32
     var y: Int32
-    var category: UInt32
-    var _pad0: UInt32 = 0
+    var rangeTiles: Float
+    var _pad0: Float = 0
+}
+
+private struct WhiteboxPathSegmentShader {
+    var fromX: Int32
+    var fromY: Int32
+    var toX: Int32
+    var toY: Int32
+}
+
+private struct DebugOverlayPayload {
+    var debugModeRaw: UInt32
+    var turretOverlays: [WhiteboxTurretOverlayShader]
+    var pathSegments: [WhiteboxPathSegmentShader]
 }
 
 public final class WhiteboxRenderer {
@@ -76,6 +81,7 @@ public final class WhiteboxRenderer {
         guard let pipelineState = preparePipeline(device: context.device) else { return }
 
         let scene = sceneBuilder.build(from: context.worldState)
+        let debugOverlays = buildDebugOverlays(context: context)
 
         var uniforms = WhiteboxUniforms(
             viewportPixelWidth: UInt32(max(1, Int(context.drawableSize.width))),
@@ -96,6 +102,9 @@ public final class WhiteboxRenderer {
             rampCount: UInt32(scene.ramps.count),
             structureCount: 0,
             entityCount: 0,
+            turretOverlayCount: UInt32(debugOverlays.turretOverlays.count),
+            pathSegmentCount: UInt32(debugOverlays.pathSegments.count),
+            debugModeRaw: debugOverlays.debugModeRaw,
             highlightedX: Int32(context.highlightedCell?.x ?? -1),
             highlightedY: Int32(context.highlightedCell?.y ?? -1),
             highlightedStructureTypeRaw: highlightedStructureTypeRaw(context.highlightedStructure),
@@ -111,6 +120,8 @@ public final class WhiteboxRenderer {
         let rampBuffer = makeRampBuffer(context.device, ramps: scene.ramps)
         let structureBuffer: MTLBuffer? = nil
         let entityBuffer: MTLBuffer? = nil
+        let turretOverlayBuffer = makeTurretOverlayBuffer(context.device, overlays: debugOverlays.turretOverlays)
+        let pathSegmentBuffer = makePathSegmentBuffer(context.device, segments: debugOverlays.pathSegments)
 
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
         encoder.label = "WhiteboxBoardCompute"
@@ -122,6 +133,8 @@ public final class WhiteboxRenderer {
         encoder.setBuffer(rampBuffer, offset: 0, index: 3)
         encoder.setBuffer(structureBuffer, offset: 0, index: 4)
         encoder.setBuffer(entityBuffer, offset: 0, index: 5)
+        encoder.setBuffer(turretOverlayBuffer, offset: 0, index: 6)
+        encoder.setBuffer(pathSegmentBuffer, offset: 0, index: 7)
 
         let threadsPerThreadgroup = MTLSize(width: 8, height: 8, depth: 1)
         let threadgroups = MTLSize(
@@ -181,34 +194,153 @@ public final class WhiteboxRenderer {
         )
     }
 
-    private func makeStructureBuffer(_ device: MTLDevice, structures: [WhiteboxStructureMarker]) -> MTLBuffer? {
-        guard !structures.isEmpty else { return nil }
-        var payload = structures.map {
-            WhiteboxStructureShader(
-                anchorX: $0.anchorX,
-                anchorY: $0.anchorY,
-                typeRaw: $0.typeRaw,
-                footprintWidth: $0.footprintWidth,
-                footprintHeight: $0.footprintHeight
-            )
-        }
+    private func makeTurretOverlayBuffer(_ device: MTLDevice, overlays: [WhiteboxTurretOverlayShader]) -> MTLBuffer? {
+        guard !overlays.isEmpty else { return nil }
+        var payload = overlays
         return device.makeBuffer(
             bytes: &payload,
-            length: MemoryLayout<WhiteboxStructureShader>.stride * payload.count
+            length: MemoryLayout<WhiteboxTurretOverlayShader>.stride * payload.count
         )
     }
 
-    private func makeEntityBuffer(_ device: MTLDevice, entities: [WhiteboxEntityMarker]) -> MTLBuffer? {
-        guard !entities.isEmpty else { return nil }
-        var payload = entities.map { WhiteboxEntityShader(x: $0.x, y: $0.y, category: $0.category) }
+    private func makePathSegmentBuffer(_ device: MTLDevice, segments: [WhiteboxPathSegmentShader]) -> MTLBuffer? {
+        guard !segments.isEmpty else { return nil }
+        var payload = segments
         return device.makeBuffer(
             bytes: &payload,
-            length: MemoryLayout<WhiteboxEntityShader>.stride * payload.count
+            length: MemoryLayout<WhiteboxPathSegmentShader>.stride * payload.count
         )
     }
 
     private func highlightedStructureTypeRaw(_ structure: StructureType?) -> UInt32 {
         guard let structure else { return 0 }
         return WhiteboxStructureTypeID(structureType: structure).rawValue
+    }
+
+    private func buildDebugOverlays(context: RenderContext) -> DebugOverlayPayload {
+        let modeRaw = debugModeRaw(context.debugMode)
+        let includeTurretRanges = modeRaw == 1 || modeRaw == 3
+        let includeEnemyPaths = modeRaw == 2 || modeRaw == 3
+
+        let turretOverlays = includeTurretRanges
+            ? buildTurretOverlays(world: context.worldState, maxCount: 256)
+            : []
+        let pathSegments = includeEnemyPaths
+            ? buildEnemyPathSegments(world: context.worldState, maxSegmentCount: 2048)
+            : []
+
+        return DebugOverlayPayload(
+            debugModeRaw: modeRaw,
+            turretOverlays: turretOverlays,
+            pathSegments: pathSegments
+        )
+    }
+
+    private func debugModeRaw(_ mode: DebugVisualizationMode) -> UInt32 {
+        switch mode {
+        case .turretRanges:
+            return 1
+        case .enemyPaths:
+            return 2
+        case .tactical:
+            return 3
+        default:
+            return 0
+        }
+    }
+
+    private func buildTurretOverlays(world: WorldState, maxCount: Int) -> [WhiteboxTurretOverlayShader] {
+        guard maxCount > 0 else { return [] }
+        let turrets = world.entities.structures(of: .turretMount).sorted { $0.id < $1.id }
+        if turrets.isEmpty { return [] }
+
+        return turrets.prefix(maxCount).map { turret in
+            WhiteboxTurretOverlayShader(
+                x: Int32(turret.position.x),
+                y: Int32(turret.position.y),
+                rangeTiles: turretRangeTiles(for: turret.turretDefID)
+            )
+        }
+    }
+
+    private func turretRangeTiles(for turretDefID: String?) -> Float {
+        switch turretDefID ?? "turret_mk1" {
+        case "turret_mk2":
+            return 10.0
+        case "gattling_tower":
+            return 6.5
+        case "plasma_sentinel":
+            return 11.0
+        default:
+            return 8.0
+        }
+    }
+
+    private func buildEnemyPathSegments(world: WorldState, maxSegmentCount: Int) -> [WhiteboxPathSegmentShader] {
+        guard maxSegmentCount > 0 else { return [] }
+        guard !world.combat.enemies.isEmpty else { return [] }
+
+        let pathfinder = Pathfinder()
+        let map = navigationMap(for: world)
+        let base = world.combat.basePosition
+
+        var segments: [WhiteboxPathSegmentShader] = []
+        segments.reserveCapacity(min(maxSegmentCount, 512))
+
+        for enemyID in world.combat.enemies.keys.sorted() {
+            guard let enemy = world.entities.entity(id: enemyID) else { continue }
+            guard let path = pathfinder.findPath(on: map, from: enemy.position, to: base), path.count > 1 else {
+                continue
+            }
+
+            for index in 0..<(path.count - 1) {
+                let from = path[index]
+                let to = path[index + 1]
+                segments.append(
+                    WhiteboxPathSegmentShader(
+                        fromX: Int32(from.x),
+                        fromY: Int32(from.y),
+                        toX: Int32(to.x),
+                        toY: Int32(to.y)
+                    )
+                )
+
+                if segments.count >= maxSegmentCount {
+                    return segments
+                }
+            }
+        }
+
+        return segments
+    }
+
+    private func navigationMap(for world: WorldState) -> GridMap {
+        var map = GridMap(width: world.board.width, height: world.board.height)
+
+        for y in 0..<world.board.height {
+            for x in 0..<world.board.width {
+                let position = GridPosition(x: x, y: y)
+                guard let terrain = world.board.terrain(at: position) else { continue }
+                map.setTile(
+                    GridTile(walkable: terrain.walkable, elevation: terrain.elevation, isRamp: terrain.isRamp),
+                    at: position
+                )
+            }
+        }
+
+        for entity in world.entities.all where entity.category == .structure {
+            guard let structureType = entity.structureType, structureType.blocksMovement else { continue }
+            for blockedCell in structureType.coveredCells(anchor: entity.position) {
+                map.setTile(GridTile(walkable: false, elevation: entity.position.z), at: blockedCell)
+            }
+        }
+
+        let base = world.board.basePosition
+        map.setTile(
+            GridTile(walkable: true, elevation: world.board.elevation(at: base), isRamp: false),
+            at: base
+        )
+
+        return map
     }
 }
