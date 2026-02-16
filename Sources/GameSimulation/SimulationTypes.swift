@@ -1076,15 +1076,16 @@ public struct WorldState: Codable, Hashable, Sendable {
             }
         }
 
-        return WorldState(
+        var world = WorldState(
             tick: 0,
             board: board,
             entities: store,
             orePatches: orePatches,
             economy: EconomyState(
-                inventories: startingResources,
-                structureInputBuffers: [hqID: startingResources],
-                structureOutputBuffers: [hqID: startingResources]
+                inventories: [:],
+                structureInputBuffers: [:],
+                structureOutputBuffers: [:],
+                storageSharedPoolByEntity: [hqID: startingResources]
             ),
             threat: ThreatState(
                 waveIndex: 0,
@@ -1121,6 +1122,8 @@ public struct WorldState: Codable, Hashable, Sendable {
                 spawnYMax: board.spawnYMax
             )
         )
+        world.rebuildAggregatedInventory()
+        return world
     }
 
     public var hqHealth: Int {
@@ -1131,6 +1134,44 @@ public struct WorldState: Codable, Hashable, Sendable {
     public var hqMaxHealth: Int {
         guard let hqID = run.hqEntityID else { return 0 }
         return entities.entity(id: hqID)?.maxHealth ?? 0
+    }
+
+    public mutating func rebuildAggregatedInventory() {
+        guard run.hqEntityID != nil else { return }
+
+        let hasPhysicalStores =
+            !economy.structureInputBuffers.isEmpty
+            || !economy.structureOutputBuffers.isEmpty
+            || !economy.storageSharedPoolByEntity.isEmpty
+            || !economy.conveyorPayloadByEntity.isEmpty
+            || !combat.wallNetworks.isEmpty
+        guard hasPhysicalStores else { return }
+
+        var aggregate: [ItemID: Int] = [:]
+
+        func absorb(_ items: [ItemID: Int]) {
+            for (itemID, quantity) in items where quantity > 0 {
+                aggregate[itemID, default: 0] += quantity
+            }
+        }
+
+        for buffer in economy.structureInputBuffers.values {
+            absorb(buffer)
+        }
+        for buffer in economy.structureOutputBuffers.values {
+            absorb(buffer)
+        }
+        for pool in economy.storageSharedPoolByEntity.values {
+            absorb(pool)
+        }
+        for payload in economy.conveyorPayloadByEntity.values {
+            aggregate[payload.itemID, default: 0] += 1
+        }
+        for network in combat.wallNetworks.values {
+            absorb(network.ammoPoolByItemID)
+        }
+
+        economy.inventories = aggregate
     }
 }
 

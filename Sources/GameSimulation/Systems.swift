@@ -91,7 +91,7 @@ public struct CommandSystem: SimulationSystem {
                     hostWallID = nil
                 }
 
-                guard state.economy.consume(costs: request.structure.buildCosts) else {
+                guard consumeConstructionCosts(request.structure.buildCosts, state: &state) else {
                     context.emit(
                         SimEvent(
                             tick: state.tick,
@@ -276,8 +276,130 @@ public struct CommandSystem: SimulationSystem {
         for cost in structureType.buildCosts {
             let refundQuantity = max(0, cost.quantity / 2)
             if refundQuantity > 0 {
-                state.economy.add(itemID: cost.itemID, quantity: refundQuantity)
+                addToHQStorage(itemID: cost.itemID, quantity: refundQuantity, state: &state)
             }
+        }
+    }
+
+    private enum ConstructionPoolKind {
+        case outputBuffer
+        case inputBuffer
+        case sharedPool
+    }
+
+    private struct ConstructionPoolRef {
+        var kind: ConstructionPoolKind
+        var structureID: EntityID
+    }
+
+    private func consumeConstructionCosts(_ costs: [ItemStack], state: inout WorldState) -> Bool {
+        guard !costs.isEmpty else { return true }
+        guard state.economy.canAfford(costs) else { return false }
+        let refs = constructionPoolOrder(state: state)
+        var poolTotals: [ItemID: Int] = [:]
+        for ref in refs {
+            for (itemID, quantity) in poolItems(ref: ref, state: state) where quantity > 0 {
+                poolTotals[itemID, default: 0] += quantity
+            }
+        }
+
+        let useLegacyGlobalOnly = costs.contains { cost in
+            state.economy.inventories[cost.itemID, default: 0] != poolTotals[cost.itemID, default: 0]
+        }
+        if useLegacyGlobalOnly {
+            return state.economy.consume(costs: costs)
+        }
+
+        for cost in costs {
+            var remaining = cost.quantity
+            for ref in refs where remaining > 0 {
+                var items = poolItems(ref: ref, state: state)
+                let available = items[cost.itemID, default: 0]
+                guard available > 0 else { continue }
+                let consumed = min(remaining, available)
+                let updated = available - consumed
+                if updated == 0 {
+                    items.removeValue(forKey: cost.itemID)
+                } else {
+                    items[cost.itemID] = updated
+                }
+                setPoolItems(items, ref: ref, state: &state)
+                remaining -= consumed
+            }
+            guard remaining == 0 else { return false }
+        }
+
+        return true
+    }
+
+    private func constructionPoolOrder(state: WorldState) -> [ConstructionPoolRef] {
+        let hqID = state.run.hqEntityID
+        var refs: [ConstructionPoolRef] = []
+
+        refs += state.economy.structureOutputBuffers.keys.sorted().compactMap { id in
+            guard id != hqID else { return nil }
+            return ConstructionPoolRef(kind: .outputBuffer, structureID: id)
+        }
+        refs += state.economy.storageSharedPoolByEntity.keys.sorted().compactMap { id in
+            guard id != hqID else { return nil }
+            return ConstructionPoolRef(kind: .sharedPool, structureID: id)
+        }
+        refs += state.economy.structureInputBuffers.keys.sorted().compactMap { id in
+            guard id != hqID else { return nil }
+            return ConstructionPoolRef(kind: .inputBuffer, structureID: id)
+        }
+
+        if let hqID {
+            refs.append(ConstructionPoolRef(kind: .sharedPool, structureID: hqID))
+            refs.append(ConstructionPoolRef(kind: .outputBuffer, structureID: hqID))
+            refs.append(ConstructionPoolRef(kind: .inputBuffer, structureID: hqID))
+        }
+
+        return refs
+    }
+
+    private func poolItems(ref: ConstructionPoolRef, state: WorldState) -> [ItemID: Int] {
+        switch ref.kind {
+        case .outputBuffer:
+            return state.economy.structureOutputBuffers[ref.structureID, default: [:]]
+        case .inputBuffer:
+            return state.economy.structureInputBuffers[ref.structureID, default: [:]]
+        case .sharedPool:
+            return state.economy.storageSharedPoolByEntity[ref.structureID, default: [:]]
+        }
+    }
+
+    private func setPoolItems(_ items: [ItemID: Int], ref: ConstructionPoolRef, state: inout WorldState) {
+        switch ref.kind {
+        case .outputBuffer:
+            if items.isEmpty {
+                state.economy.structureOutputBuffers.removeValue(forKey: ref.structureID)
+            } else {
+                state.economy.structureOutputBuffers[ref.structureID] = items
+            }
+        case .inputBuffer:
+            if items.isEmpty {
+                state.economy.structureInputBuffers.removeValue(forKey: ref.structureID)
+            } else {
+                state.economy.structureInputBuffers[ref.structureID] = items
+            }
+        case .sharedPool:
+            if items.isEmpty {
+                state.economy.storageSharedPoolByEntity.removeValue(forKey: ref.structureID)
+            } else {
+                state.economy.storageSharedPoolByEntity[ref.structureID] = items
+            }
+        }
+    }
+
+    private func addToHQStorage(itemID: ItemID, quantity: Int, state: inout WorldState) {
+        guard quantity > 0 else { return }
+        if let hqID = state.run.hqEntityID {
+            var pool = state.economy.storageSharedPoolByEntity[hqID, default: [:]]
+            pool[itemID, default: 0] += quantity
+            state.economy.storageSharedPoolByEntity[hqID] = pool
+        } else {
+            state.economy.add(itemID: itemID, quantity: quantity)
         }
     }
 
@@ -386,6 +508,7 @@ public struct EconomySystem: SimulationSystem {
         drainStructureOutputBuffers(structures: structures, state: &state)
         drainStorageSharedPools(structures: structures, state: &state)
         pruneRuntimeState(for: structures, state: &state)
+        state.rebuildAggregatedInventory()
 
         if state.threat.isWaveActive {
             state.economy.currency += 1
@@ -645,7 +768,7 @@ public struct EconomySystem: SimulationSystem {
         )
 
         for (structureID, structureType) in structureTypesByID {
-            if structureType == .storage {
+            if structureType == .storage || structureType == .hq {
                 state.economy.structureInputBuffers.removeValue(forKey: structureID)
                 state.economy.structureOutputBuffers.removeValue(forKey: structureID)
                 _ = state.economy.storageSharedPoolByEntity[structureID, default: [:]]
@@ -655,7 +778,7 @@ public struct EconomySystem: SimulationSystem {
                 state.economy.structureInputBuffers.removeValue(forKey: structureID)
             }
 
-            if structureType == .storage {
+            if structureType == .storage || structureType == .hq {
                 // Storage uses a shared pool rather than split input/output buffers.
             } else if outputBufferCapacity(for: structureType) > 0 {
                 _ = state.economy.structureOutputBuffers[structureID, default: [:]]
@@ -672,7 +795,7 @@ public struct EconomySystem: SimulationSystem {
             if structureType != .merger {
                 state.economy.mergerInputToggleByEntity.removeValue(forKey: structureID)
             }
-            if structureType != .storage {
+            if structureType != .storage && structureType != .hq {
                 state.economy.storageSharedPoolByEntity.removeValue(forKey: structureID)
             }
         }
@@ -934,7 +1057,7 @@ public struct EconomySystem: SimulationSystem {
         }
 
         let storages = structures
-            .filter { $0.structureType == .storage }
+            .filter { $0.structureType == .storage || $0.structureType == .hq }
             .sorted(by: { $0.id < $1.id })
         for storage in storages {
             for outputPort in resolvedOutputPorts(for: storage, includeBidirectional: true) {
@@ -1076,8 +1199,21 @@ public struct EconomySystem: SimulationSystem {
     }
 
     private func resolvedPorts(for structureType: StructureType, rotation: Rotation) -> [ResolvedPort] {
-        guard let definition = buildingDefsByID[structureType.rawValue] else { return [] }
-        return definition.ports.map { port in
+        let ports: [PortDef]
+        if let definition = buildingDefsByID[structureType.rawValue] {
+            ports = definition.ports
+        } else if structureType == .hq {
+            let anyFilter = ItemFilter.any
+            ports = [
+                PortDef(id: "hq_west", direction: .west, mode: .bidirectional, filter: anyFilter, bufferCapacity: 6),
+                PortDef(id: "hq_north", direction: .north, mode: .bidirectional, filter: anyFilter, bufferCapacity: 6),
+                PortDef(id: "hq_east", direction: .east, mode: .bidirectional, filter: anyFilter, bufferCapacity: 6),
+                PortDef(id: "hq_south", direction: .south, mode: .bidirectional, filter: anyFilter, bufferCapacity: 6)
+            ]
+        } else {
+            return []
+        }
+        return ports.map { port in
             ResolvedPort(
                 id: port.id,
                 direction: rotate(portDirection: port.direction, by: rotation),
@@ -1288,7 +1424,7 @@ public struct EconomySystem: SimulationSystem {
     ) -> Bool {
         guard let structure = state.entities.entity(id: structureID) else { return false }
 
-        if structureType == .storage {
+        if structureType == .storage || structureType == .hq {
             guard canAcceptInputViaPortModel(itemID: itemID, structure: structure, sourcePosition: sourcePosition, state: state) else { return false }
             var pool = state.economy.storageSharedPoolByEntity[structureID, default: [:]]
             let capacity = storagePoolCapacity(for: structureType, structure: structure)
@@ -1366,9 +1502,15 @@ public struct EconomySystem: SimulationSystem {
     }
 
     private func storagePoolCapacity(for structureType: StructureType, structure: Entity) -> Int {
-        guard structureType == .storage else { return 0 }
-        let inputCap = resolvedInputPorts(for: structure).reduce(0) { $0 + $1.capacity }
-        return inputCap > 0 ? inputCap : 48
+        switch structureType {
+        case .storage:
+            let inputCap = resolvedInputPorts(for: structure).reduce(0) { $0 + $1.capacity }
+            return inputCap > 0 ? inputCap : 48
+        case .hq:
+            return 24
+        default:
+            return 0
+        }
     }
 
     private func acceptsInputByStructureType(itemID: ItemID, structureType: StructureType) -> Bool {
@@ -1389,6 +1531,8 @@ public struct EconomySystem: SimulationSystem {
                 || itemID == "power_cell"
                 || itemID == "circuit"
         case .storage:
+            return true
+        case .hq:
             return true
         case .turretMount:
             return itemID.hasPrefix("ammo_")
