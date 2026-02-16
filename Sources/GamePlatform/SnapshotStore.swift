@@ -9,6 +9,7 @@ public protocol SnapshotStore {
 
 public enum SnapshotStoreError: Error {
     case missingFile(URL)
+    case unsupportedSchema
 }
 
 public final class FileSnapshotStore: SnapshotStore {
@@ -38,7 +39,15 @@ public final class FileSnapshotStore: SnapshotStore {
             throw SnapshotStoreError.missingFile(url)
         }
         let data = try Data(contentsOf: url)
-        return try decoder.decode(WorldSnapshot.self, from: data)
+        do {
+            return try decoder.decode(WorldSnapshot.self, from: data)
+        } catch let DecodingError.dataCorrupted(context) where context.debugDescription.contains("Unsupported snapshot schema version") {
+            throw SnapshotStoreError.unsupportedSchema
+        } catch let DecodingError.keyNotFound(key, _) where key.stringValue == "schemaVersion" {
+            throw SnapshotStoreError.unsupportedSchema
+        } catch {
+            throw error
+        }
     }
 
     private func fileURL(for name: String) -> URL {

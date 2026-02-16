@@ -9,6 +9,7 @@ public enum ContentValidationError: Error, Equatable, Sendable {
     case invalidBoard(reason: String)
     case invalidHQ(reason: String)
     case invalidDifficulty(reason: String)
+    case invalidBuilding(reason: String)
 }
 
 public struct ContentValidator {
@@ -24,6 +25,7 @@ public struct ContentValidator {
         errors += validateBoard(bundle.board)
         errors += validateHQ(bundle.hq, itemIDs: bundle.itemIDs)
         errors += validateDifficulty(bundle.difficulty)
+        errors += validateBuildings(bundle.buildings, itemIDs: bundle.itemIDs)
         return errors
     }
 
@@ -370,6 +372,74 @@ public struct ContentValidator {
             }
             if value.waveBudgetMultiplier <= 0 {
                 errors.append(.invalidDifficulty(reason: "\(label): waveBudgetMultiplier must be positive"))
+            }
+        }
+
+        return errors
+    }
+
+    private func validateBuildings(_ buildings: [BuildingDef], itemIDs: Set<ItemID>) -> [ContentValidationError] {
+        var errors: [ContentValidationError] = []
+
+        if buildings.isEmpty {
+            errors.append(.invalidBuilding(reason: "buildings.json must define at least one building"))
+            return errors
+        }
+
+        let requiredBuildingIDs: Set<String> = [
+            "wall",
+            "turretMount",
+            "miner",
+            "smelter",
+            "assembler",
+            "ammoModule",
+            "powerPlant",
+            "conveyor",
+            "splitter",
+            "merger",
+            "storage"
+        ]
+        let providedIDs = Set(buildings.map(\.id))
+        let missingIDs = requiredBuildingIDs.subtracting(providedIDs).sorted()
+        for id in missingIDs {
+            errors.append(.invalidBuilding(reason: "missing canonical building definition '\(id)'"))
+        }
+
+        for building in buildings {
+            if building.footprint.width <= 0 || building.footprint.height <= 0 {
+                errors.append(.invalidBuilding(reason: "\(building.id): footprint must be positive"))
+            }
+            if building.ports.isEmpty {
+                errors.append(.invalidBuilding(reason: "\(building.id): must define at least one directional port"))
+            }
+            if building.id == "powerPlant",
+               (building.footprint.width != 1 || building.footprint.height != 1) {
+                errors.append(.invalidBuilding(reason: "powerPlant footprint must be 1x1"))
+            }
+            if building.id == "storage",
+               (building.footprint.width != 1 || building.footprint.height != 1) {
+                errors.append(.invalidBuilding(reason: "storage footprint must be 1x1"))
+            }
+            if building.id == "storage", building.powerDraw != 0 {
+                errors.append(.invalidBuilding(reason: "storage powerDraw must be 0"))
+            }
+
+            let portIDs = Set(building.ports.map(\.id))
+            if portIDs.count != building.ports.count {
+                errors.append(.invalidBuilding(reason: "\(building.id): port ids must be unique"))
+            }
+            for port in building.ports {
+                if port.bufferCapacity <= 0 {
+                    errors.append(.invalidBuilding(reason: "\(building.id):\(port.id): bufferCapacity must be positive"))
+                }
+                if case let .allow(allowSet) = port.filter {
+                    if allowSet.isEmpty {
+                        errors.append(.invalidBuilding(reason: "\(building.id):\(port.id): allow filter cannot be empty"))
+                    }
+                    for itemID in allowSet where !itemIDs.contains(itemID) {
+                        errors.append(.invalidBuilding(reason: "\(building.id):\(port.id): unknown filtered item '\(itemID)'"))
+                    }
+                }
             }
         }
 

@@ -52,6 +52,50 @@ public struct GridPosition: Codable, Hashable, Sendable {
     }
 }
 
+public enum CardinalDirection: String, Codable, CaseIterable, Sendable {
+    case north
+    case east
+    case south
+    case west
+
+    public var delta: (x: Int, y: Int) {
+        switch self {
+        case .north:
+            return (0, -1)
+        case .east:
+            return (1, 0)
+        case .south:
+            return (0, 1)
+        case .west:
+            return (-1, 0)
+        }
+    }
+}
+
+public enum Rotation: String, Codable, CaseIterable, Sendable {
+    case north
+    case east
+    case south
+    case west
+
+    public var direction: CardinalDirection {
+        CardinalDirection(rawValue: rawValue) ?? .north
+    }
+
+    public func rotatedClockwise() -> Rotation {
+        switch self {
+        case .north:
+            return .east
+        case .east:
+            return .south
+        case .south:
+            return .west
+        case .west:
+            return .north
+        }
+    }
+}
+
 public enum StructureType: String, Codable, CaseIterable, Sendable {
     case hq
     case wall
@@ -62,6 +106,8 @@ public enum StructureType: String, Codable, CaseIterable, Sendable {
     case ammoModule
     case powerPlant
     case conveyor
+    case splitter
+    case merger
     case storage
 }
 
@@ -94,9 +140,9 @@ public struct StructureFootprint: Codable, Hashable, Sendable {
 public extension StructureType {
     var footprint: StructureFootprint {
         switch self {
-        case .hq, .powerPlant, .storage:
+        case .hq:
             return StructureFootprint(width: 2, height: 2)
-        case .wall, .turretMount, .miner, .smelter, .assembler, .ammoModule, .conveyor:
+        case .wall, .turretMount, .miner, .smelter, .assembler, .ammoModule, .powerPlant, .conveyor, .splitter, .merger, .storage:
             return StructureFootprint(width: 1, height: 1)
         }
     }
@@ -120,6 +166,10 @@ public extension StructureType {
         case .ammoModule:
             return [ItemStack(itemID: "circuit", quantity: 2), ItemStack(itemID: "plate_steel", quantity: 2)]
         case .conveyor:
+            return [ItemStack(itemID: "plate_iron", quantity: 1)]
+        case .splitter:
+            return [ItemStack(itemID: "plate_iron", quantity: 1)]
+        case .merger:
             return [ItemStack(itemID: "plate_iron", quantity: 1)]
         case .storage:
             return [ItemStack(itemID: "plate_steel", quantity: 3), ItemStack(itemID: "gear", quantity: 2)]
@@ -146,8 +196,10 @@ public extension StructureType {
             return 4
         case .conveyor:
             return 1
+        case .splitter, .merger:
+            return 0
         case .storage:
-            return 1
+            return 0
         case .wall, .turretMount:
             return 0
         }
@@ -157,27 +209,41 @@ public extension StructureType {
 public struct BuildRequest: Codable, Hashable, Sendable {
     public var structure: StructureType
     public var position: GridPosition
+    public var rotation: Rotation
     public var targetPatchID: Int?
 
-    public init(structure: StructureType, position: GridPosition, targetPatchID: Int? = nil) {
+    public init(structure: StructureType, position: GridPosition, rotation: Rotation = .north, targetPatchID: Int? = nil) {
         self.structure = structure
         self.position = position
+        self.rotation = rotation
         self.targetPatchID = targetPatchID
     }
 }
 
 public enum CommandPayload: Codable, Hashable, Sendable {
     case placeStructure(BuildRequest)
+    case removeStructure(entityID: EntityID)
+    case placeConveyor(position: GridPosition, direction: CardinalDirection)
+    case rotateBuilding(entityID: EntityID)
+    case pinRecipe(entityID: EntityID, recipeID: String)
     case extract
     case triggerWave
 
     private enum CodingKeys: String, CodingKey {
         case kind
         case build
+        case entityID
+        case position
+        case direction
+        case recipeID
     }
 
     private enum Kind: String, Codable {
         case placeStructure
+        case removeStructure
+        case placeConveyor
+        case rotateBuilding
+        case pinRecipe
         case extract
         case triggerWave
     }
@@ -188,6 +254,20 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         switch kind {
         case .placeStructure:
             self = .placeStructure(try container.decode(BuildRequest.self, forKey: .build))
+        case .removeStructure:
+            self = .removeStructure(entityID: try container.decode(EntityID.self, forKey: .entityID))
+        case .placeConveyor:
+            self = .placeConveyor(
+                position: try container.decode(GridPosition.self, forKey: .position),
+                direction: try container.decode(CardinalDirection.self, forKey: .direction)
+            )
+        case .rotateBuilding:
+            self = .rotateBuilding(entityID: try container.decode(EntityID.self, forKey: .entityID))
+        case .pinRecipe:
+            self = .pinRecipe(
+                entityID: try container.decode(EntityID.self, forKey: .entityID),
+                recipeID: try container.decode(String.self, forKey: .recipeID)
+            )
         case .extract:
             self = .extract
         case .triggerWave:
@@ -201,6 +281,20 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         case .placeStructure(let build):
             try container.encode(Kind.placeStructure, forKey: .kind)
             try container.encode(build, forKey: .build)
+        case .removeStructure(let entityID):
+            try container.encode(Kind.removeStructure, forKey: .kind)
+            try container.encode(entityID, forKey: .entityID)
+        case .placeConveyor(let position, let direction):
+            try container.encode(Kind.placeConveyor, forKey: .kind)
+            try container.encode(position, forKey: .position)
+            try container.encode(direction, forKey: .direction)
+        case .rotateBuilding(let entityID):
+            try container.encode(Kind.rotateBuilding, forKey: .kind)
+            try container.encode(entityID, forKey: .entityID)
+        case .pinRecipe(let entityID, let recipeID):
+            try container.encode(Kind.pinRecipe, forKey: .kind)
+            try container.encode(entityID, forKey: .entityID)
+            try container.encode(recipeID, forKey: .recipeID)
         case .extract:
             try container.encode(Kind.extract, forKey: .kind)
         case .triggerWave:
@@ -212,7 +306,15 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         switch self {
         case .placeStructure(let build):
             let patchToken = build.targetPatchID.map(String.init) ?? "-"
-            return "place:\(build.structure.rawValue):\(build.position.x):\(build.position.y):\(build.position.z):\(patchToken)"
+            return "place:\(build.structure.rawValue):\(build.position.x):\(build.position.y):\(build.position.z):\(build.rotation.rawValue):\(patchToken)"
+        case .removeStructure(let entityID):
+            return "remove:\(entityID)"
+        case .placeConveyor(let position, let direction):
+            return "conveyor:\(position.x):\(position.y):\(position.z):\(direction.rawValue)"
+        case .rotateBuilding(let entityID):
+            return "rotate:\(entityID)"
+        case .pinRecipe(let entityID, let recipeID):
+            return "pin:\(entityID):\(recipeID)"
         case .extract:
             return "extract"
         case .triggerWave:
@@ -242,6 +344,7 @@ public enum EventKind: String, Codable, Sendable {
     case gracePeriodEnded
     case gameOver
     case structurePlaced
+    case structureRemoved
     case waveStarted
     case waveCleared
     case waveEnded
@@ -270,13 +373,25 @@ public struct SimEvent: Codable, Hashable, Sendable {
     public var entity: EntityID?
     public var value: Int?
     public var itemID: ItemID?
+    public var placementReason: PlacementResult?
+    public var reasonDetail: String?
 
-    public init(tick: UInt64, kind: EventKind, entity: EntityID? = nil, value: Int? = nil, itemID: ItemID? = nil) {
+    public init(
+        tick: UInt64,
+        kind: EventKind,
+        entity: EntityID? = nil,
+        value: Int? = nil,
+        itemID: ItemID? = nil,
+        placementReason: PlacementResult? = nil,
+        reasonDetail: String? = nil
+    ) {
         self.tick = tick
         self.kind = kind
         self.entity = entity
         self.value = value
         self.itemID = itemID
+        self.placementReason = placementReason
+        self.reasonDetail = reasonDetail
     }
 }
 
@@ -293,6 +408,7 @@ public struct Entity: Codable, Hashable, Sendable {
     public var turretDefID: String?
     public var hostWallID: EntityID?
     public var boundPatchID: Int?
+    public var rotation: Rotation
     public var position: GridPosition
     public var health: Int
     public var maxHealth: Int
@@ -304,6 +420,7 @@ public struct Entity: Codable, Hashable, Sendable {
         turretDefID: String? = nil,
         hostWallID: EntityID? = nil,
         boundPatchID: Int? = nil,
+        rotation: Rotation = .north,
         position: GridPosition,
         health: Int,
         maxHealth: Int
@@ -314,6 +431,7 @@ public struct Entity: Codable, Hashable, Sendable {
         self.turretDefID = turretDefID
         self.hostWallID = hostWallID
         self.boundPatchID = boundPatchID
+        self.rotation = rotation
         self.position = position
         self.health = health
         self.maxHealth = maxHealth
@@ -509,6 +627,7 @@ public struct ConveyorPayload: Codable, Hashable, Sendable {
 public struct EconomyState: Codable, Hashable, Sendable {
     public var inventories: [ItemID: Int]
     public var activeRecipeByStructure: [EntityID: String]
+    public var pinnedRecipeByStructure: [EntityID: String]
     public var productionProgressByStructure: [EntityID: Double]
     public var fractionalProductionRemainders: [ItemID: Double]
     public var structureInputBuffers: [EntityID: [ItemID: Int]]
@@ -522,6 +641,7 @@ public struct EconomyState: Codable, Hashable, Sendable {
     public init(
         inventories: [ItemID: Int] = [:],
         activeRecipeByStructure: [EntityID: String] = [:],
+        pinnedRecipeByStructure: [EntityID: String] = [:],
         productionProgressByStructure: [EntityID: Double] = [:],
         fractionalProductionRemainders: [ItemID: Double] = [:],
         structureInputBuffers: [EntityID: [ItemID: Int]] = [:],
@@ -534,6 +654,7 @@ public struct EconomyState: Codable, Hashable, Sendable {
     ) {
         self.inventories = inventories
         self.activeRecipeByStructure = activeRecipeByStructure
+        self.pinnedRecipeByStructure = pinnedRecipeByStructure
         self.productionProgressByStructure = productionProgressByStructure
         self.fractionalProductionRemainders = fractionalProductionRemainders
         self.structureInputBuffers = structureInputBuffers
@@ -543,6 +664,35 @@ public struct EconomyState: Codable, Hashable, Sendable {
         self.powerDemand = powerDemand
         self.currency = currency
         self.telemetry = telemetry
+    }
+
+    public init(
+        inventories: [ItemID: Int],
+        activeRecipeByStructure: [EntityID: String],
+        productionProgressByStructure: [EntityID: Double],
+        fractionalProductionRemainders: [ItemID: Double],
+        structureInputBuffers: [EntityID: [ItemID: Int]],
+        structureOutputBuffers: [EntityID: [ItemID: Int]],
+        conveyorPayloadByEntity: [EntityID: ConveyorPayload],
+        powerAvailable: Int,
+        powerDemand: Int,
+        currency: Int,
+        telemetry: EconomyTelemetry
+    ) {
+        self.init(
+            inventories: inventories,
+            activeRecipeByStructure: activeRecipeByStructure,
+            pinnedRecipeByStructure: [:],
+            productionProgressByStructure: productionProgressByStructure,
+            fractionalProductionRemainders: fractionalProductionRemainders,
+            structureInputBuffers: structureInputBuffers,
+            structureOutputBuffers: structureOutputBuffers,
+            conveyorPayloadByEntity: conveyorPayloadByEntity,
+            powerAvailable: powerAvailable,
+            powerDemand: powerDemand,
+            currency: currency,
+            telemetry: telemetry
+        )
     }
 
     @discardableResult

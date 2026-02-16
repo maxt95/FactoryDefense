@@ -87,7 +87,7 @@ final class PlacementValidationTests: XCTestCase {
         let validator = PlacementValidator()
 
         XCTAssertEqual(
-            validator.canPlace(.powerPlant, at: GridPosition(x: 2, y: 2), in: world),
+            validator.canPlace(.hq, at: GridPosition(x: 2, y: 2), in: world),
             .restrictedZone
         )
     }
@@ -123,7 +123,7 @@ final class PlacementValidationTests: XCTestCase {
         let validator = PlacementValidator()
 
         XCTAssertEqual(
-            validator.canPlace(.storage, at: GridPosition(x: 2, y: 2), in: world),
+            validator.canPlace(.hq, at: GridPosition(x: 2, y: 2), in: world),
             .occupied
         )
     }

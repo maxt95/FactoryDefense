@@ -9,6 +9,7 @@ public enum PlacementResult: Int, Codable, Hashable, Sendable {
     case insufficientResources = 5
     case invalidMinerPlacement = 6
     case invalidTurretMountPlacement = 7
+    case invalidRemoval = 8
 }
 
 public struct PlacementValidator {

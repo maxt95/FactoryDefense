@@ -574,6 +574,8 @@ private struct FactoryDefensemacOSGameplayView: View {
             return "Needs adjacent ore patch"
         case .invalidTurretMountPlacement:
             return "Requires wall segment"
+        case .invalidRemoval:
+            return "Cannot remove"
         }
     }
 

@@ -1,0 +1,121 @@
+[
+  {
+    "id": "wall",
+    "displayName": "Wall",
+    "footprint": { "width": 1, "height": 1 },
+    "powerDraw": 0,
+    "buildCosts": [{ "itemID": "wall_kit", "quantity": 1 }],
+    "ports": [
+      { "id": "wall_io", "direction": "east", "mode": "bidirectional", "filter": { "kind": "allow", "items": ["ammo_light", "ammo_heavy", "ammo_plasma", "repair_kit"] }, "bufferCapacity": 12 }
+    ]
+  },
+  {
+    "id": "turretMount",
+    "displayName": "Turret Mount",
+    "footprint": { "width": 1, "height": 1 },
+    "powerDraw": 0,
+    "buildCosts": [{ "itemID": "turret_core", "quantity": 1 }, { "itemID": "plate_steel", "quantity": 2 }],
+    "ports": [
+      { "id": "ammo_in", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["ammo_light", "ammo_heavy", "ammo_plasma"] }, "bufferCapacity": 6 }
+    ]
+  },
+  {
+    "id": "miner",
+    "displayName": "Miner",
+    "footprint": { "width": 1, "height": 1 },
+    "powerDraw": 2,
+    "buildCosts": [{ "itemID": "plate_iron", "quantity": 6 }, { "itemID": "gear", "quantity": 3 }],
+    "ports": [
+      { "id": "ore_out", "direction": "east", "mode": "output", "filter": { "kind": "allow", "items": ["ore_iron", "ore_copper", "ore_coal"] }, "bufferCapacity": 8 }
+    ]
+  },
+  {
+    "id": "smelter",
+    "displayName": "Smelter",
+    "footprint": { "width": 1, "height": 1 },
+    "powerDraw": 3,
+    "buildCosts": [{ "itemID": "plate_steel", "quantity": 4 }],
+    "ports": [
+      { "id": "materials_in", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["ore_iron", "ore_copper", "ore_coal", "plate_iron"] }, "bufferCapacity": 12 },
+      { "id": "products_out", "direction": "east", "mode": "output", "filter": { "kind": "allow", "items": ["plate_iron", "plate_copper", "plate_steel"] }, "bufferCapacity": 4 }
+    ]
+  },
+  {
+    "id": "assembler",
+    "displayName": "Assembler",
+    "footprint": { "width": 1, "height": 1 },
+    "powerDraw": 3,
+    "buildCosts": [{ "itemID": "plate_iron", "quantity": 4 }, { "itemID": "circuit", "quantity": 2 }],
+    "ports": [
+      { "id": "parts_in", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_copper", "plate_steel", "ore_coal", "gear", "circuit"] }, "bufferCapacity": 12 },
+      { "id": "parts_out", "direction": "east", "mode": "output", "filter": { "kind": "allow", "items": ["gear", "circuit", "power_cell", "wall_kit", "turret_core", "repair_kit"] }, "bufferCapacity": 4 }
+    ]
+  },
+  {
+    "id": "ammoModule",
+    "displayName": "Ammo Module",
+    "footprint": { "width": 1, "height": 1 },
+    "powerDraw": 4,
+    "buildCosts": [{ "itemID": "circuit", "quantity": 2 }, { "itemID": "plate_steel", "quantity": 2 }],
+    "ports": [
+      { "id": "ammo_in", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_steel", "ammo_light", "power_cell", "circuit"] }, "bufferCapacity": 12 },
+      { "id": "ammo_out", "direction": "east", "mode": "output", "filter": { "kind": "allow", "items": ["ammo_light", "ammo_heavy", "ammo_plasma"] }, "bufferCapacity": 8 }
+    ]
+  },
+  {
+    "id": "powerPlant",
+    "displayName": "Power Plant",
+    "footprint": { "width": 1, "height": 1 },
+    "powerDraw": -12,
+    "buildCosts": [{ "itemID": "circuit", "quantity": 2 }, { "itemID": "plate_copper", "quantity": 4 }],
+    "ports": [
+      { "id": "fuel_in", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["ore_coal", "power_cell"] }, "bufferCapacity": 6 }
+    ]
+  },
+  {
+    "id": "conveyor",
+    "displayName": "Conveyor",
+    "footprint": { "width": 1, "height": 1 },
+    "powerDraw": 1,
+    "buildCosts": [{ "itemID": "plate_iron", "quantity": 1 }],
+    "ports": [
+      { "id": "belt_in", "direction": "west", "mode": "input", "filter": { "kind": "any" }, "bufferCapacity": 1 },
+      { "id": "belt_out", "direction": "east", "mode": "output", "filter": { "kind": "any" }, "bufferCapacity": 1 }
+    ]
+  },
+  {
+    "id": "splitter",
+    "displayName": "Splitter",
+    "footprint": { "width": 1, "height": 1 },
+    "powerDraw": 0,
+    "buildCosts": [{ "itemID": "plate_iron", "quantity": 1 }],
+    "ports": [
+      { "id": "split_in", "direction": "west", "mode": "input", "filter": { "kind": "any" }, "bufferCapacity": 1 },
+      { "id": "split_out_a", "direction": "north", "mode": "output", "filter": { "kind": "any" }, "bufferCapacity": 1 },
+      { "id": "split_out_b", "direction": "south", "mode": "output", "filter": { "kind": "any" }, "bufferCapacity": 1 }
+    ]
+  },
+  {
+    "id": "merger",
+    "displayName": "Merger",
+    "footprint": { "width": 1, "height": 1 },
+    "powerDraw": 0,
+    "buildCosts": [{ "itemID": "plate_iron", "quantity": 1 }],
+    "ports": [
+      { "id": "merge_in_a", "direction": "north", "mode": "input", "filter": { "kind": "any" }, "bufferCapacity": 1 },
+      { "id": "merge_in_b", "direction": "south", "mode": "input", "filter": { "kind": "any" }, "bufferCapacity": 1 },
+      { "id": "merge_out", "direction": "east", "mode": "output", "filter": { "kind": "any" }, "bufferCapacity": 1 }
+    ]
+  },
+  {
+    "id": "storage",
+    "displayName": "Storage",
+    "footprint": { "width": 1, "height": 1 },
+    "powerDraw": 0,
+    "buildCosts": [{ "itemID": "plate_steel", "quantity": 3 }, { "itemID": "gear", "quantity": 2 }],
+    "ports": [
+      { "id": "storage_west", "direction": "west", "mode": "bidirectional", "filter": { "kind": "any" }, "bufferCapacity": 24 },
+      { "id": "storage_east", "direction": "east", "mode": "bidirectional", "filter": { "kind": "any" }, "bufferCapacity": 24 }
+    ]
+  }
+]

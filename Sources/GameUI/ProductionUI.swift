@@ -902,6 +902,8 @@ public struct BuildingReferencePanel: View {
         case .ammoModule: return "Ammo Module"
         case .powerPlant: return "Power Plant"
         case .conveyor: return "Conveyor"
+        case .splitter: return "Splitter"
+        case .merger: return "Merger"
         case .storage: return "Storage"
         }
     }
@@ -926,6 +928,10 @@ public struct BuildingReferencePanel: View {
             return Color(red: 0.90, green: 0.90, blue: 0.20)
         case .conveyor:
             return Color(red: 0.50, green: 0.50, blue: 0.70)
+        case .splitter:
+            return Color(red: 0.35, green: 0.55, blue: 0.78)
+        case .merger:
+            return Color(red: 0.48, green: 0.52, blue: 0.80)
         case .storage:
             return Color(red: 0.60, green: 0.40, blue: 0.20)
         }

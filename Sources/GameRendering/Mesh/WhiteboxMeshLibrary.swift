@@ -40,6 +40,8 @@ public enum MeshID: Int, CaseIterable, Hashable, Sendable {
     case ammoModule
     case powerPlant
     case conveyor
+    case splitter
+    case merger
     case storage
     case hq
 

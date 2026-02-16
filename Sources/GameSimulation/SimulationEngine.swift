@@ -1,12 +1,49 @@
 import Foundation
 
 public struct WorldSnapshot: Codable, Hashable, Sendable {
+    public static let currentSchemaVersion = 2
+
+    public var schemaVersion: Int
     public var world: WorldState
     public var queuedCommands: [UInt64: [PlayerCommand]]
 
-    public init(world: WorldState, queuedCommands: [UInt64: [PlayerCommand]]) {
+    public init(
+        schemaVersion: Int = WorldSnapshot.currentSchemaVersion,
+        world: WorldState,
+        queuedCommands: [UInt64: [PlayerCommand]]
+    ) {
+        self.schemaVersion = schemaVersion
         self.world = world
         self.queuedCommands = queuedCommands
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case world
+        case queuedCommands
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        guard schemaVersion == WorldSnapshot.currentSchemaVersion else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .schemaVersion,
+                in: container,
+                debugDescription: "Unsupported snapshot schema version \(schemaVersion). Expected \(WorldSnapshot.currentSchemaVersion)."
+            )
+        }
+
+        self.schemaVersion = schemaVersion
+        self.world = try container.decode(WorldState.self, forKey: .world)
+        self.queuedCommands = try container.decode([UInt64: [PlayerCommand]].self, forKey: .queuedCommands)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(world, forKey: .world)
+        try container.encode(queuedCommands, forKey: .queuedCommands)
     }
 }
 

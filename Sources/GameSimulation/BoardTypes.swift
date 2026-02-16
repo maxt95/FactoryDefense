@@ -295,7 +295,7 @@ private func roundedUp(_ value: Int, toMultipleOf step: Int) -> Int {
 public extension StructureType {
     var blocksMovement: Bool {
         switch self {
-        case .conveyor, .turretMount:
+        case .conveyor, .splitter, .merger, .turretMount:
             return false
         case .hq, .wall, .miner, .smelter, .assembler, .ammoModule, .powerPlant, .storage:
             return true

@@ -43,6 +43,18 @@ public enum WhiteboxAssetCatalog {
             addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.45, 0.05, 0.45))
             addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.10, 0.02, 0.10), offset: SIMD3<Float>(0.24, 0.10, 0))
 
+        case .splitter:
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.42, 0.08, 0.42))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.10, 0.03, 0.10), offset: SIMD3<Float>(0.22, 0.14, 0))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(0.08, 0.14, 0.20))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(0.08, 0.14, -0.20))
+
+        case .merger:
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.42, 0.08, 0.42))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.10, 0.03, 0.10), offset: SIMD3<Float>(0.25, 0.14, 0))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(-0.20, 0.14, 0.16))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(-0.20, 0.14, -0.16))
+
         case .storage:
             addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.45, 0.20, 0.45))
             addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.18, 0.08, 0.18), offset: SIMD3<Float>(0, 0.45, 0))

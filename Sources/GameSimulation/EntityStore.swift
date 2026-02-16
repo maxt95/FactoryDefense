@@ -62,6 +62,7 @@ public struct EntityStore: Codable, Hashable, Sendable {
     public mutating func spawnStructure(
         _ structure: StructureType,
         at position: GridPosition,
+        rotation: Rotation = .north,
         turretDefID: String? = nil,
         hostWallID: EntityID? = nil,
         boundPatchID: Int? = nil,
@@ -80,6 +81,7 @@ public struct EntityStore: Codable, Hashable, Sendable {
             turretDefID: resolvedTurretDefID,
             hostWallID: hostWallID,
             boundPatchID: boundPatchID,
+            rotation: rotation,
             position: position,
             health: resolvedHealth,
             maxHealth: resolvedMaxHealth
@@ -124,6 +126,12 @@ public struct EntityStore: Codable, Hashable, Sendable {
     public mutating func updateBoundPatchID(_ id: EntityID, to boundPatchID: Int?) {
         guard var entity = entitiesByID[id] else { return }
         entity.boundPatchID = boundPatchID
+        entitiesByID[id] = entity
+    }
+
+    public mutating func rotateStructure(_ id: EntityID) {
+        guard var entity = entitiesByID[id], entity.category == .structure else { return }
+        entity.rotation = entity.rotation.rotatedClockwise()
         entitiesByID[id] = entity
     }
 

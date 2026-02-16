@@ -20,6 +20,10 @@ public enum WhiteboxColors {
             return SIMD3<Float>(0.90, 0.90, 0.20)
         case WhiteboxStructureTypeID.conveyor.rawValue:
             return SIMD3<Float>(0.50, 0.50, 0.70)
+        case WhiteboxStructureTypeID.splitter.rawValue:
+            return SIMD3<Float>(0.35, 0.55, 0.78)
+        case WhiteboxStructureTypeID.merger.rawValue:
+            return SIMD3<Float>(0.48, 0.52, 0.80)
         case WhiteboxStructureTypeID.storage.rawValue:
             return SIMD3<Float>(0.60, 0.40, 0.20)
         case WhiteboxStructureTypeID.hq.rawValue:
@@ -47,6 +51,10 @@ public enum WhiteboxColors {
             return SIMD3<Float>(0.90, 0.90, 0.20)
         case .conveyor:
             return SIMD3<Float>(0.50, 0.50, 0.70)
+        case .splitter:
+            return SIMD3<Float>(0.35, 0.55, 0.78)
+        case .merger:
+            return SIMD3<Float>(0.48, 0.52, 0.80)
         case .storage:
             return SIMD3<Float>(0.60, 0.40, 0.20)
         case .hq:

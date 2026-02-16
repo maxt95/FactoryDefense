@@ -6,6 +6,23 @@
 - Platform scope: macOS, iOS, iPadOS, and CLI gameplay root all reach behavior parity via a shared gameplay interaction module.
 - Baseline gate: current `swift test` is green (72 tests) on February 16, 2026.
 
+## Implementation Status (2026-02-16)
+- Completed in this delivery:
+  - Public API/type expansion in simulation (`Rotation`, `CardinalDirection`, `BuildRequest.rotation`, new command payloads, `structureRemoved`, richer placement rejection metadata).
+  - `StructureType` expansion (`splitter`, `merger`) across simulation/UI/rendering exhaustiveness paths.
+  - CommandSystem support for `removeStructure`, `placeConveyor`, `rotateBuilding`, `pinRecipe`.
+  - Immediate demolish semantics with 50% floor refund, HQ removal rejection, path-safety rejection, deterministic wall/turret coupled cleanup.
+  - Snapshot schema break (`schemaVersion = 2`) and explicit legacy snapshot rejection.
+  - Content schema additions (`BuildingDef`, `PortDef`, `ItemFilter`) and authoritative `Content/bootstrap/buildings.json`.
+  - Building validation for canonical constraints (including storage/power-plant 1x1 and storage power draw 0).
+  - Golden replay fingerprint regeneration and new command/snapshot/removal tests.
+- Still in progress / remaining for parity:
+  - Full directional conveyor runtime (remove east-only movement assumptions).
+  - PRD-complete splitter/merger transfer semantics.
+  - Storage shared-pool logistics behavior.
+  - Removal of transport fallback to global inventory (except HUD aggregation).
+  - Shared cross-platform gameplay interaction module + drag-draw parity + canonical rejection UX timing.
+
 ## Locked Decisions
 1. Scope: full PRD parity for both target PRDs.
 2. Refactor style: clean break (no compatibility fallback behavior in runtime logic).

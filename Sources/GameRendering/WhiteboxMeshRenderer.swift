@@ -408,6 +408,10 @@ private extension MeshID {
             self = .powerPlant
         case WhiteboxStructureTypeID.conveyor.rawValue:
             self = .conveyor
+        case WhiteboxStructureTypeID.splitter.rawValue:
+            self = .splitter
+        case WhiteboxStructureTypeID.merger.rawValue:
+            self = .merger
         case WhiteboxStructureTypeID.storage.rawValue:
             self = .storage
         case WhiteboxStructureTypeID.hq.rawValue:

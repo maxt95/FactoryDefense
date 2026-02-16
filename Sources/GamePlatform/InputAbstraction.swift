@@ -13,6 +13,14 @@ public enum InputGesture: Sendable {
     case dragPan(deltaX: Float, deltaY: Float)
     case pinch(scale: Float)
     case placeStructure(type: StructureType, position: GridPosition)
+    case placeConveyor(position: GridPosition, direction: CardinalDirection)
+    case rotateBuilding(entityID: EntityID)
+    case rotateBuildSelection
+    case removeStructure(entityID: EntityID)
+    case pinRecipe(entityID: EntityID, recipeID: String)
+    case cancelBuildMode
+    case confirmDemolish
+    case dragDrawPath(points: [GridPosition], structure: StructureType)
     case triggerWave
 }
 
@@ -54,9 +62,40 @@ public struct DefaultInputMapper: InputMapper {
                 actor: actor,
                 payload: .placeStructure(BuildRequest(structure: type, position: position))
             )
+        case .placeConveyor(let position, let direction):
+            return PlayerCommand(
+                tick: tick,
+                actor: actor,
+                payload: .placeConveyor(position: position, direction: direction)
+            )
+        case .rotateBuilding(let entityID):
+            return PlayerCommand(
+                tick: tick,
+                actor: actor,
+                payload: .rotateBuilding(entityID: entityID)
+            )
+        case .removeStructure(let entityID):
+            return PlayerCommand(
+                tick: tick,
+                actor: actor,
+                payload: .removeStructure(entityID: entityID)
+            )
+        case .pinRecipe(let entityID, let recipeID):
+            return PlayerCommand(
+                tick: tick,
+                actor: actor,
+                payload: .pinRecipe(entityID: entityID, recipeID: recipeID)
+            )
         case .triggerWave:
             return PlayerCommand(tick: tick, actor: actor, payload: .triggerWave)
-        case .dragPan, .pinch:
+        case .dragDrawPath(let points, let structure):
+            guard let first = points.first else { return nil }
+            return PlayerCommand(
+                tick: tick,
+                actor: actor,
+                payload: .placeStructure(BuildRequest(structure: structure, position: first))
+            )
+        case .dragPan, .pinch, .rotateBuildSelection, .cancelBuildMode, .confirmDemolish:
             return nil
         }
     }

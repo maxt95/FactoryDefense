@@ -109,7 +109,7 @@ inline int ramp_elevation(const device WhiteboxRamp* ramps, uint count, int2 cel
 }
 
 inline int2 footprint_size_for_type(uint typeRaw) {
-    if (typeRaw == 2u || typeRaw == 7u || typeRaw == 9u) {
+    if (typeRaw == 12u) {
         return int2(2, 2);
     }
     return int2(1, 1);
@@ -139,7 +139,10 @@ inline float structure_height_in_tiles(uint typeRaw) {
         case 6u: return 0.52; // ammo module
         case 7u: return 1.05; // power plant
         case 8u: return 0.18; // conveyor
-        case 9u: return 0.72; // storage
+        case 9u: return 0.20; // splitter
+        case 10u: return 0.20; // merger
+        case 11u: return 0.72; // storage
+        case 12u: return 0.90; // hq
         default: return 0.50;
     }
 }
@@ -154,7 +157,10 @@ inline float3 structure_base_color(uint typeRaw) {
         case 6u: return float3(0.80, 0.20, 0.20);
         case 7u: return float3(0.90, 0.90, 0.20);
         case 8u: return float3(0.50, 0.50, 0.70);
-        case 9u: return float3(0.60, 0.40, 0.20);
+        case 9u: return float3(0.35, 0.55, 0.78);
+        case 10u: return float3(0.48, 0.52, 0.80);
+        case 11u: return float3(0.60, 0.40, 0.20);
+        case 12u: return float3(0.20, 0.80, 0.90);
         default: return float3(0.75, 0.76, 0.78);
     }
 }

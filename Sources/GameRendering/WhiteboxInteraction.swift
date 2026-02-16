@@ -199,8 +199,10 @@ public enum WhiteboxStructureTypeID: UInt32, Sendable {
     case ammoModule = 6
     case powerPlant = 7
     case conveyor = 8
-    case storage = 9
-    case hq = 10
+    case splitter = 9
+    case merger = 10
+    case storage = 11
+    case hq = 12
 
     public init(structureType: StructureType) {
         switch structureType {
@@ -222,6 +224,10 @@ public enum WhiteboxStructureTypeID: UInt32, Sendable {
             self = .powerPlant
         case .conveyor:
             self = .conveyor
+        case .splitter:
+            self = .splitter
+        case .merger:
+            self = .merger
         case .storage:
             self = .storage
         }

@@ -283,6 +283,10 @@ public struct ObjectInspectorBuilder: Sendable {
             return "Power Plant"
         case .conveyor:
             return "Conveyor"
+        case .splitter:
+            return "Splitter"
+        case .merger:
+            return "Merger"
         case .storage:
             return "Storage"
         }

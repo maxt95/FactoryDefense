@@ -23,7 +23,8 @@ public struct CommandSystem: SimulationSystem {
                         SimEvent(
                             tick: state.tick,
                             kind: .placementRejected,
-                            value: PlacementResult.outOfBounds.rawValue
+                            value: PlacementResult.outOfBounds.rawValue,
+                            placementReason: .outOfBounds
                         )
                     )
                     continue
@@ -43,7 +44,8 @@ public struct CommandSystem: SimulationSystem {
                         SimEvent(
                             tick: state.tick,
                             kind: .placementRejected,
-                            value: result.rawValue
+                            value: result.rawValue,
+                            placementReason: result
                         )
                     )
                     continue
@@ -61,7 +63,8 @@ public struct CommandSystem: SimulationSystem {
                             SimEvent(
                                 tick: state.tick,
                                 kind: .placementRejected,
-                                value: PlacementResult.invalidMinerPlacement.rawValue
+                                value: PlacementResult.invalidMinerPlacement.rawValue,
+                                placementReason: .invalidMinerPlacement
                             )
                         )
                         continue
@@ -78,7 +81,8 @@ public struct CommandSystem: SimulationSystem {
                             SimEvent(
                                 tick: state.tick,
                                 kind: .placementRejected,
-                                value: PlacementResult.invalidTurretMountPlacement.rawValue
+                                value: PlacementResult.invalidTurretMountPlacement.rawValue,
+                                placementReason: .invalidTurretMountPlacement
                             )
                         )
                         continue
@@ -92,7 +96,8 @@ public struct CommandSystem: SimulationSystem {
                         SimEvent(
                             tick: state.tick,
                             kind: .placementRejected,
-                            value: PlacementResult.insufficientResources.rawValue
+                            value: PlacementResult.insufficientResources.rawValue,
+                            placementReason: .insufficientResources
                         )
                     )
                     continue
@@ -107,6 +112,7 @@ public struct CommandSystem: SimulationSystem {
                 let structureID = state.entities.spawnStructure(
                     request.structure,
                     at: placementPosition,
+                    rotation: request.rotation,
                     hostWallID: hostWallID,
                     boundPatchID: targetPatchID
                 )
@@ -123,6 +129,102 @@ public struct CommandSystem: SimulationSystem {
                         entity: structureID
                     )
                 )
+            case .removeStructure(let entityID):
+                guard let structure = state.entities.entity(id: entityID),
+                      structure.category == .structure,
+                      let structureType = structure.structureType else {
+                    context.emit(
+                        SimEvent(
+                            tick: state.tick,
+                            kind: .placementRejected,
+                            value: PlacementResult.invalidRemoval.rawValue,
+                            placementReason: .invalidRemoval,
+                            reasonDetail: "missing-structure"
+                        )
+                    )
+                    continue
+                }
+                guard structureType != .hq else {
+                    context.emit(
+                        SimEvent(
+                            tick: state.tick,
+                            kind: .placementRejected,
+                            value: PlacementResult.invalidRemoval.rawValue,
+                            placementReason: .invalidRemoval,
+                            reasonDetail: "hq-removal-forbidden"
+                        )
+                    )
+                    continue
+                }
+
+                var removalIDs: [EntityID] = [entityID]
+                if structureType == .wall {
+                    let mountedTurretIDs = state.entities.all
+                        .filter { $0.category == .structure && $0.structureType == .turretMount && $0.hostWallID == entityID }
+                        .map(\.id)
+                        .sorted()
+                    removalIDs.append(contentsOf: mountedTurretIDs)
+                }
+
+                var previewState = state
+                for removalID in removalIDs {
+                    previewState.entities.remove(removalID)
+                }
+                if blocksCriticalPath(afterRemovalWorld: previewState, placementValidator: placementValidator) {
+                    context.emit(
+                        SimEvent(
+                            tick: state.tick,
+                            kind: .placementRejected,
+                            value: PlacementResult.blocksCriticalPath.rawValue,
+                            placementReason: .blocksCriticalPath,
+                            reasonDetail: "removal-seals-path"
+                        )
+                    )
+                    continue
+                }
+
+                for removalID in removalIDs.sorted() {
+                    guard let removed = state.entities.entity(id: removalID),
+                          let removedStructureType = removed.structureType else { continue }
+                    applyRefund(for: removedStructureType, state: &state)
+                    unbindPatchIfNeeded(for: removed, state: &state)
+                    state.entities.remove(removalID)
+                    cleanupRuntimeState(for: removalID, state: &state)
+                    context.emit(
+                        SimEvent(
+                            tick: state.tick,
+                            kind: .structureRemoved,
+                            entity: removalID
+                        )
+                    )
+                }
+
+                if removalIDs.contains(where: { state.entities.entity(id: $0)?.structureType == .wall }) || structureType == .wall {
+                    state.combat.wallNetworksDirty = true
+                }
+            case .placeConveyor(let position, let direction):
+                let request = BuildRequest(
+                    structure: .conveyor,
+                    position: position,
+                    rotation: rotation(for: direction)
+                )
+                let translated = PlayerCommand(
+                    tick: command.tick,
+                    actor: command.actor,
+                    payload: .placeStructure(request)
+                )
+                let translatedContext = SystemContext(
+                    tickDurationSeconds: context.tickDurationSeconds,
+                    commands: [translated],
+                    emitEvent: context.emit
+                )
+                update(state: &state, context: translatedContext)
+            case .rotateBuilding(let entityID):
+                state.entities.rotateStructure(entityID)
+            case .pinRecipe(let entityID, let recipeID):
+                if state.entities.entity(id: entityID)?.category == .structure {
+                    state.economy.pinnedRecipeByStructure[entityID] = recipeID
+                }
             case .extract:
                 // Extraction is deferred for v1; command retained for snapshot compatibility.
                 continue
@@ -136,6 +238,64 @@ public struct CommandSystem: SimulationSystem {
         guard let patchIndex = state.orePatches.firstIndex(where: { $0.id == patchID }) else { return }
         state.orePatches[patchIndex].boundMinerID = minerID
         state.entities.updateBoundPatchID(minerID, to: patchID)
+    }
+
+    private func rotation(for direction: CardinalDirection) -> Rotation {
+        switch direction {
+        case .north:
+            return .north
+        case .east:
+            return .east
+        case .south:
+            return .south
+        case .west:
+            return .west
+        }
+    }
+
+    private func blocksCriticalPath(afterRemovalWorld world: WorldState, placementValidator: PlacementValidator) -> Bool {
+        let map = placementValidator.navigationMap(for: world)
+        let pathfinder = Pathfinder()
+        let base = GridPosition(x: world.board.basePosition.x, y: world.board.basePosition.y)
+        guard let baseTile = map.tile(at: base), baseTile.walkable else {
+            return true
+        }
+
+        let spawns = world.board.spawnPositions()
+        guard !spawns.isEmpty else { return true }
+        for spawn in spawns where spawn != base {
+            guard let spawnTile = map.tile(at: spawn), spawnTile.walkable else { continue }
+            if pathfinder.findPath(on: map, from: spawn, to: base) != nil {
+                return false
+            }
+        }
+        return true
+    }
+
+    private func applyRefund(for structureType: StructureType, state: inout WorldState) {
+        for cost in structureType.buildCosts {
+            let refundQuantity = max(0, cost.quantity / 2)
+            if refundQuantity > 0 {
+                state.economy.add(itemID: cost.itemID, quantity: refundQuantity)
+            }
+        }
+    }
+
+    private func unbindPatchIfNeeded(for structure: Entity, state: inout WorldState) {
+        guard structure.structureType == .miner, let patchID = structure.boundPatchID else { return }
+        if let patchIndex = state.orePatches.firstIndex(where: { $0.id == patchID && $0.boundMinerID == structure.id }) {
+            state.orePatches[patchIndex].boundMinerID = nil
+        }
+    }
+
+    private func cleanupRuntimeState(for structureID: EntityID, state: inout WorldState) {
+        state.economy.activeRecipeByStructure.removeValue(forKey: structureID)
+        state.economy.pinnedRecipeByStructure.removeValue(forKey: structureID)
+        state.economy.productionProgressByStructure.removeValue(forKey: structureID)
+        state.economy.structureInputBuffers.removeValue(forKey: structureID)
+        state.economy.structureOutputBuffers.removeValue(forKey: structureID)
+        state.economy.conveyorPayloadByEntity.removeValue(forKey: structureID)
+        state.combat.lastFireTickByTurret.removeValue(forKey: structureID)
     }
 }
 
@@ -344,6 +504,12 @@ public struct EconomySystem: SimulationSystem {
         state: WorldState
     ) -> RecipeDef? {
         let inventory = combinedInventory(for: structureID, state: state)
+        if let pinnedRecipeID = state.economy.pinnedRecipeByStructure[structureID],
+           let pinnedRecipe = recipesByID[pinnedRecipeID],
+           pinnedRecipe.inputs.allSatisfy({ inventory[$0.itemID, default: 0] >= $0.quantity }),
+           canRunRecipeWithoutBreachingConstructionStock(recipe: pinnedRecipe, inventory: state.economy.inventories) {
+            return pinnedRecipe
+        }
         for recipeID in prioritizedRecipeIDs {
             guard let recipe = recipesByID[recipeID] else { continue }
             guard recipe.inputs.allSatisfy({ inventory[$0.itemID, default: 0] >= $0.quantity }) else { continue }
@@ -925,6 +1091,7 @@ public struct EconomySystem: SimulationSystem {
     private func pruneRuntimeState(for structures: [Entity], state: inout WorldState) {
         let validStructureIDs = Set(structures.map(\.id))
         state.economy.activeRecipeByStructure = state.economy.activeRecipeByStructure.filter { validStructureIDs.contains($0.key) }
+        state.economy.pinnedRecipeByStructure = state.economy.pinnedRecipeByStructure.filter { validStructureIDs.contains($0.key) }
         state.economy.productionProgressByStructure = state.economy.productionProgressByStructure.filter { validStructureIDs.contains($0.key) }
         state.economy.structureInputBuffers = state.economy.structureInputBuffers.filter { validStructureIDs.contains($0.key) }
         state.economy.structureOutputBuffers = state.economy.structureOutputBuffers.filter { validStructureIDs.contains($0.key) }

@@ -39,6 +39,116 @@ public struct ItemStack: Codable, Hashable, Sendable {
     }
 }
 
+public enum ItemFilter: Hashable, Sendable {
+    case any
+    case allow(Set<ItemID>)
+}
+
+extension ItemFilter: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case items
+    }
+
+    private enum Kind: String, Codable {
+        case any
+        case allow
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try container.decode(Kind.self, forKey: .kind)
+        switch kind {
+        case .any:
+            self = .any
+        case .allow:
+            let items = try container.decode([ItemID].self, forKey: .items)
+            self = .allow(Set(items))
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .any:
+            try container.encode(Kind.any, forKey: .kind)
+        case .allow(let itemIDs):
+            try container.encode(Kind.allow, forKey: .kind)
+            try container.encode(Array(itemIDs).sorted(), forKey: .items)
+        }
+    }
+}
+
+public enum PortDirection: String, Codable, CaseIterable, Sendable {
+    case north
+    case east
+    case south
+    case west
+}
+
+public enum PortMode: String, Codable, CaseIterable, Sendable {
+    case input
+    case output
+    case bidirectional
+}
+
+public struct PortDef: Codable, Hashable, Sendable {
+    public var id: String
+    public var direction: PortDirection
+    public var mode: PortMode
+    public var filter: ItemFilter
+    public var bufferCapacity: Int
+
+    public init(
+        id: String,
+        direction: PortDirection,
+        mode: PortMode,
+        filter: ItemFilter = .any,
+        bufferCapacity: Int = 1
+    ) {
+        self.id = id
+        self.direction = direction
+        self.mode = mode
+        self.filter = filter
+        self.bufferCapacity = max(1, bufferCapacity)
+    }
+}
+
+public struct BuildingFootprintDef: Codable, Hashable, Sendable {
+    public var width: Int
+    public var height: Int
+
+    public init(width: Int, height: Int) {
+        self.width = width
+        self.height = height
+    }
+}
+
+public struct BuildingDef: Codable, Hashable, Sendable {
+    public var id: String
+    public var displayName: String
+    public var footprint: BuildingFootprintDef
+    public var powerDraw: Int
+    public var buildCosts: [ItemStack]
+    public var ports: [PortDef]
+
+    public init(
+        id: String,
+        displayName: String,
+        footprint: BuildingFootprintDef,
+        powerDraw: Int,
+        buildCosts: [ItemStack],
+        ports: [PortDef]
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.footprint = footprint
+        self.powerDraw = powerDraw
+        self.buildCosts = buildCosts
+        self.ports = ports
+    }
+}
+
 public enum AmmoType: String, Codable, CaseIterable, Sendable {
     case lightBallistic
     case heavyBallistic
@@ -500,6 +610,7 @@ public struct GameContentBundle: Codable, Sendable {
     public var board: BoardDef
     public var hq: HQDef
     public var difficulty: DifficultyConfigDef
+    public var buildings: [BuildingDef]
 
     public init(
         items: [ItemDef],
@@ -510,7 +621,8 @@ public struct GameContentBundle: Codable, Sendable {
         techNodes: [TechNodeDef],
         board: BoardDef = .starter,
         hq: HQDef = .v1Default,
-        difficulty: DifficultyConfigDef = .v1Default
+        difficulty: DifficultyConfigDef = .v1Default,
+        buildings: [BuildingDef] = []
     ) {
         self.items = items
         self.recipes = recipes
@@ -521,6 +633,7 @@ public struct GameContentBundle: Codable, Sendable {
         self.board = board
         self.hq = hq
         self.difficulty = difficulty
+        self.buildings = buildings
     }
 
     public init(
@@ -532,7 +645,8 @@ public struct GameContentBundle: Codable, Sendable {
         techNodes: [TechNodeDef],
         board: BoardDef = .starter,
         hq: HQDef = .v1Default,
-        difficulty: DifficultyConfigDef = .v1Default
+        difficulty: DifficultyConfigDef = .v1Default,
+        buildings: [BuildingDef] = []
     ) {
         self.items = items
         self.recipes = recipes
@@ -543,6 +657,7 @@ public struct GameContentBundle: Codable, Sendable {
         self.board = board
         self.hq = hq
         self.difficulty = difficulty
+        self.buildings = buildings
     }
 
     public var waves: [WaveDef] {
@@ -558,7 +673,8 @@ public struct GameContentBundle: Codable, Sendable {
         techNodes: [],
         board: .starter,
         hq: .v1Default,
-        difficulty: .v1Default
+        difficulty: .v1Default,
+        buildings: []
     )
 }
 
