@@ -119,6 +119,49 @@ final class RuntimeControllerTests: XCTestCase {
         XCTAssertNil(runtime.world.entities.entity(id: wallID))
     }
 
+    func testPlaceStructurePathStopsWhenResourcesExhausted() {
+        var world = makeCommandHelperWorld()
+        world.economy.inventories["wall_kit"] = 2
+        let runtime = GameRuntimeController(initialWorld: world)
+
+        runtime.placeStructurePath(
+            .wall,
+            along: [
+                GridPosition(x: 1, y: 7),
+                GridPosition(x: 2, y: 7),
+                GridPosition(x: 3, y: 7),
+                GridPosition(x: 4, y: 7)
+            ]
+        )
+        _ = runtime.advanceTick()
+
+        let placedWalls = runtime.latestEvents.filter { $0.kind == .structurePlaced }.count
+        XCTAssertEqual(placedWalls, 2)
+    }
+
+    func testPlaceStructurePathSkipsInvalidCellsAndKeepsValidPlacements() {
+        var world = makeCommandHelperWorld()
+        for cost in StructureType.wall.buildCosts {
+            world.economy.inventories[cost.itemID] = 20
+        }
+        let runtime = GameRuntimeController(initialWorld: world)
+
+        runtime.placeStructurePath(
+            .wall,
+            along: [
+                GridPosition(x: 0, y: 0), // occupied by HQ
+                GridPosition(x: 1, y: 7),
+                GridPosition(x: 2, y: 7)
+            ]
+        )
+        _ = runtime.advanceTick()
+        XCTAssertEqual(
+            runtime.latestEvents.filter { $0.kind == .structurePlaced }.count,
+            2
+        )
+        XCTAssertNotNil(runtime.world.entities.entity(id: 1)) // HQ still present
+    }
+
     private func makeImmediateGameOverWorld() -> WorldState {
         let board = BoardState(
             width: 8,

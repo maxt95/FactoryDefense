@@ -174,6 +174,74 @@ public final class GameRuntimeController: ObservableObject {
         enqueue(payload: .placeConveyor(position: position, direction: direction))
     }
 
+    public func placeStructurePath(
+        _ structure: StructureType,
+        along points: [GridPosition],
+        rotation: Rotation = .north,
+        targetPatchID: Int? = nil
+    ) {
+        guard !points.isEmpty else { return }
+
+        var simulatedWorld = world
+        var placedAny = false
+
+        for position in points {
+            let anchorPosition = placementAnchor(for: structure, requestedPosition: position)
+            let coveredCells = structure.coveredCells(anchor: anchorPosition)
+            guard let expansionInsets = simulatedWorld.board.plannedExpansion(for: coveredCells) else {
+                continue
+            }
+
+            let placementAnchor = anchorPosition.translated(byX: expansionInsets.left, byY: expansionInsets.top)
+            var previewState = simulatedWorld
+            previewState.applyBoardExpansion(expansionInsets)
+            let result = placementValidator.canPlace(
+                structure,
+                at: placementAnchor,
+                targetPatchID: targetPatchID,
+                in: previewState
+            )
+            guard result == .ok else {
+                continue
+            }
+
+            guard simulatedWorld.economy.canAfford(structure.buildCosts) else {
+                placementResult = .insufficientResources
+                break
+            }
+
+            enqueue(
+                payload: .placeStructure(
+                    BuildRequest(
+                        structure: structure,
+                        position: anchorPosition,
+                        rotation: rotation,
+                        targetPatchID: targetPatchID
+                    )
+                )
+            )
+
+            simulatedWorld.applyBoardExpansion(expansionInsets)
+            let placedPosition = GridPosition(
+                x: placementAnchor.x,
+                y: placementAnchor.y,
+                z: simulatedWorld.board.elevation(at: placementAnchor)
+            )
+            simulatedWorld.entities.spawnStructure(
+                structure,
+                at: placedPosition,
+                rotation: rotation,
+                boundPatchID: targetPatchID
+            )
+            _ = simulatedWorld.economy.consume(costs: structure.buildCosts)
+            placedAny = true
+        }
+
+        if placedAny {
+            placementResult = .ok
+        }
+    }
+
     public func removeStructure(entityID: EntityID) {
         enqueue(payload: .removeStructure(entityID: entityID))
     }

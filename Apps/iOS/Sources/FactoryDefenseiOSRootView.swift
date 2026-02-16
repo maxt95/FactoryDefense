@@ -75,6 +75,7 @@ private struct FactoryDefenseiOSGameplayView: View {
     private let picker = WhiteboxPicker()
     private let objectInspectorBuilder = ObjectInspectorBuilder()
     private let orePatchInspectorBuilder = OrePatchInspectorBuilder()
+    private let dragDrawPlanner = GameplayDragDrawPlanner()
 
     private var selectedStructure: StructureType {
         interaction.selectedStructure(from: buildMenu)
@@ -108,15 +109,10 @@ private struct FactoryDefenseiOSGameplayView: View {
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 1)
                         .onChanged { value in
-                            let deltaX = value.translation.width - dragTranslation.width
-                            let deltaY = value.translation.height - dragTranslation.height
-                            cameraState.panBy(deltaX: -Float(deltaX), deltaY: -Float(deltaY))
-                            enforceCameraConstraints(viewport: proxy.size)
-                            dragTranslation = value.translation
-                            previewPlacement(at: value.location, viewport: proxy.size)
+                            handleDragChanged(value, viewport: proxy.size)
                         }
-                        .onEnded { _ in
-                            dragTranslation = .zero
+                        .onEnded { value in
+                            handleDragEnded(value, viewport: proxy.size)
                         }
                 )
                 .simultaneousGesture(
@@ -413,6 +409,48 @@ private struct FactoryDefenseiOSGameplayView: View {
             return
         }
         runtime.previewPlacement(structure: selectedStructure, at: position)
+    }
+
+    private func handleDragChanged(_ value: DragGesture.Value, viewport: CGSize) {
+        if interaction.isBuildMode, dragDrawPlanner.supportsDragDraw(for: selectedStructure) {
+            if !interaction.isDragDrawActive,
+               let start = pickGrid(at: value.startLocation, viewport: viewport) {
+                interaction.beginDragDraw(at: start)
+            }
+            if let current = pickGrid(at: value.location, viewport: viewport) {
+                interaction.updateDragDraw(at: current)
+                runtime.previewPlacement(structure: selectedStructure, at: current)
+            } else {
+                runtime.clearPlacementPreview()
+            }
+            return
+        }
+
+        let deltaX = value.translation.width - dragTranslation.width
+        let deltaY = value.translation.height - dragTranslation.height
+        cameraState.panBy(deltaX: -Float(deltaX), deltaY: -Float(deltaY))
+        enforceCameraConstraints(viewport: viewport)
+        dragTranslation = value.translation
+        previewPlacement(at: value.location, viewport: viewport)
+    }
+
+    private func handleDragEnded(_ value: DragGesture.Value, viewport: CGSize) {
+        defer { dragTranslation = .zero }
+
+        guard interaction.isBuildMode, dragDrawPlanner.supportsDragDraw(for: selectedStructure) else {
+            interaction.cancelDragDraw()
+            return
+        }
+
+        if let current = pickGrid(at: value.location, viewport: viewport) {
+            interaction.updateDragDraw(at: current)
+        }
+        let path = interaction.finishDragDraw(using: dragDrawPlanner)
+        guard path.count > 1 else { return }
+
+        selectedTarget = nil
+        runtime.placeStructurePath(selectedStructure, along: path)
+        refreshPlacementPreview(viewport: viewport)
     }
 
     private func refreshPlacementPreview(viewport: CGSize) {

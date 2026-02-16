@@ -24,9 +24,11 @@
   - Introduced shared `GameplayInteractionState` in `GameUI` and adopted it across macOS/iOS/iPadOS/CLI gameplay roots for unified build/interact mode and build-menu selection transitions.
   - Added shared timed rejection-feedback controller (`PlacementFeedbackController`) with 1.5s placement-rejection label persistence wired across macOS/iOS/iPadOS/CLI gameplay roots.
   - Added shared demolish-confirmation interaction state (`pendingDemolishEntityID`) and wired confirmation alerts + Demolish actions across macOS/iOS/iPadOS gameplay roots.
+  - Added shared drag-draw planner + interaction state and wired conveyor/wall drag-draw path placement across macOS/iOS/iPadOS/CLI gameplay roots with dominant-axis snapping.
+  - Added runtime path-placement batching (`placeStructurePath`) with deterministic per-cell command enqueue, invalid-cell skip behavior, and chain stop on resource exhaustion.
   - Golden replay fingerprint regeneration and new command/snapshot/removal tests.
 - Still in progress / remaining for parity:
-  - Shared interaction module follow-through: drag-draw parity.
+  - None in the shared interaction follow-through slice.
 
 ## Locked Decisions
 1. Scope: full PRD parity for both target PRDs.
