@@ -1,6 +1,6 @@
 # Whitebox 3D Asset Strategy for Factory Defense
 
-Last updated: 2026-02-15
+Last updated: 2026-02-16
 Status: Implementation guide
 
 ## Context
@@ -33,10 +33,10 @@ This document compares two approaches for creating whitebox 3D assets and recomm
 
 Best saved for when production art begins. The recommended pipeline when that time comes:
 
-- **Format:** USDC (binary USD) — Apple-native, Blender exports well, Model I/O reads directly
-- **Loading:** `MDLAsset` + `MTKMesh` with `MTKModelIOVertexDescriptorFromMetal()` to bridge vertex layouts
+- **Format:** glTF 2.0 / GLB as primary interchange — designed for runtime delivery, clear PBR metallic/roughness semantics, lighter tooling than USD. See `docs/prd/asset_pipeline.md` §3 for full format analysis.
+- **Alternative:** USDC (binary USD) — Apple-native, valid for scene layout and Apple Preview validation. Remains useful for archival and multi-asset composition but is not the primary interchange format.
+- **Loading:** `MDLAsset` + `MTKMesh` with `MTKModelIOVertexDescriptorFromMetal()` to bridge vertex layouts (for USD path). GLTFKit2 for glTF path.
 - **Fallback:** OBJ if simplicity is needed (no scene hierarchy, but dead-simple for single meshes)
-- **glTF/GLB:** Not natively supported by Model I/O — requires third-party dependency (GLTFKit2)
 
 Key concerns for when this is built:
 - Coordinate system: Blender default is Z-up, Metal/camera uses Y-up. USD export must set Forward=-Z, Up=Y
@@ -296,6 +296,8 @@ Leverage the existing `DebugVisualizationMode` enum to add:
 
 ## Future Migration Path (Procedural → DCC Assets)
 
+> **Full production pipeline:** The complete DCC-to-runtime asset pipeline — including texture strategy, LOD generation, memory management, and distribution — is documented in `docs/prd/asset_pipeline.md`.
+
 When production art is ready:
 
 1. Define `MeshProvider` protocol:
@@ -305,7 +307,7 @@ When production art is ready:
    }
    ```
 2. `WhiteboxMeshLibrary` already conforms to this protocol
-3. Build `ModelIOMeshLibrary` that loads USDC/USDZ via `MDLAsset` + `MTKMesh`
+3. Build `ModelIOMeshLibrary` that loads glTF (via GLTFKit2) or USDC/USDZ (via `MDLAsset` + `MTKMesh`)
 4. Swap providers per-asset incrementally (real wall model + procedural enemies is fine)
 5. Rendering code unchanged — only the data source changes
 
@@ -319,6 +321,64 @@ Assets/Whitebox/
   terrain/wb_tile_flat.usdc, wb_tile_ramp.usdc
   misc/wb_base_core.usdc, wb_resource_node.usdc
 ```
+
+---
+
+## Production Art Pipeline Preview
+
+This section bridges the whitebox phase to the full production asset pipeline. None of these apply during the current whitebox phase — they document decisions and conventions that take effect when the first DCC asset enters the project. See `docs/prd/asset_pipeline.md` for the complete pipeline design.
+
+### Format Decision: glTF-First Pipeline
+
+The DCC interchange format is **glTF 2.0 / GLB** (not USDC as originally suggested in Approach A above). glTF is designed for runtime delivery with clear PBR metallic/roughness semantics and lighter tooling requirements. USDC remains valid for scene layout composition, Apple Preview validation, and archival, but glTF is the primary format that feeds the asset compiler.
+
+See `docs/prd/asset_pipeline.md` §3 for the full format comparison and decision rationale.
+
+### Texture Compression (When PBR Textures Arrive)
+
+- **Standardize on ASTC** for all Apple targets. iOS 18+ and macOS 15+ (Apple Silicon) natively support ASTC — no PVRTC or BC fallbacks needed.
+- **ORM channel packing** (single texture, linear color space):
+  - R = Ambient Occlusion
+  - G = Roughness
+  - B = Metallic
+  - This is the glTF 2.0 / Khronos standard packing. Reduces texture fetches from 3 to 1 for material properties — critical for TBDR bandwidth on Apple GPUs.
+- **Texture resolution ceiling:** 256×256 for standard 1×1 structures (50–80px on screen at isometric distance). 512×512 maximum for hero structures (HQ, Lab) with 2×2 footprints.
+- **Generate mipmaps offline** for all textures — no runtime mipmap generation.
+
+See `docs/prd/asset_pipeline.md` §6 for the full texture strategy including ASTC block size recommendations per texture class.
+
+### LOD Generation
+
+- **meshoptimizer** (MIT license, C library) for offline LOD generation when transitioning to DCC meshes.
+- 2 LOD levels for standard structures, 2–3 for hero structures.
+- Screen-size thresholds stored per LOD in asset metadata; quality preset drives LOD bias.
+- **Not needed for the whitebox phase** — procedural geometry is already minimal-polygon.
+
+See `docs/prd/asset_pipeline.md` §7 for LOD levels per asset category and selection criteria.
+
+### iOS Memory Considerations
+
+- **GPU-native compressed textures (ASTC) avoid transient RGBA8 decode spikes** — critical for iOS memory management where jetsam enforces dynamic termination limits.
+- Placeholder LOD rendering during streaming keeps the scene populated while higher-detail assets load.
+- Quality preset drives texture resolution cap and LOD bias to stay within device memory budgets.
+- Must monitor and respond to memory warnings by evicting non-essential cached textures and LODs.
+
+See `docs/prd/asset_pipeline.md` §8 for full memory budget tables per quality preset and Metal resource storage mode conventions.
+
+### Asset Compiler Concept
+
+When DCC assets arrive, a build-time Swift CLI tool validates and converts interchange files (glTF) into the engine-native runtime format. The compiler enforces:
+- Coordinate system normalization (Y-up)
+- Tangent basis computation (MikkTSpace)
+- ORM texture packing validation
+- ASTC compression with platform-specific block sizes
+- LOD chain generation
+- Mipmap generation
+- Provenance metadata recording
+
+**Not needed during the whitebox phase.** The compiler becomes necessary when the first DCC asset enters the pipeline.
+
+See `docs/prd/asset_pipeline.md` §4 for the full compiler pipeline specification.
 
 ---
 

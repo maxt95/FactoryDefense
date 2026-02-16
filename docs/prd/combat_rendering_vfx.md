@@ -720,6 +720,17 @@ public func draw(in view: MTKView) {
 - Should the whitebox renderer be retained as a debug/fallback mode?
   - Recommendation: yes. Keep it available behind a debug toggle but disabled by default once instanced rendering is functional.
 
+### 7.10 TBDR Optimization Notes
+
+Apple GPUs are **tile-based deferred renderers (TBDR)**. Bandwidth pressure dominates over ALU pressure on these architectures. The instanced rendering pipeline must account for this:
+
+- **Use `.memoryless` storage** for render targets consumed within the same render pass (depth, stencil intermediates). This avoids writing tile memory back to system memory — the data never leaves the tile.
+- **Avoid GPU occlusion query patterns.** Prefer hierarchical Z-buffer culling combined with coarse CPU-side frustum culling. Occlusion queries create pipeline stalls that are especially costly on TBDR.
+- **Validate render pass structure** with Metal System Trace. Ensure compute/render overlap where dependencies allow. Look for unnecessary pass breaks that force tile memory flushes.
+- **Minimize render target loads/stores.** Configure `loadAction` (`.clear` or `.dontCare`, never `.load` unless reading back previous frame data) and `storeAction` (`.dontCare` for intermediates, `.store` only for final output).
+- **ORM texture packing** (§6.2 of `asset_pipeline.md`) reduces material texture fetches from 3 to 1, directly reducing TBDR bandwidth pressure per fragment.
+- **Reference:** Apple Metal Best Practices Guide — TBDR architecture section.
+
 ---
 
 ## 8. GPU Particle System
@@ -906,6 +917,17 @@ Sources/GameRendering/Shaders/
 | 3 | Emission count (particle_emit only) | `particle_emit` |
 | 4 | Max particles constant (particle_emit only) | `particle_emit` |
 
+**Metal resource storage mode conventions:**
+
+| Resource | Storage Mode | Rationale |
+|---|---|---|
+| Instance buffers | `.storageModeShared` | CPU writes, GPU reads each frame |
+| Particle pool | `.storageModePrivate` | GPU-only, no CPU readback |
+| Emission queue | `.storageModeShared` | CPU fills, GPU reads |
+| Render targets (intermediates) | `.memoryless` | Consumed within same pass; never stored to system memory (TBDR optimization) |
+| Render targets (final output) | `.storageModePrivate` | GPU writes, display reads |
+| Staging textures (streamed assets) | `.shared` → blit → `.private` | CPU upload, then GPU-optimal storage |
+
 ### 9.4 Implementation Status
 
 | Aspect | Status |
@@ -983,6 +1005,35 @@ Counts scale: `mobileBalanced` uses ~40% of `macCinematic` counts.
 | Per-pass frame time measurement | Gap — no GPU profiling integration |
 | Adaptive quality scaling | Gap |
 | Particle budget scaling by preset | Gap |
+
+### 10.6 iOS Memory Termination Risk
+
+iOS enforces dynamic memory limits via **jetsam**. Termination thresholds vary by device model and current system conditions — there is no hard "safe" memory ceiling.
+
+**Current GPU-side memory footprint (from §10.2):**
+- Particle pool (double-buffered): ~10.24 MB
+- Instance buffers (triple-buffered): ~768 KB
+- Render targets (existing): ~40 MB
+- **Total: ~55 MB GPU-side** — well within budget for all target devices.
+
+**Risk area: texture streaming when production art arrives.** Once DCC assets with PBR textures enter the pipeline, resident texture memory becomes the dominant factor. Enforce per-preset resident texture ceilings:
+- `mobileBalanced`: 150–300 MB
+- `tabletHigh`: 300–600 MB
+- `macCinematic`: 600 MB–1.5 GB
+
+**Diagnostic tools:**
+- Xcode memory gauges (live monitoring)
+- Jetsam event reports (`sysdiagnose`)
+- `os_proc_available_memory()` for adaptive budget queries
+- Memory warning callbacks (`didReceiveMemoryWarning`)
+
+**Adaptive response on memory warning:**
+1. Drop particle pool to `mobileBalanced` counts (16,384 max)
+2. Evict cached LODs — fall back to lowest available LOD for all assets
+3. Release non-essential cached textures (LRU eviction)
+4. Log the event for post-session analysis
+
+See `asset_pipeline.md` §8 for full memory budget tables and Metal resource storage mode patterns.
 
 ---
 
@@ -1217,3 +1268,4 @@ Phase 1 (Spatial + Projectile)
 
 - 2026-02-15: Initial draft — full architecture spec for combat physics, rendering pipeline, and VFX system with 9-phase implementation roadmap.
 - 2026-02-16: Cross-PRD alignment: Updated per-turret type stats and fire rate tracking to Exists (Milestone 0). Fixed raider targeting from probability-based (70/30) to deterministic (seeks nearest non-wall structure) per wave_threat_system.md.
+- 2026-02-16: Added §7.10 TBDR Optimization Notes, §10.6 iOS Memory Termination Risk, and Metal resource storage mode table in §9.3. Cross-referenced asset_pipeline.md for texture memory budgets and resource patterns.

@@ -20,6 +20,7 @@ It is intentionally high level; linked PRDs provide detailed design and implemen
 - `docs/prd/run_bootstrap_session_init.md` defines run lifecycle, bootstrap sequence, difficulty parameterization, map layout, and grace period. Authoritative for the HQ-only bootstrap model.
 - `docs/prd/build_interaction_flow.md` defines build/rotate/demolish interaction model, inspect/build modes, conveyor drag-draw, and command flow from UI to simulation.
 - `docs/WHITEBOX_ASSET_STRATEGY.md` defines the whitebox rendering path for early playable visuals.
+- `docs/prd/asset_pipeline.md` defines the full DCC-to-runtime asset pipeline: interchange formats, texture strategy, LOD generation, memory/streaming budgets, and distribution packaging.
 
 ## Product Pillars
 - Factory throughput directly powers survival.
@@ -147,6 +148,12 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Whitebox phase uses procedural 3D geometry and instanced rendering to make simulation state visibly legible before production art.
 - Native Apple quality targets remain macOS, iOS, and iPadOS with responsive layouts and quality tiers.
 
+### Distribution Strategy
+- V1 ships all assets in the app bundle (procedural geometry, JSON content). No external downloads required.
+- Post-v1: if app size exceeds 200 MB after production art is integrated, adopt **Background Assets / Managed Background Assets** framework (Apple's successor to legacy On-Demand Resources).
+- Must disclose first-launch download sizes per App Review guidelines (§2.3.12).
+- Reference: `docs/prd/asset_pipeline.md` §9.
+
 ## Technical Requirements (v1)
 - Swift + MetalKit + full Xcode support.
 - Deterministic fixed-step simulation (20 Hz).
@@ -154,6 +161,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Data-driven content (JSON) with validation checks.
 - Responsive behavior across aspect ratios and safe areas.
 - Quality presets + dynamic resolution across device tiers.
+- Asset pipeline designed for whitebox-first, production-art-ready transition (MeshProvider protocol, glTF interchange, ASTC compression, LOD generation).
 
 ## UX Requirements (v1)
 - Playable with touch and keyboard/mouse.
@@ -190,6 +198,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Run Bootstrap & Session Init PRD: `docs/prd/run_bootstrap_session_init.md`
 - Build Interaction Flow PRD: `docs/prd/build_interaction_flow.md`
 - Whitebox Asset Strategy: `docs/WHITEBOX_ASSET_STRATEGY.md`
+- Asset Pipeline PRD: `docs/prd/asset_pipeline.md`
 
 ## Change Control
 When updating this file:
@@ -212,6 +221,7 @@ All individual PRDs have been updated to align with the locked decisions above (
 - `run_bootstrap_session_init.md`: ~~Ring 0 coal, richness, ore colors~~ **Resolved.** Coal guaranteed, richness varied, colors corrected.
 - `build_interaction_flow.md`: ~~Ammo Module port count~~ **Resolved.** Fixed to 2 inputs per building_specifications.
 - `combat_rendering_vfx.md`: ~~Turret implementation status~~ **Resolved.** Updated to Exists (Milestone 0). Raider targeting updated to deterministic.
+- `asset_pipeline.md`: **New.** Covers DCC-to-runtime pipeline, texture strategy, LOD generation, memory/streaming, and distribution. Cross-referenced from WHITEBOX_ASSET_STRATEGY.md, combat_rendering_vfx.md, and ore_patches_resource_nodes.md.
 
 ## Changelog
 - 2026-02-15: Added Factory & Economy PRD link.
@@ -222,3 +232,4 @@ All individual PRDs have been updated to align with the locked decisions above (
 - 2026-02-16: Re-aligned living PRD threat model to `wave_threat_system.md` (continuous pressure, no separate raid subsystem, no build-phase gating).
 - 2026-02-16: Major cross-PRD alignment pass. Resolved ~20 conflicts across individual PRDs. Locked decisions: HQ-only bootstrap (supersedes factory_economy 6-structure start), wall-mounted turrets with wall network ammo pools (supersedes building_specifications standalone turret), difficulty-scaled grace period 60–180s (supersedes factory_economy 20s), quadratic wave budget formula (supersedes factory_economy linear), Ring 0 guarantees iron+copper+coal with varied richness. Added HQ, Ore Patches, Tech Tree, and Build Interaction subsections to systems model. Added cross-PRD reconciliation tracker. Updated system execution order to 8 systems.
 - 2026-02-16: Completed cross-PRD reconciliation. Updated all 5 individual PRDs to align with living PRD locked decisions: factory_economy (continuous model, HQ-only bootstrap, quadratic formula, wall-mounted turrets, deterministic targeting), building_specifications (wall-mounted turret rewrite), run_bootstrap_session_init (coal guarantee, varied richness, ore colors), build_interaction_flow (ammo module ports), combat_rendering_vfx (M0 status, deterministic targeting).
+- 2026-02-16: Added Asset Pipeline PRD. Added distribution strategy subsection, asset pipeline technical requirement, and cross-PRD reference for asset_pipeline.md. Updated combat_rendering_vfx.md with TBDR optimization notes, iOS memory termination risk, and Metal storage mode conventions. Updated ore_patches_resource_nodes.md with production art material requirements. Updated WHITEBOX_ASSET_STRATEGY.md with production art pipeline preview section and glTF-first format decision.

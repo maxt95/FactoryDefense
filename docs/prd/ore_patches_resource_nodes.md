@@ -492,6 +492,31 @@ When a renewal patch spawns during a build window:
 
 Tiles in unrevealed rings render as **darkened terrain** with a subtle fog overlay. The ring boundary is not explicitly drawn — the fog edge implies it. This avoids HUD clutter while signaling that unexplored territory exists.
 
+### 9.6 Production Art Material Requirements
+
+When transitioning from whitebox to production art, ore patch assets need the following materials. These conventions align with the full asset pipeline documented in `docs/prd/asset_pipeline.md` §6.
+
+**Textures per ore patch asset:**
+
+| Texture | Color Space | Format | Resolution | Notes |
+|---|---|---|---|---|
+| Base color | sRGB | ASTC 6×6 | 256×256 max | Primary hue from ore colors below |
+| Normal map | Linear | ASTC 4×4 | 256×256 max | Tangent-space, surface detail (cracks, crystalline facets) |
+| ORM packed | Linear | ASTC 6×6 | 256×256 max | R=Occlusion, G=Roughness, B=Metallic (per `asset_pipeline.md` §6.2) |
+
+**Base color hues by ore type** (matching the whitebox color palette from §9.2):
+- Iron: rust orange (`#B87333`) as primary hue
+- Copper: teal green (`#2E8B7A`) as primary hue
+- Coal: dark charcoal (`#3A3A3A`) as primary hue
+
+**Resolution rationale:** Ore patches are 1×1 tile footprint, appearing at 50–80px on screen at the isometric camera distance of 28. 256×256 is the maximum useful resolution; higher wastes memory with zero visual payoff.
+
+**Visual state transitions (4 stages) without extra textures:**
+- **Desaturation:** Driven by vertex color or shader uniform — the `richnessFraction` (remainingOre / totalOre) controls a lerp from full saturation (1.0) to grayscale (0.0). No additional textures needed per depletion stage.
+- **Height scale:** Driven by shader uniform — `richnessFraction` controls Y-scale from full height (1.0) to flat (0.15), matching the visual stages defined in §9.1.
+
+This approach means each ore type needs only **3 textures** (base color, normal, ORM) rather than 12 (3 textures × 4 stages). The shader handles all stage transitions dynamically.
+
 ---
 
 ## 10. Simulation Integration
@@ -860,3 +885,4 @@ On Normal difficulty with 5 starting patches (2 iron, 2 copper, 1 coal), the pla
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-02-16 | 1.0-draft | Initial draft — collaborative design session |
+| 2026-02-16 | 1.0-draft | Added §9.6 Production Art Material Requirements. Cross-referenced asset_pipeline.md for texture conventions and ORM packing. |
