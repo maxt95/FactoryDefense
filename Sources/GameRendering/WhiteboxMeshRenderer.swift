@@ -85,6 +85,11 @@ public final class WhiteboxMeshRenderer {
         encoder.setDepthStencilState(depthState)
         encoder.setCullMode(.none)
         encoder.setFrontFacing(.counterClockwise)
+#if os(macOS)
+        encoder.setTriangleFillMode(context.debugMode == .wireframe ? .lines : .fill)
+#else
+        encoder.setTriangleFillMode(.fill)
+#endif
 
         for batch in batches {
             guard let mesh = meshLibrary.mesh(for: batch.meshID) else { continue }

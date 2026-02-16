@@ -17,6 +17,7 @@ public enum DebugVisualizationMode: String, Codable, CaseIterable, Sendable {
     case depth
     case overdraw
     case nanInf
+    case wireframe
 }
 
 public struct RenderContext {
