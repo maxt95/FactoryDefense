@@ -28,7 +28,7 @@ final class AmmoConsumptionTests: XCTestCase {
                 enemies: [
                     enemyID: EnemyRuntime(
                         id: enemyID,
-                        archetype: .scout,
+                        archetype: .droneScout,
                         moveEveryTicks: 1,
                         baseDamage: 1,
                         rewardCurrency: 1

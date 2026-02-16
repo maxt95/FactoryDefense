@@ -19,7 +19,7 @@ final class TurretBehaviorTests: XCTestCase {
                 enemies: [
                     enemyID: EnemyRuntime(
                         id: enemyID,
-                        archetype: .scout,
+                        archetype: .droneScout,
                         moveEveryTicks: 10,
                         baseDamage: 1,
                         rewardCurrency: 1
@@ -76,7 +76,7 @@ final class TurretBehaviorTests: XCTestCase {
                 enemies: [
                     enemyID: EnemyRuntime(
                         id: enemyID,
-                        archetype: .scout,
+                        archetype: .droneScout,
                         moveEveryTicks: 10,
                         baseDamage: 1,
                         rewardCurrency: 1

@@ -22,12 +22,12 @@ final class GoldenReplayTests: XCTestCase {
             PlayerCommand(
                 tick: 5,
                 actor: player,
-                payload: .placeStructure(BuildRequest(structure: .turretMount, position: GridPosition(x: 6, y: 1)))
+                payload: .placeStructure(BuildRequest(structure: .wall, position: GridPosition(x: 6, y: 1)))
             ),
             PlayerCommand(
-                tick: 15,
+                tick: 6,
                 actor: player,
-                payload: .placeStructure(BuildRequest(structure: .turretMount, position: GridPosition(x: 6, y: 3)))
+                payload: .placeStructure(BuildRequest(structure: .turretMount, position: GridPosition(x: 6, y: 1)))
             ),
             PlayerCommand(
                 tick: 30,
@@ -62,7 +62,7 @@ final class GoldenReplayTests: XCTestCase {
         let digest = SHA256.hash(data: data)
         let fingerprint = digest.map { String(format: "%02x", $0) }.joined()
 
-        let expected = "a4c7be16a5fc9684a2af23c7f549389751019a90ea3d9229fd8979a9da2c16a9"
+        let expected = "14282682dd0bd1c606368a95fa267da2cb2cf1f5151323a3aae57ae0a446352a"
         XCTAssertEqual(fingerprint, expected)
     }
 }

@@ -50,7 +50,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 | Grace period | Difficulty-scaled (Easy 180s / Normal 120s / Hard 60s); no enemies during this window |
 | Grace skip | Disabled in v1 (no early-end command/button) |
 | Waves | Continuous threat model: grace period → trickle pressure → timed surge waves; no separate raid subsystem |
-| Map orientation | Fixed in v1: factory-west, spawn-east |
+| Map orientation | Board readability remains factory-west oriented in defaults; enemy spawns are full-perimeter in v1 (no single safe edge) |
 | Defense topology | Turrets mount on wall segments (1:1); wall networks carry ammo to turrets via shared pools; wall line defines defensive territory |
 | Ore patches | Finite deposits with depletion; Ring 0 guarantees iron + copper + coal; outer rings revealed via geology survey tech |
 | Progression | Resource + research tech tree unlocks (Lab building, item-cost research, gating and passive bonuses) |
@@ -68,7 +68,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 
 ## Session Structure
 - Boot phase: HQ placed at map center with difficulty-scaled starting resources in its storage buffer; Ring 0 ore patches (iron + copper + coal guaranteed) visible; difficulty-scaled grace period with no enemy spawns (Easy 180s / Normal 120s / Hard 60s).
-- Orientation: fixed for v1 (factory-west / spawn-east) for deterministic readability and consistent tuning.
+- Orientation: board defaults remain deterministic/readable, while threat ingress is full-perimeter.
 - Continuous pressure: trickle scouts begin immediately after grace period ends and persist for the rest of the run.
 - Wave surges: timed attacks with inter-wave gap compression over time (base gap: Easy 120s / Normal 90s / Hard 60s, shrinking by 2s per wave to a floor).
 - Endless escalation: hand-authored waves 1–8 transition to procedural budget-based composition (quadratic scaling: `budget(w) = 10 + 4w + floor(0.5w²)`).
@@ -87,6 +87,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Enemies follow a shared flow field toward the HQ. They attack the nearest structure blocking their path. Enemy types have behavioral modifiers (raiders seek structures, breachers target walls, overseers buff nearby enemies). Artillery_bug is deferred to post-v1.
 - Enemy damage is archetype-specific (swarmling=5, drone_scout=8, raider=12, breacher=15, overseer=10). Breachers deal 2× damage to walls. V1 enemy roster: 5 types.
 - Waves are hand-authored for waves 1–8, with procedural quadratic-budget escalation for wave 9+.
+- Spawn topology is full perimeter with deterministic 2–4 surge clusters, 3-tick intra-cluster staggering, 0–40 tick inter-cluster offsets, and 2-cell outside-border entry marching.
 - Research consumes real produced items and competes directly with build costs and ammo production. The Lab is a 2×2, 5-power building. Tech gates unlock buildings, recipes, upgrades, and passive bonuses.
 
 ## Canonical V1 Systems Model
@@ -118,7 +119,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Turrets mount on wall segments (1:1). Each connected wall network has a shared ammo pool (capacity = segmentCount × 12). Conveyors inject ammo into wall networks at any segment. Turrets draw from their network's pool.
 - Turret behavior is type-specific (ammo type, range, fire rate, damage). Four turret types: turret_mk1, turret_mk2, gattling_tower, plasma_sentinel.
 - Threat model is continuous: difficulty-scaled grace period → trickle pressure → timed surge waves, with full-perimeter spawns and structure-targeting enemy behaviors.
-- Enemies follow a shared flow field (BFS from HQ). They attack the nearest impassable structure blocking their path. Enemy-type modifiers: raiders seek non-wall structures, breachers deal 2× wall damage, artillery fires at range, overseers buff nearby enemies.
+- Enemies follow a shared flow field (BFS from HQ). They attack the nearest impassable structure blocking their path. Enemy-type modifiers: raiders seek non-wall structures, breachers deal 2× wall damage, overseers buff nearby enemies (+25% damage, +15% effective speed, non-stacking). `artillery_bug` is deferred to post-v1.
 - Hand-authored waves 1–8 from `waves.json`; procedural waves 9+ use quadratic budget formula: `budget(w) = 10 + 4w + floor(0.5w²)`.
 - When a wall segment is destroyed, turrets mounted on it are destroyed, the wall network may split, and the flow field rebuilds.
 
@@ -213,7 +214,7 @@ When updating this file:
 - Extraction economy: exact conversion of run results into meta progression.
 - Long-run scaling: when to introduce elite/flying/siege enemy variants.
 - Should wave-survived rewards be explicit (currency/resources) or remain pressure-only progression?
-- Maximum concurrent enemy cap by platform tier and quality preset (recommended: 500 per wave_threat_system.md).
+- Post-v1: should platform tiers exceed the current fixed concurrent enemy cap (500)?
 
 ## Cross-PRD Reconciliation Status
 All individual PRDs have been updated to align with the locked decisions above (completed 2026-02-16):
@@ -238,3 +239,4 @@ All individual PRDs have been updated to align with the locked decisions above (
 - 2026-02-16: Landed ore runtime v1 slice in code: miner placement now requires/binds adjacent ore patches (optional targeted patch ID), miner extraction consumes finite bound patch richness into miner output buffers, depletion emits `patchExhausted` + `minerIdled`, and idle miners stop drawing power. Added simulation coverage for placement/binding/depletion paths.
 - 2026-02-16: Locked remaining bootstrap decisions: fixed map orientation (factory-west/spawn-east), grace-period skip disabled in v1, and current `hq.json` starting-resource tables retained as baseline pending telemetry tuning.
 - 2026-02-16: Rebalanced HQ starting resources across all difficulties to include processed starter components (`plate_copper`, `plate_steel`, `gear`, `circuit`, `turret_core`) and higher initial wall/ammo budgets; updated PRDs and tests to match the new baseline.
+- 2026-02-16: Landed Wave Threat v1 runtime slice in code: authored waves 1–8 + procedural waves 9+, deterministic full-perimeter clustered spawning with staggered queues, structure-targeting enemy modifiers (raider/breacher/overseer), wall-network shared ammo pools with split/rebuild events, host-wall turret mounting, and new threat telemetry counters. Supersedes prior spawn-east lock for threat ingress.

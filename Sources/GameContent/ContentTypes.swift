@@ -75,17 +75,41 @@ public struct TurretDef: Codable, Hashable, Sendable {
     }
 }
 
+public enum EnemyBehaviorModifier: String, Codable, CaseIterable, Sendable {
+    case none
+    case structureSeeker
+    case wallBreaker
+    case auraBuffer
+}
+
 public struct EnemyDef: Codable, Hashable, Sendable {
     public var id: EnemyID
     public var health: Int
     public var speed: Float
     public var threatCost: Int
+    public var baseDamage: Int
+    public var behaviorModifier: EnemyBehaviorModifier
+    public var wallDamageMultiplier: Double?
+    public var minBudgetToSpawn: Int
 
-    public init(id: EnemyID, health: Int, speed: Float, threatCost: Int) {
+    public init(
+        id: EnemyID,
+        health: Int,
+        speed: Float,
+        threatCost: Int,
+        baseDamage: Int? = nil,
+        behaviorModifier: EnemyBehaviorModifier = .none,
+        wallDamageMultiplier: Double? = nil,
+        minBudgetToSpawn: Int = 0
+    ) {
         self.id = id
         self.health = health
         self.speed = speed
         self.threatCost = threatCost
+        self.baseDamage = baseDamage ?? max(1, threatCost)
+        self.behaviorModifier = behaviorModifier
+        self.wallDamageMultiplier = wallDamageMultiplier
+        self.minBudgetToSpawn = max(0, minBudgetToSpawn)
     }
 }
 
@@ -110,6 +134,76 @@ public struct WaveDef: Codable, Hashable, Sendable {
         self.index = index
         self.spawnBudget = spawnBudget
         self.composition = composition
+    }
+}
+
+public struct ProceduralWaveFormulaDef: Codable, Hashable, Sendable {
+    public var base: Int
+    public var linear: Int
+    public var quadratic: Double
+
+    public init(base: Int, linear: Int, quadratic: Double) {
+        self.base = base
+        self.linear = linear
+        self.quadratic = quadratic
+    }
+}
+
+public struct WaveDifficultyMultipliersDef: Codable, Hashable, Sendable {
+    public var easy: Double
+    public var normal: Double
+    public var hard: Double
+
+    public init(easy: Double, normal: Double, hard: Double) {
+        self.easy = easy
+        self.normal = normal
+        self.hard = hard
+    }
+
+    public func value(for difficulty: DifficultyID) -> Double {
+        switch difficulty {
+        case .easy:
+            return easy
+        case .normal:
+            return normal
+        case .hard:
+            return hard
+        }
+    }
+}
+
+public struct ProceduralWaveConfigDef: Codable, Hashable, Sendable {
+    public var budgetFormula: ProceduralWaveFormulaDef
+    public var swarmlingReserveRatio: Double
+    public var difficultyMultipliers: WaveDifficultyMultipliersDef
+
+    public init(
+        budgetFormula: ProceduralWaveFormulaDef,
+        swarmlingReserveRatio: Double,
+        difficultyMultipliers: WaveDifficultyMultipliersDef
+    ) {
+        self.budgetFormula = budgetFormula
+        self.swarmlingReserveRatio = swarmlingReserveRatio
+        self.difficultyMultipliers = difficultyMultipliers
+    }
+
+    public static let v1Default = ProceduralWaveConfigDef(
+        budgetFormula: ProceduralWaveFormulaDef(base: 10, linear: 4, quadratic: 0.5),
+        swarmlingReserveRatio: 0.3,
+        difficultyMultipliers: WaveDifficultyMultipliersDef(easy: 0.85, normal: 1.0, hard: 1.15)
+    )
+}
+
+public struct WaveContentDef: Codable, Hashable, Sendable {
+    public var handAuthoredWaves: [WaveDef]
+    public var proceduralConfig: ProceduralWaveConfigDef
+
+    public init(
+        handAuthoredWaves: [WaveDef],
+        proceduralConfig: ProceduralWaveConfigDef = .v1Default
+    ) {
+        self.handAuthoredWaves = handAuthoredWaves
+        self.proceduralConfig = proceduralConfig
     }
 }
 
@@ -401,7 +495,7 @@ public struct GameContentBundle: Codable, Sendable {
     public var recipes: [RecipeDef]
     public var turrets: [TurretDef]
     public var enemies: [EnemyDef]
-    public var waves: [WaveDef]
+    public var waveContent: WaveContentDef
     public var techNodes: [TechNodeDef]
     public var board: BoardDef
     public var hq: HQDef
@@ -422,11 +516,37 @@ public struct GameContentBundle: Codable, Sendable {
         self.recipes = recipes
         self.turrets = turrets
         self.enemies = enemies
-        self.waves = waves
+        self.waveContent = WaveContentDef(handAuthoredWaves: waves)
         self.techNodes = techNodes
         self.board = board
         self.hq = hq
         self.difficulty = difficulty
+    }
+
+    public init(
+        items: [ItemDef],
+        recipes: [RecipeDef],
+        turrets: [TurretDef],
+        enemies: [EnemyDef],
+        waveContent: WaveContentDef,
+        techNodes: [TechNodeDef],
+        board: BoardDef = .starter,
+        hq: HQDef = .v1Default,
+        difficulty: DifficultyConfigDef = .v1Default
+    ) {
+        self.items = items
+        self.recipes = recipes
+        self.turrets = turrets
+        self.enemies = enemies
+        self.waveContent = waveContent
+        self.techNodes = techNodes
+        self.board = board
+        self.hq = hq
+        self.difficulty = difficulty
+    }
+
+    public var waves: [WaveDef] {
+        waveContent.handAuthoredWaves
     }
 
     public static let empty = GameContentBundle(
@@ -434,7 +554,7 @@ public struct GameContentBundle: Codable, Sendable {
         recipes: [],
         turrets: [],
         enemies: [],
-        waves: [],
+        waveContent: WaveContentDef(handAuthoredWaves: []),
         techNodes: [],
         board: .starter,
         hq: .v1Default,

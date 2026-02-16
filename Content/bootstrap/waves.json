@@ -51,23 +51,21 @@
   },
   {
     "index": 7,
-    "spawnBudget": 50,
+    "spawnBudget": 43,
     "composition": [
       { "enemyID": "swarmling", "count": 12, "delayTicks": 0 },
       { "enemyID": "raider", "count": 3, "delayTicks": 35 },
-      { "enemyID": "breacher", "count": 1, "delayTicks": 65 },
-      { "enemyID": "artillery_bug", "count": 1, "delayTicks": 90 }
+      { "enemyID": "breacher", "count": 2, "delayTicks": 65 }
     ]
   },
   {
     "index": 8,
-    "spawnBudget": 82,
+    "spawnBudget": 68,
     "composition": [
       { "enemyID": "drone_scout", "count": 10, "delayTicks": 0 },
       { "enemyID": "raider", "count": 3, "delayTicks": 40 },
       { "enemyID": "breacher", "count": 2, "delayTicks": 70 },
-      { "enemyID": "artillery_bug", "count": 1, "delayTicks": 100 },
-      { "enemyID": "overseer", "count": 1, "delayTicks": 140 }
+      { "enemyID": "overseer", "count": 1, "delayTicks": 120 }
     ]
   }
 ]

@@ -132,7 +132,7 @@ final class RuntimeControllerTests: XCTestCase {
                 enemies: [
                     enemyID: EnemyRuntime(
                         id: enemyID,
-                        archetype: .scout,
+                        archetype: .droneScout,
                         moveEveryTicks: 1,
                         baseDamage: 2,
                         rewardCurrency: 1

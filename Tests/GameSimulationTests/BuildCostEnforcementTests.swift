@@ -26,19 +26,28 @@ final class BuildCostEnforcementTests: XCTestCase {
 
     func testPlacementConsumesExactBuildCostOnce() {
         var world = WorldState.bootstrap()
-        world.economy.inventories = ["turret_core": 1, "plate_steel": 2]
+        world.economy.inventories = ["wall_kit": 1, "turret_core": 1, "plate_steel": 2]
 
         let engine = SimulationEngine(worldState: world, systems: [CommandSystem()])
         engine.enqueue(
             PlayerCommand(
                 tick: 0,
                 actor: PlayerID(1),
+                payload: .placeStructure(BuildRequest(structure: .wall, position: GridPosition(x: 10, y: 10)))
+            )
+        )
+        engine.enqueue(
+            PlayerCommand(
+                tick: 1,
+                actor: PlayerID(1),
                 payload: .placeStructure(BuildRequest(structure: .turretMount, position: GridPosition(x: 10, y: 10)))
             )
         )
 
+        _ = engine.step()
         let events = engine.step()
 
+        XCTAssertEqual(engine.worldState.economy.inventories["wall_kit", default: 0], 0)
         XCTAssertEqual(engine.worldState.economy.inventories["turret_core", default: 0], 0)
         XCTAssertEqual(engine.worldState.economy.inventories["plate_steel", default: 0], 0)
         XCTAssertEqual(engine.worldState.entities.structures(of: .turretMount).count, 1)

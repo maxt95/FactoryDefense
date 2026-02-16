@@ -38,13 +38,13 @@ final class PlacementValidationTests: XCTestCase {
         )
     }
 
-    func testTwoByTwoPlacementOutOfBoundsIsRejected() {
+    func testTurretMountWithoutWallIsRejected() {
         let validator = PlacementValidator()
         let world = WorldState.bootstrap()
 
         XCTAssertEqual(
             validator.canPlace(.turretMount, at: GridPosition(x: 0, y: 0), in: world),
-            .outOfBounds
+            .invalidTurretMountPlacement
         )
     }
 
@@ -170,7 +170,7 @@ final class PlacementValidationTests: XCTestCase {
         )
     }
 
-    func testTwoByTwoPlacementBlocksPathWhenOnlyCoveredCellSealsCorridor() {
+    func testTurretMountRequiresHostWallInCorridorScenario() {
         let blocked = (0..<5).flatMap { x in
             (0..<5).compactMap { y -> GridPosition? in
                 if y == 2 { return nil }
@@ -208,7 +208,7 @@ final class PlacementValidationTests: XCTestCase {
         let validator = PlacementValidator()
         XCTAssertEqual(
             validator.canPlace(.turretMount, at: GridPosition(x: 2, y: 3), in: world),
-            .blocksCriticalPath
+            .invalidTurretMountPlacement
         )
     }
 

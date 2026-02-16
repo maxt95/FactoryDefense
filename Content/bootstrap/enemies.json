@@ -1,8 +1,57 @@
 [
-  { "id": "swarmling", "health": 10, "speed": 1.8, "threatCost": 1 },
-  { "id": "drone_scout", "health": 20, "speed": 1.4, "threatCost": 2 },
-  { "id": "raider", "health": 45, "speed": 1.0, "threatCost": 5 },
-  { "id": "breacher", "health": 70, "speed": 0.9, "threatCost": 8 },
-  { "id": "artillery_bug", "health": 90, "speed": 0.75, "threatCost": 10 },
-  { "id": "overseer", "health": 140, "speed": 0.65, "threatCost": 14 }
+  {
+    "id": "swarmling",
+    "health": 10,
+    "speed": 1.8,
+    "threatCost": 1,
+    "baseDamage": 5,
+    "behaviorModifier": "none",
+    "minBudgetToSpawn": 0
+  },
+  {
+    "id": "drone_scout",
+    "health": 20,
+    "speed": 1.4,
+    "threatCost": 2,
+    "baseDamage": 8,
+    "behaviorModifier": "none",
+    "minBudgetToSpawn": 0
+  },
+  {
+    "id": "raider",
+    "health": 45,
+    "speed": 1.0,
+    "threatCost": 5,
+    "baseDamage": 12,
+    "behaviorModifier": "structureSeeker",
+    "minBudgetToSpawn": 20
+  },
+  {
+    "id": "breacher",
+    "health": 70,
+    "speed": 0.9,
+    "threatCost": 8,
+    "baseDamage": 15,
+    "behaviorModifier": "wallBreaker",
+    "wallDamageMultiplier": 2.0,
+    "minBudgetToSpawn": 30
+  },
+  {
+    "id": "artillery_bug",
+    "health": 90,
+    "speed": 0.75,
+    "threatCost": 10,
+    "baseDamage": 18,
+    "behaviorModifier": "none",
+    "minBudgetToSpawn": 45
+  },
+  {
+    "id": "overseer",
+    "health": 140,
+    "speed": 0.65,
+    "threatCost": 14,
+    "baseDamage": 10,
+    "behaviorModifier": "auraBuffer",
+    "minBudgetToSpawn": 60
+  }
 ]
