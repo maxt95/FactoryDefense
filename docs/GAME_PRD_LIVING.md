@@ -15,6 +15,7 @@ It is intentionally high level; linked PRDs provide detailed design and implemen
 - `docs/prd/building_specifications.md` defines the conveyor-routed building/port/buffer model and supersedes older abstract logistics assumptions.
 - `docs/prd/combat_rendering_vfx.md` defines projectile physics, enemy pathfinding, instanced GPU rendering, and VFX particle system architecture.
 - `docs/prd/tech_tree_runtime.md` defines the tech tree runtime: Lab building, research flow, node effects, gating rules, and simulation integration.
+- `docs/prd/ore_patches_resource_nodes.md` defines ore patch generation, depletion, renewal, reveal rings, and miner–patch binding.
 - `docs/WHITEBOX_ASSET_STRATEGY.md` defines the whitebox rendering path for early playable visuals.
 
 ## Product Pillars
@@ -139,6 +140,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Building Specifications PRD: `docs/prd/building_specifications.md`
 - Combat, Rendering & VFX PRD: `docs/prd/combat_rendering_vfx.md`
 - Tech Tree Runtime PRD: `docs/prd/tech_tree_runtime.md`
+- Ore Patches & Resource Nodes PRD: `docs/prd/ore_patches_resource_nodes.md`
 - Whitebox Asset Strategy: `docs/WHITEBOX_ASSET_STRATEGY.md`
 
 ## Change Control
