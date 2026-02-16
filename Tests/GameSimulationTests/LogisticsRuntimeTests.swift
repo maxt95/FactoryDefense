@@ -70,6 +70,63 @@ final class LogisticsRuntimeTests: XCTestCase {
         XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[southTarget]?.itemID, "plate_iron")
     }
 
+    func testSplitterRetriesAlternateWhenPreferredOutputBlocked() {
+        var entities = EntityStore()
+        let splitterID = entities.spawnStructure(.splitter, at: GridPosition(x: 3, y: 3), rotation: .east)
+        let northTarget = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 2), rotation: .north)
+        let southTarget = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 4), rotation: .south)
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(
+                conveyorPayloadByEntity: [
+                    splitterID: ConveyorPayload(itemID: "plate_iron", progressTicks: 5),
+                    northTarget: ConveyorPayload(itemID: "gear", progressTicks: 0)
+                ]
+            ),
+            threat: ThreatState(),
+            run: RunState()
+        )
+
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+        _ = engine.step()
+
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[northTarget]?.itemID, "gear")
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[southTarget]?.itemID, "plate_iron")
+        XCTAssertEqual(engine.worldState.economy.splitterOutputToggleByEntity[splitterID], 1)
+    }
+
+    func testMergerFallsBackWhenPreferredInputEmpty() {
+        var entities = EntityStore()
+        let mergerID = entities.spawnStructure(.merger, at: GridPosition(x: 3, y: 3), rotation: .east)
+        let southInput = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 4), rotation: .north)
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(
+                conveyorPayloadByEntity: [
+                    southInput: ConveyorPayload(itemID: "plate_copper", progressTicks: 5)
+                ]
+            ),
+            threat: ThreatState(),
+            run: RunState()
+        )
+
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+        _ = engine.step()
+
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[mergerID]?.itemID, "plate_copper")
+        XCTAssertNil(engine.worldState.economy.conveyorPayloadByEntity[southInput])
+    }
+
     func testStorageSharedPoolAcceptsBidirectionalPortsFromBuildingDefs() {
         var entities = EntityStore()
         let storageID = entities.spawnStructure(.storage, at: GridPosition(x: 3, y: 3))

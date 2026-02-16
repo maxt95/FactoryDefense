@@ -168,5 +168,4 @@ Exit criteria:
 - [ ] Finish logistics runtime gaps: splitter/merger behaviors and shared-pool storage hub semantics.
 - [ ] Add UI/HUD surfacing for threat telemetry (`spawnedEnemiesByWave`, queued backlog, structure damage count, dry-fire rate).
 - [ ] Implement ore reveal/renewal lifecycle (geology survey unlocks, ring reveal state, renewal spawn policy) on top of current Ring 0 depletion runtime.
-- [ ] Complete strict per-port item-filter enforcement from content schema and remaining splitter/merger edge-case parity.
 - [ ] Finish shared gameplay interaction module wiring for rotate/pin/remove across macOS/iOS/iPadOS/CLI.

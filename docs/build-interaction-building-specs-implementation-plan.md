@@ -17,12 +17,10 @@
   - Building validation for canonical constraints (including storage/power-plant 1x1 and storage power draw 0).
   - Directional conveyor transfer across all four facings with belt-node-aware handoff.
   - Splitter output alternation and merger alternating input pull runtime state.
-  - Storage shared-pool runtime (`storageSharedPoolByEntity`) with west/north ingress and east/south drain behavior.
-  - Port-side input gating for consumers (`smelter`, `assembler`, `ammoModule`) and hard rejection for direct `turretMount` input.
+  - Storage shared-pool runtime (`storageSharedPoolByEntity`) using content-defined bidirectional ports.
+  - Content-driven port transfer validation from `buildings.json` (input/output side resolution by rotation + per-port item filters) with fallback guards for legacy defaults.
   - Golden replay fingerprint regeneration and new command/snapshot/removal tests.
 - Still in progress / remaining for parity:
-  - Full per-port item-filter parity driven directly from `buildings.json` (beyond current side-aware structure checks).
-  - Final PRD edge-case parity for splitter blocked-output retry and merger starvation fallback under mixed topologies.
   - Removal of transport fallback to global inventory (except HUD aggregation).
   - Shared cross-platform gameplay interaction module + drag-draw parity + canonical rejection UX timing.
 

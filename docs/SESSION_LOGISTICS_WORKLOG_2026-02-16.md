@@ -82,6 +82,19 @@ Files: `Sources/GameSimulation/SimulationTypes.swift`, `Sources/GameSimulation/S
   - deterministic requeue when egress target is blocked.
 - Completed directional conveyor tests against belt-node targets and added strict invalid-port rejection coverage.
 
+### 9) Content-driven per-port transfer filters
+Files: `Sources/GameSimulation/Systems.swift`, `Tests/GameSimulationTests/LogisticsRuntimeTests.swift`
+- `EconomySystem` now resolves input/output ports from `buildings.json` definitions (including rotation transforms) instead of relying only on hardcoded structure rules.
+- Transfer checks now enforce:
+  - ingress side matching to resolved input/bidirectional ports,
+  - per-port item filter validation (`ItemFilter.any` / `ItemFilter.allow`),
+  - storage pool capacity derived from configured storage input-port capacities.
+- Output draining now selects items that match each output port filter and preserves backpressure behavior when adjacent consumers exist but are blocked.
+- Added logistics edge-case tests:
+  - `testSmelterRejectsItemNotAllowedByPortFilter`
+  - `testSplitterRetriesAlternateWhenPreferredOutputBlocked`
+  - `testMergerFallsBackWhenPreferredInputEmpty`
+
 ## Test coverage added
 File: `Tests/GameSimulationTests/LogisticsRuntimeTests.swift`
 - `testConveyorCarriesOutputToNeighborInputBuffer`
