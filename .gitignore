@@ -7,3 +7,4 @@ DerivedData/
 .local_snapshots/
 .vscode/
 .codex/
+.derivedData/
