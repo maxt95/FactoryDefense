@@ -47,7 +47,8 @@
     "powerDraw": 3,
     "buildCosts": [{ "itemID": "plate_iron", "quantity": 4 }, { "itemID": "circuit", "quantity": 2 }],
     "ports": [
-      { "id": "parts_in", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_copper", "plate_steel", "ore_coal", "gear", "circuit"] }, "bufferCapacity": 12 },
+      { "id": "parts_in_west", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_copper", "plate_steel", "ore_coal", "gear", "circuit"] }, "bufferCapacity": 6 },
+      { "id": "parts_in_north", "direction": "north", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_copper", "plate_steel", "ore_coal", "gear", "circuit"] }, "bufferCapacity": 6 },
       { "id": "parts_out", "direction": "east", "mode": "output", "filter": { "kind": "allow", "items": ["gear", "circuit", "power_cell", "wall_kit", "turret_core", "repair_kit"] }, "bufferCapacity": 4 }
     ]
   },
@@ -58,7 +59,8 @@
     "powerDraw": 4,
     "buildCosts": [{ "itemID": "circuit", "quantity": 2 }, { "itemID": "plate_steel", "quantity": 2 }],
     "ports": [
-      { "id": "ammo_in", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_steel", "ammo_light", "power_cell", "circuit"] }, "bufferCapacity": 12 },
+      { "id": "ammo_in_west", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_steel", "ammo_light", "power_cell", "circuit"] }, "bufferCapacity": 6 },
+      { "id": "ammo_in_north", "direction": "north", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_steel", "ammo_light", "power_cell", "circuit"] }, "bufferCapacity": 6 },
       { "id": "ammo_out", "direction": "east", "mode": "output", "filter": { "kind": "allow", "items": ["ammo_light", "ammo_heavy", "ammo_plasma"] }, "bufferCapacity": 8 }
     ]
   },

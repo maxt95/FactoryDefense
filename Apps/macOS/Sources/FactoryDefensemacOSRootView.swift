@@ -519,18 +519,13 @@ private struct FactoryDefensemacOSGameplayView: View {
                 .disabled(selectedDemolishableEntityID == nil)
 
                 Spacer(minLength: 8)
-
-                Button("Wave") {
-                    runtime.triggerWave()
-                }
-                .buttonStyle(.borderedProminent)
             }
             .padding(10)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 10))
 
         case .resources:
-            ResourceHUDPanel(world: runtime.world)
+            ResourceHUDPanel(world: runtime.world, techNodes: techTree.nodes(inventory: inventory))
 
         case .buildMenu:
             BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in

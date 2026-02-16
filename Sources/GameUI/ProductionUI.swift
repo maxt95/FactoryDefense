@@ -93,6 +93,20 @@ public struct BuildMenuViewModel: Sendable {
             costs: [ItemStack(itemID: "plate_iron", quantity: 1)]
         ),
         BuildMenuEntry(
+            id: "splitter",
+            title: "Splitter",
+            structure: .splitter,
+            category: .logistics,
+            costs: [ItemStack(itemID: "plate_iron", quantity: 1)]
+        ),
+        BuildMenuEntry(
+            id: "merger",
+            title: "Merger",
+            structure: .merger,
+            category: .logistics,
+            costs: [ItemStack(itemID: "plate_iron", quantity: 1)]
+        ),
+        BuildMenuEntry(
             id: "storage",
             title: "Storage",
             structure: .storage,
@@ -450,9 +464,11 @@ public struct TuningDashboardPanel: View {
 
 public struct ResourceHUDPanel: View {
     public var world: WorldState
+    public var techNodes: [TechNodePresentation]
 
-    public init(world: WorldState) {
+    public init(world: WorldState, techNodes: [TechNodePresentation] = []) {
         self.world = world
+        self.techNodes = techNodes
     }
 
     public var body: some View {
@@ -460,12 +476,21 @@ public struct ResourceHUDPanel: View {
             Text("Run Resources")
                 .font(.headline)
 
+            if let warning = warningText {
+                Text(warning.message)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(warning.color)
+            }
+
             HStack(spacing: 10) {
                 statChip(title: "Tick", value: "\(world.tick)")
-                statChip(title: "Currency", value: "\(world.economy.currency)")
-                statChip(title: "Base", value: "\(world.hqHealth)")
+                statChip(title: "HQ", value: "\(world.hqHealth)/\(world.hqMaxHealth)")
                 statChip(title: "Wave", value: waveLabel)
-                statChip(title: "Power", value: powerLabel)
+                statChip(title: "Timer", value: timerLabel)
+                statChip(title: "Power", value: "\(world.economy.powerAvailable)/\(world.economy.powerDemand)")
+                statChip(title: "Headroom", value: "\(world.economy.powerAvailable - world.economy.powerDemand)")
+                statChip(title: "Currency", value: "\(world.economy.currency)")
+                statChip(title: "Research", value: researchProgressLabel)
             }
 
             HStack(spacing: 10) {
@@ -493,13 +518,59 @@ public struct ResourceHUDPanel: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
+    private var hudModel: HUDViewModel {
+        HUDViewModel.build(from: world)
+    }
+
+    private var warningText: (message: String, color: Color)? {
+        switch hudModel.warning {
+        case .none:
+            return nil
+        case .lowAmmo:
+            return ("Warning: Low ammo stock during active surge", .orange)
+        case .baseCritical:
+            return ("Warning: HQ health critical", .red)
+        case .surgeImminent:
+            return ("Warning: Surge imminent", .yellow)
+        case .powerShortage:
+            return ("Warning: Power shortage reducing throughput", .yellow)
+        case .patchExhausted:
+            return ("Warning: Ore patch exhausted", .orange)
+        }
+    }
+
     private var waveLabel: String {
-        let state = world.threat.isWaveActive ? "active" : "build"
+        if world.run.phase == .gracePeriod {
+            return "\(world.threat.waveIndex) (grace)"
+        }
+        let state = world.threat.isWaveActive ? "active" : "idle"
         return "\(world.threat.waveIndex) (\(state))"
     }
 
-    private var powerLabel: String {
-        "\(world.economy.powerAvailable)/\(world.economy.powerDemand)"
+    private var timerLabel: String {
+        if world.run.phase == .gracePeriod {
+            return "Grace \(formatTicks(hudModel.snapshot.graceRemainingTicks))"
+        }
+
+        if world.threat.isWaveActive, let waveEnds = world.threat.waveEndsAtTick, waveEnds > world.tick {
+            return "Surge \(formatTicks(waveEnds - world.tick))"
+        }
+
+        return "Next \(formatTicks(hudModel.snapshot.nextWaveInTicks))"
+    }
+
+    private var researchProgressLabel: String {
+        guard !techNodes.isEmpty else { return "n/a" }
+        let unlocked = techNodes.filter { $0.status == .unlocked }.count
+        return "\(unlocked)/\(techNodes.count)"
+    }
+
+    private func formatTicks(_ ticks: UInt64) -> String {
+        let totalSeconds = Int(ticks / 20)
+        let minutes = totalSeconds / 60
+        let seconds = totalSeconds % 60
+        let paddedSeconds = seconds < 10 ? "0\(seconds)" : "\(seconds)"
+        return "\(minutes):\(paddedSeconds)"
     }
 
     private var resourceRows: [(itemID: ItemID, label: String, quantity: Int)] {
