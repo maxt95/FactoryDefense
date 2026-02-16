@@ -61,7 +61,14 @@ public struct CommandSystem: SimulationSystem {
                     y: placementAnchor.y,
                     z: state.board.elevation(at: placementAnchor)
                 )
-                _ = state.entities.spawnStructure(request.structure, at: placementPosition)
+                let structureID = state.entities.spawnStructure(request.structure, at: placementPosition)
+                context.emit(
+                    SimEvent(
+                        tick: state.tick,
+                        kind: .structurePlaced,
+                        entity: structureID
+                    )
+                )
             case .extract:
                 // Extraction is deferred for v1; command retained for snapshot compatibility.
                 continue

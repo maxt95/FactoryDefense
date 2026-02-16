@@ -17,17 +17,53 @@ struct FactoryDefenseApp: App {
     }
 }
 
+private struct RunConfiguration: Hashable {
+    var difficulty: Difficulty
+    var seed: RunSeed
+}
+
+private enum AppScreen: Hashable {
+    case mainMenu
+    case difficultySelect
+    case gameplay(RunConfiguration)
+    case runSummary(RunSummarySnapshot)
+}
+
 private struct FactoryDefenseRootView: View {
-    @State private var didStartGame = false
+    @State private var screen: AppScreen = .mainMenu
 
     var body: some View {
-        if didStartGame {
-            FactoryDefenseGameplayView()
-        } else {
+        switch screen {
+        case .mainMenu:
             FactoryDefenseMainMenu(
                 title: "Factory Defense",
-                onStart: { didStartGame = true },
+                onStart: { screen = .difficultySelect },
                 onQuit: { NSApplication.shared.terminate(nil) }
+            )
+        case .difficultySelect:
+            FactoryDefenseDifficultySelect(
+                onSelectDifficulty: { difficulty in
+                    let run = RunConfiguration(
+                        difficulty: difficulty,
+                        seed: RunSeed.random(in: RunSeed.min ... RunSeed.max)
+                    )
+                    screen = .gameplay(run)
+                },
+                onBack: { screen = .mainMenu }
+            )
+        case .gameplay(let run):
+            FactoryDefenseGameplayView(
+                initialWorld: .bootstrap(difficulty: run.difficulty, seed: run.seed),
+                onRunEnded: { summary in
+                    screen = .runSummary(summary)
+                }
+            )
+            .id("gameplay-\(run.difficulty.rawValue)-\(run.seed)")
+        case .runSummary(let summary):
+            FactoryDefenseRunSummaryView(
+                summary: summary,
+                onNewRun: { screen = .difficultySelect },
+                onMainMenu: { screen = .mainMenu }
             )
         }
     }
@@ -69,8 +105,109 @@ private struct FactoryDefenseMainMenu: View {
     }
 }
 
+private struct FactoryDefenseDifficultySelect: View {
+    let onSelectDifficulty: (Difficulty) -> Void
+    let onBack: () -> Void
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.09, green: 0.12, blue: 0.18), Color(red: 0.05, green: 0.07, blue: 0.11)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                Text("Select Difficulty")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+
+                HStack(spacing: 12) {
+                    Button("Easy") { onSelectDifficulty(.easy) }
+                        .buttonStyle(.borderedProminent)
+                    Button("Normal") { onSelectDifficulty(.normal) }
+                        .buttonStyle(.borderedProminent)
+                    Button("Hard") { onSelectDifficulty(.hard) }
+                        .buttonStyle(.borderedProminent)
+                }
+                .controlSize(.large)
+
+                Button("Back", action: onBack)
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+            }
+            .padding(40)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+        }
+    }
+}
+
+private struct FactoryDefenseRunSummaryView: View {
+    let summary: RunSummarySnapshot
+    let onNewRun: () -> Void
+    let onMainMenu: () -> Void
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.10, green: 0.11, blue: 0.17), Color(red: 0.04, green: 0.06, blue: 0.10)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                Text("Run Summary")
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    summaryRow("Waves survived", "\(summary.wavesSurvived)")
+                    summaryRow("Run duration", formattedDuration(summary.runDurationSeconds))
+                    summaryRow("Enemies destroyed", "\(summary.enemiesDestroyed)")
+                    summaryRow("Structures built", "\(summary.structuresBuilt)")
+                    summaryRow("Ammo spent", "\(summary.ammoSpent)")
+                }
+                .frame(maxWidth: 360)
+
+                HStack(spacing: 12) {
+                    Button("New Run", action: onNewRun)
+                        .buttonStyle(.borderedProminent)
+                    Button("Main Menu", action: onMainMenu)
+                        .buttonStyle(.bordered)
+                }
+                .controlSize(.large)
+            }
+            .padding(40)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+        }
+    }
+
+    private func summaryRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.white.opacity(0.85))
+            Spacer()
+            Text(value)
+                .foregroundStyle(.white)
+                .fontWeight(.semibold)
+        }
+    }
+
+    private func formattedDuration(_ seconds: Int) -> String {
+        let clamped = max(0, seconds)
+        let minutes = clamped / 60
+        let remaining = clamped % 60
+        let paddedSeconds = remaining < 10 ? "0\(remaining)" : "\(remaining)"
+        return "\(minutes)m \(paddedSeconds)s"
+    }
+}
+
 private struct FactoryDefenseGameplayView: View {
-    @StateObject private var runtime = GameRuntimeController()
+    @StateObject private var runtime: GameRuntimeController
     @State private var buildMenu = BuildMenuViewModel.productionPreset
     @State private var techTree = TechTreeViewModel.productionPreset
     @State private var onboarding = OnboardingGuideViewModel.starter
@@ -80,6 +217,14 @@ private struct FactoryDefenseGameplayView: View {
     @State private var cameraState = WhiteboxCameraState()
     @State private var dragTranslation: CGSize = .zero
     @State private var zoomGestureScale: CGFloat = 1
+    @State private var didReportRunSummary = false
+
+    let onRunEnded: (RunSummarySnapshot) -> Void
+
+    init(initialWorld: WorldState, onRunEnded: @escaping (RunSummarySnapshot) -> Void) {
+        _runtime = StateObject(wrappedValue: GameRuntimeController(initialWorld: initialWorld))
+        self.onRunEnded = onRunEnded
+    }
 
     private static let keyboardPanStep: Float = 56
 
@@ -160,6 +305,11 @@ private struct FactoryDefenseGameplayView: View {
             }
             .onDisappear {
                 runtime.stop()
+            }
+            .onChange(of: runtime.runSummary) { _, summary in
+                guard let summary, !didReportRunSummary else { return }
+                didReportRunSummary = true
+                onRunEnded(summary)
             }
             .onChange(of: runtime.world.tick) { _, _ in
                 onboarding.update(from: runtime.world)

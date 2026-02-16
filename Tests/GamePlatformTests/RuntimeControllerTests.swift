@@ -64,4 +64,85 @@ final class RuntimeControllerTests: XCTestCase {
         XCTAssertEqual(request.structure, .wall)
         XCTAssertEqual(request.position, GridPosition(x: 5, y: 5))
     }
+
+    func testRunSummaryIsPublishedOnGameOver() {
+        let runtime = GameRuntimeController(initialWorld: makeImmediateGameOverWorld())
+
+        runtime.placeStructure(.wall, at: GridPosition(x: 3, y: 3))
+        let events = runtime.advanceTick()
+
+        XCTAssertTrue(events.contains(where: { $0.kind == .structurePlaced }))
+        XCTAssertTrue(events.contains(where: { $0.kind == .gameOver }))
+
+        guard let summary = runtime.runSummary else {
+            return XCTFail("Expected run summary after game over")
+        }
+
+        XCTAssertEqual(summary.finalTick, 0)
+        XCTAssertEqual(summary.wavesSurvived, 0)
+        XCTAssertEqual(summary.enemiesDestroyed, 0)
+        XCTAssertEqual(summary.structuresBuilt, 1)
+        XCTAssertEqual(summary.ammoSpent, 0)
+    }
+
+    private func makeImmediateGameOverWorld() -> WorldState {
+        let board = BoardState(
+            width: 8,
+            height: 8,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 7,
+            spawnYMin: 0,
+            spawnYMax: 2,
+            blockedCells: [],
+            restrictedCells: [],
+            ramps: []
+        )
+
+        var entities = EntityStore()
+        let hqID = entities.spawnStructure(.hq, at: GridPosition(x: 1, y: 1), health: 2, maxHealth: 2)
+        let enemyID = entities.spawnEnemy(at: GridPosition(x: 0, y: 0), health: 10)
+
+        return WorldState(
+            tick: 0,
+            board: board,
+            entities: entities,
+            economy: EconomyState(inventories: ["wall_kit": 1]),
+            threat: ThreatState(
+                waveIndex: 0,
+                nextWaveTick: 9_999,
+                waveIntervalTicks: 9_999,
+                waveDurationTicks: 180,
+                waveEndsAtTick: nil,
+                isWaveActive: false,
+                waveGapBaseTicks: 9_999,
+                waveGapFloorTicks: 9_999,
+                waveGapCompressionTicks: 0,
+                gracePeriodTicks: 0,
+                graceEndsAtTick: 0,
+                trickleIntervalTicks: 9_999,
+                trickleMinCount: 1,
+                trickleMaxCount: 1,
+                nextTrickleTick: 9_999,
+                raidCooldownUntilTick: 0,
+                milestoneEvery: 5,
+                lastMilestoneWave: 0
+            ),
+            run: RunState(phase: .playing, hqEntityID: hqID),
+            combat: CombatState(
+                enemies: [
+                    enemyID: EnemyRuntime(
+                        id: enemyID,
+                        archetype: .scout,
+                        moveEveryTicks: 1,
+                        baseDamage: 2,
+                        rewardCurrency: 1
+                    )
+                ],
+                basePosition: GridPosition(x: 0, y: 0),
+                spawnEdgeX: 7,
+                spawnYMin: 0,
+                spawnYMax: 2
+            )
+        )
+    }
 }

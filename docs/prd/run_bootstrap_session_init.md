@@ -310,7 +310,7 @@ The implicit message to the player: "Here's your base and some supplies. The clo
 | Restricted geometry | 2×2 HQ footprint restricted cells | **Done** | — |
 | Lifecycle events | `runStarted`, `gracePeriodEnded`, `gameOver` | **Done** | Add summary-screen event consumption in app/UI layer |
 | Extraction UI/command | Hidden/removed for T0 | **Done** | — |
-| End-of-run summary | Summary view after game-over | **Not done** | Implement summary UI + post-summary navigation flow |
+| End-of-run summary | Summary view after game-over | **Done** | Keep polish/balance iteration in normal UI backlog |
 | Raid subsystem cleanup | No separate raid subsystem in v1 | **Partial** (spawning removed, legacy fields remain for compatibility) | Remove/rename remaining legacy raid fields when safe for replay/snapshot migration |
 
 ---

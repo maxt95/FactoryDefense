@@ -238,6 +238,7 @@ public enum EventKind: String, Codable, Sendable {
     case runStarted
     case gracePeriodEnded
     case gameOver
+    case structurePlaced
     case waveStarted
     case waveEnded
     case raidTriggered

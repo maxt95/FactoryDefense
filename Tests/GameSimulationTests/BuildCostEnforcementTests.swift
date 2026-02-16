@@ -37,10 +37,11 @@ final class BuildCostEnforcementTests: XCTestCase {
             )
         )
 
-        _ = engine.step()
+        let events = engine.step()
 
         XCTAssertEqual(engine.worldState.economy.inventories["turret_core", default: 0], 0)
         XCTAssertEqual(engine.worldState.economy.inventories["plate_steel", default: 0], 0)
         XCTAssertEqual(engine.worldState.entities.structures(of: .turretMount).count, 1)
+        XCTAssertTrue(events.contains(where: { $0.kind == .structurePlaced }))
     }
 }

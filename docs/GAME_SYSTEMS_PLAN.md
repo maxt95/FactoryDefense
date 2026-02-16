@@ -26,7 +26,7 @@ This plan tracks implementation status against the canonical v1 product directio
 - `[x]` Ammo truth exists (`no ammo -> no shot`) with per-turret ammo/range/fire-rate/damage differentiation.
 - `[~]` Economy loop is recipe-driven with per-structure timing/progress for smelter/assembler/ammo-module, plus first-pass structure buffers/conveyor backpressure; miner/resource-node realism and full port/filter model remain follow-up.
 - `[x]` Build cost enforcement is simulation-authoritative.
-- `[~]` Run bootstrap/session init is partially aligned: HQ-only bootstrap, difficulty+seed params, phase lifecycle events, extraction UI removal, and deterministic Ring 0 patch generation are in; summary flow and full ore runtime remain follow-up.
+- `[~]` Run bootstrap/session init is partially aligned: HQ-only bootstrap, difficulty+seed params, phase lifecycle events, extraction UI removal, deterministic Ring 0 patch generation, and end-of-run summary flow are in; full ore runtime remains follow-up.
 - `[ ]` Ore patch adjacency/depletion and structure-targeting threat pressure are not complete.
 
 ### Rendering truth

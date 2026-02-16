@@ -8,6 +8,7 @@ public final class GameRuntimeController: ObservableObject {
     @Published public private(set) var latestEvents: [SimEvent]
     @Published public private(set) var highlightedCell: GridPosition?
     @Published public private(set) var placementResult: PlacementResult
+    @Published public private(set) var runSummary: RunSummarySnapshot?
 
     public let actor: PlayerID
 
@@ -15,6 +16,7 @@ public final class GameRuntimeController: ObservableObject {
     private let engine: SimulationEngine
     private var tickTask: Task<Void, Never>?
     private let placementValidator = PlacementValidator()
+    private var summaryCounters = SummaryCounters()
 
     public init(
         initialWorld: WorldState = .bootstrap(),
@@ -25,6 +27,7 @@ public final class GameRuntimeController: ObservableObject {
         self.latestEvents = []
         self.highlightedCell = nil
         self.placementResult = .ok
+        self.runSummary = nil
         self.actor = actor
         self.tickRate = max(1, tickRate)
         self.engine = SimulationEngine(worldState: initialWorld, tickRate: max(1, tickRate))
@@ -58,6 +61,7 @@ public final class GameRuntimeController: ObservableObject {
         let events = engine.step()
         world = engine.worldState
         latestEvents = events
+        consumeSummaryEvents(events)
         if world.board != previousBoard {
             clearPlacementPreview()
         }
@@ -136,4 +140,42 @@ public final class GameRuntimeController: ObservableObject {
     public func snapshot() -> WorldSnapshot {
         engine.makeSnapshot()
     }
+
+    private func consumeSummaryEvents(_ events: [SimEvent]) {
+        for event in events {
+            switch event.kind {
+            case .enemyDestroyed:
+                summaryCounters.enemiesDestroyed += 1
+            case .structurePlaced:
+                summaryCounters.structuresBuilt += 1
+            case .ammoSpent:
+                summaryCounters.ammoSpent += max(0, event.value ?? 0)
+            case .gameOver:
+                guard runSummary == nil else { continue }
+                let finalTick: UInt64
+                if let tickValue = event.value, tickValue >= 0 {
+                    finalTick = UInt64(tickValue)
+                } else {
+                    finalTick = event.tick
+                }
+
+                runSummary = RunSummarySnapshot(
+                    finalTick: finalTick,
+                    wavesSurvived: world.threat.waveIndex,
+                    enemiesDestroyed: summaryCounters.enemiesDestroyed,
+                    structuresBuilt: summaryCounters.structuresBuilt,
+                    ammoSpent: summaryCounters.ammoSpent
+                )
+                stop()
+            default:
+                continue
+            }
+        }
+    }
+}
+
+private struct SummaryCounters {
+    var enemiesDestroyed: Int = 0
+    var structuresBuilt: Int = 0
+    var ammoSpent: Int = 0
 }
