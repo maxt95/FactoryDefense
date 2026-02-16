@@ -37,6 +37,8 @@ public enum WarningBanner: String, Sendable {
     case lowAmmo
     case baseCritical
     case surgeImminent
+    case powerShortage
+    case patchExhausted
 }
 
 public struct HUDViewModel: Sendable {
@@ -54,12 +56,18 @@ public struct HUDViewModel: Sendable {
             ? world.threat.graceEndsAtTick - world.tick
             : 0
         let ammo = world.economy.inventories["ammo_light", default: 0]
+        let powerShortage = world.economy.powerDemand > world.economy.powerAvailable
+        let hasExhaustedPatch = world.orePatches.contains(where: { $0.isExhausted })
 
         let warning: WarningBanner
         if world.hqHealth <= 100 {
             warning = .baseCritical
+        } else if powerShortage {
+            warning = .powerShortage
         } else if ammo < 10 && world.threat.isWaveActive {
             warning = .lowAmmo
+        } else if hasExhaustedPatch {
+            warning = .patchExhausted
         } else if world.run.phase == .playing && nextWaveIn > 0 && nextWaveIn <= 80 {
             warning = .surgeImminent
         } else {

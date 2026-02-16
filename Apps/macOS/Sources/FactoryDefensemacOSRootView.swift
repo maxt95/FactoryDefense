@@ -525,7 +525,7 @@ private struct FactoryDefensemacOSGameplayView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
 
         case .resources:
-            ResourceHUDPanel(world: runtime.world)
+            ResourceHUDPanel(world: runtime.world, techNodes: techTree.nodes(inventory: inventory))
 
         case .buildMenu:
             BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in
