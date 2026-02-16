@@ -37,3 +37,9 @@ open FactoryDefense.xcodeproj
 ```
 
 The generated project references this package as `FactoryDefenseCore`.
+
+Run macOS app from any directory inside a worktree:
+
+```bash
+"$(git rev-parse --show-toplevel)/scripts/run_macos_app.sh"
+```

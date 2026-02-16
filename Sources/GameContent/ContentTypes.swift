@@ -58,12 +58,14 @@ public struct TurretDef: Codable, Hashable, Sendable {
     public var ammoType: AmmoType
     public var fireRate: Float
     public var range: Float
+    public var damage: Int
 
-    public init(id: String, ammoType: AmmoType, fireRate: Float, range: Float) {
+    public init(id: String, ammoType: AmmoType, fireRate: Float, range: Float, damage: Int) {
         self.id = id
         self.ammoType = ammoType
         self.fireRate = fireRate
         self.range = range
+        self.damage = damage
     }
 }
 

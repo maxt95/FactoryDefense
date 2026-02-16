@@ -1,6 +1,14 @@
 import Foundation
 import GameContent
 
+private enum CanonicalBootstrapContent {
+    static let bundle: GameContentBundle? = {
+        let contentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Content/bootstrap")
+        return try? ContentLoader().loadBundle(from: contentDirectory)
+    }()
+}
+
 public struct CommandSystem: SimulationSystem {
     public init() {}
 
@@ -21,17 +29,11 @@ public struct CommandSystem: SimulationSystem {
                     continue
                 }
 
-                state.applyBoardExpansion(expansionInsets)
                 let placementAnchor = request.position.translated(byX: expansionInsets.left, byY: expansionInsets.top)
-                let result = placementValidator.canPlace(request.structure, at: placementAnchor, in: state)
-                if result == .ok {
-                    let placementPosition = GridPosition(
-                        x: placementAnchor.x,
-                        y: placementAnchor.y,
-                        z: state.board.elevation(at: placementAnchor)
-                    )
-                    _ = state.entities.spawnStructure(request.structure, at: placementPosition)
-                } else {
+                var previewState = state
+                previewState.applyBoardExpansion(expansionInsets)
+                let result = placementValidator.canPlace(request.structure, at: placementAnchor, in: previewState)
+                guard result == .ok else {
                     context.emit(
                         SimEvent(
                             tick: state.tick,
@@ -39,7 +41,27 @@ public struct CommandSystem: SimulationSystem {
                             value: result.rawValue
                         )
                     )
+                    continue
                 }
+
+                guard state.economy.consume(costs: request.structure.buildCosts) else {
+                    context.emit(
+                        SimEvent(
+                            tick: state.tick,
+                            kind: .placementRejected,
+                            value: PlacementResult.insufficientResources.rawValue
+                        )
+                    )
+                    continue
+                }
+
+                state.applyBoardExpansion(expansionInsets)
+                let placementPosition = GridPosition(
+                    x: placementAnchor.x,
+                    y: placementAnchor.y,
+                    z: state.board.elevation(at: placementAnchor)
+                )
+                _ = state.entities.spawnStructure(request.structure, at: placementPosition)
             case .extract:
                 state.run.extracted = true
                 context.emit(SimEvent(tick: state.tick, kind: .extracted, value: state.economy.currency))
@@ -51,120 +73,240 @@ public struct CommandSystem: SimulationSystem {
 }
 
 public struct EconomySystem: SimulationSystem {
-    public init() {}
+    private let recipesByID: [String: RecipeDef]
+    private let minimumConstructionStock: [ItemID: Int]
+    private let reserveProtectedRecipeIDs: Set<String>
+
+    public init(
+        recipes: [RecipeDef] = EconomySystem.defaultRecipes,
+        minimumConstructionStock: [ItemID: Int] = EconomySystem.defaultMinimumConstructionStock,
+        reserveProtectedRecipeIDs: Set<String> = EconomySystem.defaultReserveProtectedRecipeIDs
+    ) {
+        self.recipesByID = Dictionary(uniqueKeysWithValues: recipes.map { ($0.id, $0) })
+        self.minimumConstructionStock = minimumConstructionStock
+        self.reserveProtectedRecipeIDs = reserveProtectedRecipeIDs
+    }
 
     public func update(state: inout WorldState, context: SystemContext) {
-        let powerPlants = state.entities.structures(of: .powerPlant).count
-        let miners = state.entities.structures(of: .miner).count
-        let smelters = state.entities.structures(of: .smelter).count
-        let ammoModules = state.entities.structures(of: .ammoModule).count
-        let assemblers = state.entities.structures(of: .assembler).count
-        let conveyors = state.entities.structures(of: .conveyor).count
-        let storages = state.entities.structures(of: .storage).count
-
-        state.economy.powerAvailable = powerPlants * 12
-        state.economy.powerDemand = miners * 2 + smelters * 3 + ammoModules * 4 + assemblers * 3 + conveyors + storages
-
-        let efficiency: Double
-        if state.economy.powerDemand == 0 {
-            efficiency = 1.0
-        } else {
-            efficiency = min(1.0, Double(state.economy.powerAvailable) / Double(state.economy.powerDemand))
+        let structures = state.entities.all.filter { $0.category == .structure }
+        var powerAvailable = 0
+        var powerDemand = 0
+        for entity in structures {
+            guard let structureType = entity.structureType else { continue }
+            let structurePower = structureType.powerDemand
+            if structurePower < 0 {
+                powerAvailable += abs(structurePower)
+            } else {
+                powerDemand += structurePower
+            }
         }
+        state.economy.powerAvailable = powerAvailable
+        state.economy.powerDemand = powerDemand
 
-        let logisticsBoost = 1.0 + min(0.9, Double(conveyors) * 0.03 + Double(storages) * 0.04)
-        let throughputMultiplier = efficiency * logisticsBoost
+        let efficiency = powerDemand == 0 ? 1.0 : min(1.0, Double(powerAvailable) / Double(powerDemand))
+        let tickDuration = context.tickDurationSeconds
 
-        let oreProduced = Int((Double(miners) * throughputMultiplier).rounded(.down))
-        state.economy.add(itemID: "ore_iron", quantity: oreProduced)
-        let copperProduced = Int((Double(miners) * 0.8 * throughputMultiplier).rounded(.down))
-        state.economy.add(itemID: "ore_copper", quantity: copperProduced)
-        let coalProduced = Int((Double(max(1, miners / 2)) * 0.6 * throughputMultiplier).rounded(.down))
-        state.economy.add(itemID: "ore_coal", quantity: coalProduced)
+        produceRawResources(state: &state, tickDuration: tickDuration, efficiency: efficiency)
 
-        let ironSmeltRuns = min(
-            max(1, Int((Double(smelters) * throughputMultiplier).rounded(.down))),
-            state.economy.inventories["ore_iron", default: 0] / 2
+        runProduction(
+            structures: state.entities.structures(of: .smelter),
+            prioritizedRecipeIDs: ["smelt_steel", "smelt_iron", "smelt_copper"],
+            state: &state,
+            tickDuration: tickDuration,
+            efficiency: efficiency
         )
-        if ironSmeltRuns > 0 {
-            _ = state.economy.consume(itemID: "ore_iron", quantity: ironSmeltRuns * 2)
-            state.economy.add(itemID: "plate_iron", quantity: ironSmeltRuns)
-        }
-
-        let copperSmeltRuns = min(
-            max(1, Int((Double(max(1, smelters / 2)) * throughputMultiplier).rounded(.down))),
-            state.economy.inventories["ore_copper", default: 0] / 2
+        runProduction(
+            structures: state.entities.structures(of: .assembler),
+            prioritizedRecipeIDs: [
+                "craft_turret_core",
+                "craft_wall_kit",
+                "craft_repair_kit",
+                "assemble_power_cell",
+                "etch_circuit",
+                "forge_gear"
+            ],
+            state: &state,
+            tickDuration: tickDuration,
+            efficiency: efficiency
         )
-        if copperSmeltRuns > 0 {
-            _ = state.economy.consume(itemID: "ore_copper", quantity: copperSmeltRuns * 2)
-            state.economy.add(itemID: "plate_copper", quantity: copperSmeltRuns)
-        }
-
-        let steelRuns = min(
-            max(1, Int((Double(max(1, smelters / 3)) * throughputMultiplier).rounded(.down))),
-            min(
-                state.economy.inventories["plate_iron", default: 0] / 2,
-                state.economy.inventories["ore_coal", default: 0]
-            )
+        runProduction(
+            structures: state.entities.structures(of: .ammoModule),
+            prioritizedRecipeIDs: ["craft_ammo_plasma", "craft_ammo_heavy", "craft_ammo_light"],
+            state: &state,
+            tickDuration: tickDuration,
+            efficiency: efficiency
         )
-        if steelRuns > 0 {
-            _ = state.economy.consume(itemID: "plate_iron", quantity: steelRuns * 2)
-            _ = state.economy.consume(itemID: "ore_coal", quantity: steelRuns)
-            state.economy.add(itemID: "plate_steel", quantity: steelRuns)
-        }
 
-        let assemblerRuns = min(
-            max(1, Int((Double(assemblers) * throughputMultiplier).rounded(.down))),
-            min(
-                state.economy.inventories["plate_copper", default: 0] / 2,
-                state.economy.inventories["ore_coal", default: 0]
-            )
-        )
-        if assemblerRuns > 0 {
-            _ = state.economy.consume(itemID: "plate_copper", quantity: assemblerRuns * 2)
-            _ = state.economy.consume(itemID: "ore_coal", quantity: assemblerRuns)
-            state.economy.add(itemID: "circuit", quantity: assemblerRuns)
-        }
-
-        let powerCellRuns = min(
-            max(1, Int((Double(max(1, assemblers / 2)) * throughputMultiplier).rounded(.down))),
-            min(
-                state.economy.inventories["plate_copper", default: 0],
-                state.economy.inventories["circuit", default: 0]
-            )
-        )
-        if powerCellRuns > 0 {
-            _ = state.economy.consume(itemID: "plate_copper", quantity: powerCellRuns)
-            _ = state.economy.consume(itemID: "circuit", quantity: powerCellRuns)
-            state.economy.add(itemID: "power_cell", quantity: powerCellRuns)
-        }
-
-        let ammoRuns = min(
-            max(1, Int((Double(ammoModules) * throughputMultiplier).rounded(.down))),
-            state.economy.inventories["plate_iron", default: 0]
-        )
-        if ammoRuns > 0 {
-            _ = state.economy.consume(itemID: "plate_iron", quantity: ammoRuns)
-            state.economy.add(itemID: "ammo_light", quantity: ammoRuns * 4)
-        }
-
-        let heavyAmmoRuns = min(
-            max(1, Int((Double(max(1, ammoModules / 2)) * throughputMultiplier).rounded(.down))),
-            min(
-                state.economy.inventories["plate_steel", default: 0],
-                state.economy.inventories["ammo_light", default: 0] / 2
-            )
-        )
-        if heavyAmmoRuns > 0 {
-            _ = state.economy.consume(itemID: "plate_steel", quantity: heavyAmmoRuns)
-            _ = state.economy.consume(itemID: "ammo_light", quantity: heavyAmmoRuns * 2)
-            state.economy.add(itemID: "ammo_heavy", quantity: heavyAmmoRuns * 3)
-        }
+        pruneProductionState(for: Set(structures.map(\.id)), state: &state)
 
         if state.threat.isWaveActive {
             state.economy.currency += 1
         }
     }
+
+    private func produceRawResources(state: inout WorldState, tickDuration: Double, efficiency: Double) {
+        let minerCount = Double(state.entities.structures(of: .miner).count)
+        guard minerCount > 0 else { return }
+        let effectiveMinerRate = minerCount * efficiency * tickDuration
+        state.economy.addFractional(itemID: "ore_iron", quantity: effectiveMinerRate * 1.0)
+        state.economy.addFractional(itemID: "ore_copper", quantity: effectiveMinerRate * 0.8)
+        state.economy.addFractional(itemID: "ore_coal", quantity: effectiveMinerRate * 0.6)
+    }
+
+    private func runProduction(
+        structures: [Entity],
+        prioritizedRecipeIDs: [String],
+        state: inout WorldState,
+        tickDuration: Double,
+        efficiency: Double
+    ) {
+        for structure in structures.sorted(by: { $0.id < $1.id }) {
+            let structureID = structure.id
+            guard let selectedRecipe = selectRecipe(prioritizedRecipeIDs: prioritizedRecipeIDs, inventory: state.economy.inventories) else {
+                state.economy.activeRecipeByStructure.removeValue(forKey: structureID)
+                state.economy.productionProgressByStructure[structureID] = 0
+                continue
+            }
+
+            if state.economy.activeRecipeByStructure[structureID] != selectedRecipe.id {
+                state.economy.activeRecipeByStructure[structureID] = selectedRecipe.id
+                state.economy.productionProgressByStructure[structureID] = 0
+            }
+
+            let progressGain = tickDuration * efficiency
+            state.economy.productionProgressByStructure[structureID, default: 0] += progressGain
+
+            var progress = state.economy.productionProgressByStructure[structureID, default: 0]
+            let recipeSeconds = Double(selectedRecipe.seconds)
+            guard recipeSeconds > 0 else { continue }
+
+            while progress + 0.000_001 >= recipeSeconds, state.economy.canAfford(selectedRecipe.inputs) {
+                _ = state.economy.consume(costs: selectedRecipe.inputs)
+                for output in selectedRecipe.outputs {
+                    state.economy.add(itemID: output.itemID, quantity: output.quantity)
+                }
+                progress -= recipeSeconds
+            }
+
+            state.economy.productionProgressByStructure[structureID] = max(0, progress)
+        }
+    }
+
+    private func selectRecipe(prioritizedRecipeIDs: [String], inventory: [ItemID: Int]) -> RecipeDef? {
+        for recipeID in prioritizedRecipeIDs {
+            guard let recipe = recipesByID[recipeID] else { continue }
+            guard recipe.inputs.allSatisfy({ inventory[$0.itemID, default: 0] >= $0.quantity }) else { continue }
+            guard canRunRecipeWithoutBreachingConstructionStock(recipe: recipe, inventory: inventory) else { continue }
+            return recipe
+        }
+        return nil
+    }
+
+    private func canRunRecipeWithoutBreachingConstructionStock(recipe: RecipeDef, inventory: [ItemID: Int]) -> Bool {
+        guard reserveProtectedRecipeIDs.contains(recipe.id) else { return true }
+        let outputItemIDs = Set(recipe.outputs.map(\.itemID))
+
+        for input in recipe.inputs {
+            let minimum = minimumConstructionStock[input.itemID, default: 0]
+            guard minimum > 0 else { continue }
+            // If the recipe regenerates the same item, let it run.
+            guard !outputItemIDs.contains(input.itemID) else { continue }
+
+            let remaining = inventory[input.itemID, default: 0] - input.quantity
+            if remaining < minimum {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    private func pruneProductionState(for validStructureIDs: Set<EntityID>, state: inout WorldState) {
+        state.economy.activeRecipeByStructure = state.economy.activeRecipeByStructure.filter { validStructureIDs.contains($0.key) }
+        state.economy.productionProgressByStructure = state.economy.productionProgressByStructure.filter { validStructureIDs.contains($0.key) }
+    }
+
+    public static var defaultRecipes: [RecipeDef] {
+        if let loaded = CanonicalBootstrapContent.bundle?.recipes, !loaded.isEmpty {
+            return loaded
+        }
+
+        return [
+            RecipeDef(id: "smelt_iron", inputs: [ItemStack(itemID: "ore_iron", quantity: 2)], outputs: [ItemStack(itemID: "plate_iron", quantity: 1)], seconds: 2.0),
+            RecipeDef(id: "smelt_copper", inputs: [ItemStack(itemID: "ore_copper", quantity: 2)], outputs: [ItemStack(itemID: "plate_copper", quantity: 1)], seconds: 2.0),
+            RecipeDef(
+                id: "smelt_steel",
+                inputs: [ItemStack(itemID: "plate_iron", quantity: 2), ItemStack(itemID: "ore_coal", quantity: 1)],
+                outputs: [ItemStack(itemID: "plate_steel", quantity: 1)],
+                seconds: 4.0
+            ),
+            RecipeDef(id: "forge_gear", inputs: [ItemStack(itemID: "plate_iron", quantity: 2)], outputs: [ItemStack(itemID: "gear", quantity: 1)], seconds: 1.5),
+            RecipeDef(
+                id: "etch_circuit",
+                inputs: [ItemStack(itemID: "plate_copper", quantity: 2), ItemStack(itemID: "ore_coal", quantity: 1)],
+                outputs: [ItemStack(itemID: "circuit", quantity: 1)],
+                seconds: 2.0
+            ),
+            RecipeDef(
+                id: "assemble_power_cell",
+                inputs: [ItemStack(itemID: "plate_copper", quantity: 1), ItemStack(itemID: "circuit", quantity: 1)],
+                outputs: [ItemStack(itemID: "power_cell", quantity: 1)],
+                seconds: 2.5
+            ),
+            RecipeDef(
+                id: "craft_wall_kit",
+                inputs: [ItemStack(itemID: "plate_steel", quantity: 1), ItemStack(itemID: "gear", quantity: 1)],
+                outputs: [ItemStack(itemID: "wall_kit", quantity: 1)],
+                seconds: 1.2
+            ),
+            RecipeDef(
+                id: "craft_turret_core",
+                inputs: [ItemStack(itemID: "plate_steel", quantity: 1), ItemStack(itemID: "circuit", quantity: 1), ItemStack(itemID: "gear", quantity: 1)],
+                outputs: [ItemStack(itemID: "turret_core", quantity: 1)],
+                seconds: 2.5
+            ),
+            RecipeDef(id: "craft_ammo_light", inputs: [ItemStack(itemID: "plate_iron", quantity: 1)], outputs: [ItemStack(itemID: "ammo_light", quantity: 4)], seconds: 2.0),
+            RecipeDef(
+                id: "craft_ammo_heavy",
+                inputs: [ItemStack(itemID: "plate_steel", quantity: 1), ItemStack(itemID: "ammo_light", quantity: 2)],
+                outputs: [ItemStack(itemID: "ammo_heavy", quantity: 3)],
+                seconds: 2.6
+            ),
+            RecipeDef(
+                id: "craft_ammo_plasma",
+                inputs: [ItemStack(itemID: "power_cell", quantity: 1), ItemStack(itemID: "circuit", quantity: 1)],
+                outputs: [ItemStack(itemID: "ammo_plasma", quantity: 2)],
+                seconds: 3.0
+            ),
+            RecipeDef(
+                id: "craft_repair_kit",
+                inputs: [ItemStack(itemID: "plate_steel", quantity: 1), ItemStack(itemID: "circuit", quantity: 1)],
+                outputs: [ItemStack(itemID: "repair_kit", quantity: 1)],
+                seconds: 2.0
+            )
+        ]
+    }
+
+    public static let defaultMinimumConstructionStock: [ItemID: Int] = [
+        "plate_iron": 6,
+        "plate_copper": 4,
+        "plate_steel": 4,
+        "gear": 3,
+        "circuit": 2
+    ]
+
+    public static let defaultReserveProtectedRecipeIDs: Set<String> = [
+        "smelt_steel",
+        "forge_gear",
+        "etch_circuit",
+        "assemble_power_cell",
+        "craft_wall_kit",
+        "craft_turret_core",
+        "craft_repair_kit",
+        "craft_ammo_light",
+        "craft_ammo_heavy",
+        "craft_ammo_plasma"
+    ]
 }
 
 public struct WaveSystem: SimulationSystem {
@@ -362,14 +504,21 @@ public struct EnemyMovementSystem: SimulationSystem {
 }
 
 public struct CombatSystem: SimulationSystem {
-    public var ammoItemID: ItemID
-    public var turretRange: Int
-    public var projectileDamage: Int
+    private let turretDefsByID: [String: TurretDef]
+    private let defaultTurretDefID: String
+    private let overrideRange: Int?
+    private let overrideDamage: Int?
 
-    public init(ammoItemID: ItemID = "ammo_light", turretRange: Int = 8, projectileDamage: Int = 12) {
-        self.ammoItemID = ammoItemID
-        self.turretRange = turretRange
-        self.projectileDamage = projectileDamage
+    public init(
+        turretDefinitions: [TurretDef] = CombatSystem.defaultTurretDefinitions,
+        defaultTurretDefID: String = "turret_mk1",
+        turretRange: Int? = nil,
+        projectileDamage: Int? = nil
+    ) {
+        self.turretDefsByID = Dictionary(uniqueKeysWithValues: turretDefinitions.map { ($0.id, $0) })
+        self.defaultTurretDefID = defaultTurretDefID
+        self.overrideRange = turretRange
+        self.overrideDamage = projectileDamage
     }
 
     public func update(state: inout WorldState, context: SystemContext) {
@@ -378,44 +527,85 @@ public struct CombatSystem: SimulationSystem {
         let turrets = state.entities.structures(of: .turretMount).sorted { $0.id < $1.id }
         guard !turrets.isEmpty else { return }
 
-        var shotsFired = 0
-        var dryFires = 0
+        var spentByItem: [ItemID: Int] = [:]
+        var dryFiresByItem: [ItemID: Int] = [:]
 
         for turret in turrets {
-            guard let target = nearestEnemy(to: turret.position, state: state) else { continue }
+            guard let turretDef = resolveTurretDef(for: turret) else { continue }
+            guard let ammoItemID = ammoItemID(for: turretDef.ammoType) else { continue }
+
+            let ticksPerShot = ticksBetweenShots(fireRate: turretDef.fireRate, tickDuration: context.tickDurationSeconds)
+            if let lastTick = state.combat.lastFireTickByTurret[turret.id], state.tick < lastTick + ticksPerShot {
+                continue
+            }
+
+            let range = overrideRange.map(Double.init) ?? Double(turretDef.range)
+            guard let target = nearestEnemy(to: turret.position, state: state, range: range) else { continue }
+
+            state.combat.lastFireTickByTurret[turret.id] = state.tick
 
             if state.economy.consume(itemID: ammoItemID, quantity: 1) {
                 let distance = turret.position.manhattanDistance(to: target.position)
                 let travelTicks = UInt64(max(1, distance / 2 + 1))
+                let damage = overrideDamage ?? turretDef.damage
 
                 let projectileID = state.entities.spawnProjectile(at: turret.position)
                 state.combat.projectiles[projectileID] = ProjectileRuntime(
                     id: projectileID,
                     sourceTurretID: turret.id,
                     targetEnemyID: target.id,
-                    damage: projectileDamage,
+                    damage: damage,
                     impactTick: state.tick + travelTicks
                 )
 
-                shotsFired += 1
+                spentByItem[ammoItemID, default: 0] += 1
                 context.emit(SimEvent(tick: state.tick, kind: .projectileFired, entity: projectileID, value: Int(travelTicks)))
             } else {
-                dryFires += 1
+                dryFiresByItem[ammoItemID, default: 0] += 1
             }
         }
 
-        if shotsFired > 0 {
-            context.emit(SimEvent(tick: state.tick, kind: .ammoSpent, value: shotsFired, itemID: ammoItemID))
+        for itemID in spentByItem.keys.sorted() {
+            let spent = spentByItem[itemID, default: 0]
+            guard spent > 0 else { continue }
+            context.emit(SimEvent(tick: state.tick, kind: .ammoSpent, value: spent, itemID: itemID))
         }
 
-        if dryFires > 0 {
-            context.emit(SimEvent(tick: state.tick, kind: .notEnoughAmmo, value: dryFires, itemID: ammoItemID))
+        for itemID in dryFiresByItem.keys.sorted() {
+            let dryFires = dryFiresByItem[itemID, default: 0]
+            guard dryFires > 0 else { continue }
+            context.emit(SimEvent(tick: state.tick, kind: .notEnoughAmmo, value: dryFires, itemID: itemID))
         }
     }
 
-    private func nearestEnemy(to position: GridPosition, state: WorldState) -> Entity? {
+    private func resolveTurretDef(for turret: Entity) -> TurretDef? {
+        if let turretDefID = turret.turretDefID, let turretDef = turretDefsByID[turretDefID] {
+            return turretDef
+        }
+        return turretDefsByID[defaultTurretDefID]
+    }
+
+    private func ticksBetweenShots(fireRate: Float, tickDuration: Double) -> UInt64 {
+        guard fireRate > 0 else { return 1 }
+        let secondsBetweenShots = 1.0 / Double(fireRate)
+        let ticks = Int((secondsBetweenShots / tickDuration).rounded())
+        return UInt64(max(1, ticks))
+    }
+
+    private func ammoItemID(for ammoType: AmmoType) -> ItemID? {
+        switch ammoType {
+        case .lightBallistic:
+            return "ammo_light"
+        case .heavyBallistic:
+            return "ammo_heavy"
+        case .plasma:
+            return "ammo_plasma"
+        }
+    }
+
+    private func nearestEnemy(to position: GridPosition, state: WorldState, range: Double) -> Entity? {
         let enemies = state.entities.enemies().filter { enemy in
-            position.manhattanDistance(to: enemy.position) <= turretRange
+            Double(position.manhattanDistance(to: enemy.position)) <= range
         }
 
         guard !enemies.isEmpty else { return nil }
@@ -428,6 +618,19 @@ public struct CombatSystem: SimulationSystem {
             }
             return lDist < rDist
         }
+    }
+
+    public static var defaultTurretDefinitions: [TurretDef] {
+        if let loaded = CanonicalBootstrapContent.bundle?.turrets, !loaded.isEmpty {
+            return loaded
+        }
+
+        return [
+            TurretDef(id: "turret_mk1", ammoType: .lightBallistic, fireRate: 2.0, range: 8.0, damage: 12),
+            TurretDef(id: "turret_mk2", ammoType: .heavyBallistic, fireRate: 1.4, range: 10.0, damage: 25),
+            TurretDef(id: "gattling_tower", ammoType: .lightBallistic, fireRate: 4.2, range: 6.5, damage: 8),
+            TurretDef(id: "plasma_sentinel", ammoType: .plasma, fireRate: 0.9, range: 11.0, damage: 45)
+        ]
     }
 }
 

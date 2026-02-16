@@ -82,7 +82,13 @@ public final class GameRuntimeController: ObservableObject {
         var previewWorld = world
         previewWorld.applyBoardExpansion(expansionInsets)
         let adjustedPosition = position.translated(byX: expansionInsets.left, byY: expansionInsets.top)
-        placementResult = placementValidator.canPlace(structure, at: adjustedPosition, in: previewWorld)
+        let result = placementValidator.canPlace(structure, at: adjustedPosition, in: previewWorld)
+        guard result == .ok else {
+            placementResult = result
+            return
+        }
+
+        placementResult = world.economy.canAfford(structure.buildCosts) ? .ok : .insufficientResources
     }
 
     public func clearPlacementPreview() {

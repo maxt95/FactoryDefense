@@ -23,30 +23,30 @@ This plan tracks implementation status against the canonical v1 product directio
 - `[x]` Content JSON schemas and validation pipeline exist for core data packs.
 
 ### Gameplay truth
-- `[~]` Ammo truth exists (`no ammo -> no shot`) but turret type differentiation is incomplete.
-- `[~]` Economy loop exists but remains partly hardcoded and not fully recipe/buffer driven.
-- `[ ]` Build cost enforcement is not fully simulation-authoritative.
+- `[x]` Ammo truth exists (`no ammo -> no shot`) with per-turret ammo/range/fire-rate/damage differentiation.
+- `[~]` Economy loop is recipe-driven with per-structure timing/progress for smelter/assembler/ammo-module; miner/resource-node realism and conveyor buffers remain follow-up.
+- `[x]` Build cost enforcement is simulation-authoritative.
 - `[ ]` Ore patch adjacency/depletion, full conveyor buffer model, and structure-targeting threat pressure are not complete.
 
 ### Rendering truth
 - `[~]` Render graph scaffolding exists, but whitebox geometry draw path is still incomplete.
 
 ## Milestone Plan
-### Milestone 0 - P0 Gameplay Truth (Current Top Priority)
+### Milestone 0 - P0 Gameplay Truth (Completed)
 Goal: make the simulation obey core v1 rules from `docs/GAME_PRD_LIVING.md` and `docs/prd/factory_economy.md`.
 
-- [ ] Enforce build costs in simulation command handling (not UI-only).
-- [ ] Wire per-turret definitions into combat (`ammo type`, `range`, `fire rate`, `damage`).
-- [ ] Move production execution to recipe-driven behavior from content data.
-- [ ] Implement missing production chains (`gear`, `wall_kit`, `turret_core`, `ammo_plasma`).
-- [ ] Add acceptance tests for cost enforcement + turret ammo truth across turret variants.
+- [x] Enforce build costs in simulation command handling (not UI-only).
+- [x] Wire per-turret definitions into combat (`ammo type`, `range`, `fire rate`, `damage`).
+- [x] Move production execution to recipe-driven behavior from content data.
+- [x] Implement missing production chains (`gear`, `wall_kit`, `turret_core`, `ammo_plasma`).
+- [x] Add acceptance tests for cost enforcement + turret ammo truth across turret variants.
 
 Exit criteria:
 - Placing non-bootstrap structures consumes required resources.
 - Distinct turret types consume the correct ammo and respect stat differences.
 - Production output matches recipe expectations (including missing chains now active).
 
-### Milestone 1 - P1 Factory and Threat Reality
+### Milestone 1 - P1 Factory and Threat Reality (Current Top Priority)
 Goal: complete the first fully legible factory-defense vertical slice.
 
 - [ ] Add ore patch/resource node entities and miner adjacency requirements.
@@ -115,12 +115,12 @@ Exit criteria:
 
 ### Workstream C - Factory Economy and Logistics
 - [~] Starter production loop and power scaling exist.
-- [ ] Recipe-timed, per-structure, buffer-based production model.
+- [~] Recipe-timed, per-structure production model exists on global inventory; buffer-based routing remains.
 - [ ] Conveyor-routed runtime with splitter/merger/storage hub behavior.
 
 ### Workstream D - Combat, Waves, AI
 - [~] Base wave cadence exists.
-- [ ] Per-turret stat and ammo differentiation.
+- [x] Per-turret stat and ammo differentiation.
 - [ ] Authored-wave consumption from `waves.json` + endless procedural continuation.
 - [ ] Structure-targeting enemy behaviors and cascade pressure.
 
@@ -140,7 +140,7 @@ Exit criteria:
 
 ### Workstream H - Quality and Tooling
 - [x] Determinism/golden replay/perf scaffolding exists.
-- [ ] Add milestone acceptance tests for P0/P1 gameplay-truth criteria.
+- [~] Milestone acceptance tests added for P0 gameplay truth; P1 criteria remain.
 
 ## Dependency Rules (Current)
 - Milestone 0 must complete before deep balancing claims are considered valid.
@@ -161,6 +161,6 @@ Exit criteria:
   - `FactoryDefense_iPadOS` (`CODE_SIGNING_ALLOWED=NO`)
 
 ## Immediate Next Actions
-- [ ] Break Milestone 0 into file-level implementation tickets in simulation/content/UI modules.
-- [ ] Add automated tests for build-cost deduction and per-turret ammo consumption.
-- [ ] Update this plan at each milestone boundary with measured outcomes.
+- [ ] Begin Milestone 1 implementation: ore patch/resource node entities + miner adjacency/depletion.
+- [ ] Move WaveSystem from formula spawning to `waves.json` authored waves (1-8) with deterministic scheduling.
+- [ ] Implement structure-targeting enemy behaviors to create production-line cascade pressure.

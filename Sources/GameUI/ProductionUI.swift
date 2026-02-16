@@ -58,20 +58,6 @@ public struct BuildMenuViewModel: Sendable {
 
     public static let productionPreset = BuildMenuViewModel(entries: [
         BuildMenuEntry(
-            id: "turret_mount",
-            title: "Turret Mount",
-            structure: .turretMount,
-            category: .defense,
-            costs: [ItemStack(itemID: "turret_core", quantity: 1), ItemStack(itemID: "plate_steel", quantity: 2)]
-        ),
-        BuildMenuEntry(
-            id: "wall",
-            title: "Wall",
-            structure: .wall,
-            category: .defense,
-            costs: [ItemStack(itemID: "wall_kit", quantity: 1)]
-        ),
-        BuildMenuEntry(
             id: "miner",
             title: "Miner",
             structure: .miner,
@@ -84,6 +70,13 @@ public struct BuildMenuViewModel: Sendable {
             structure: .smelter,
             category: .production,
             costs: [ItemStack(itemID: "plate_steel", quantity: 4)]
+        ),
+        BuildMenuEntry(
+            id: "assembler",
+            title: "Assembler",
+            structure: .assembler,
+            category: .production,
+            costs: [ItemStack(itemID: "plate_iron", quantity: 4), ItemStack(itemID: "circuit", quantity: 2)]
         ),
         BuildMenuEntry(
             id: "ammo_module",
@@ -112,8 +105,22 @@ public struct BuildMenuViewModel: Sendable {
             structure: .powerPlant,
             category: .utility,
             costs: [ItemStack(itemID: "circuit", quantity: 2), ItemStack(itemID: "plate_copper", quantity: 4)]
+        ),
+        BuildMenuEntry(
+            id: "turret_mount",
+            title: "Turret Mount",
+            structure: .turretMount,
+            category: .defense,
+            costs: [ItemStack(itemID: "turret_core", quantity: 1), ItemStack(itemID: "plate_steel", quantity: 2)]
+        ),
+        BuildMenuEntry(
+            id: "wall",
+            title: "Wall",
+            structure: .wall,
+            category: .defense,
+            costs: [ItemStack(itemID: "wall_kit", quantity: 1)]
         )
-    ])
+    ], selectedEntryID: "miner")
 }
 
 public enum TechNodeStatus: String, Sendable {
@@ -441,6 +448,139 @@ public struct TuningDashboardPanel: View {
         .padding(10)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+public struct ResourceHUDPanel: View {
+    public var world: WorldState
+
+    public init(world: WorldState) {
+        self.world = world
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Run Resources")
+                .font(.headline)
+
+            HStack(spacing: 10) {
+                statChip(title: "Tick", value: "\(world.tick)")
+                statChip(title: "Currency", value: "\(world.economy.currency)")
+                statChip(title: "Base", value: "\(world.run.baseIntegrity)")
+                statChip(title: "Wave", value: waveLabel)
+                statChip(title: "Power", value: powerLabel)
+            }
+
+            HStack(spacing: 10) {
+                statChip(title: "Iron Plate", value: "\(world.economy.inventories["plate_iron", default: 0])")
+                statChip(title: "Gear", value: "\(world.economy.inventories["gear", default: 0])")
+                statChip(title: "Circuit", value: "\(world.economy.inventories["circuit", default: 0])")
+                statChip(title: "Light Ammo", value: "\(world.economy.inventories["ammo_light", default: 0])")
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(resourceRows, id: \.itemID) { row in
+                        Text("\(row.label): \(row.quantity)")
+                            .font(.caption2.monospacedDigit())
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 8)
+                            .background(Color.white.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 7))
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var waveLabel: String {
+        let state = world.threat.isWaveActive ? "active" : "build"
+        return "\(world.threat.waveIndex) (\(state))"
+    }
+
+    private var powerLabel: String {
+        "\(world.economy.powerAvailable)/\(world.economy.powerDemand)"
+    }
+
+    private var resourceRows: [(itemID: ItemID, label: String, quantity: Int)] {
+        let order: [ItemID] = [
+            "ore_iron",
+            "ore_copper",
+            "ore_coal",
+            "plate_iron",
+            "plate_copper",
+            "plate_steel",
+            "gear",
+            "circuit",
+            "power_cell",
+            "wall_kit",
+            "turret_core",
+            "ammo_light",
+            "ammo_heavy",
+            "ammo_plasma"
+        ]
+
+        let indexedRows = order.enumerated().map { (index, itemID) in
+            (
+                index: index,
+                itemID: itemID,
+                label: shortLabel(for: itemID),
+                quantity: world.economy.inventories[itemID, default: 0]
+            )
+        }
+
+        return indexedRows
+            .sorted { lhs, rhs in
+                let lhsNonZero = lhs.quantity > 0
+                let rhsNonZero = rhs.quantity > 0
+                if lhsNonZero != rhsNonZero {
+                    return lhsNonZero && !rhsNonZero
+                }
+                if lhs.quantity != rhs.quantity {
+                    return lhs.quantity > rhs.quantity
+                }
+                return lhs.index < rhs.index
+            }
+            .map { row in
+                (itemID: row.itemID, label: row.label, quantity: row.quantity)
+            }
+    }
+
+    private func shortLabel(for itemID: ItemID) -> String {
+        switch itemID {
+        case "ore_iron": return "Iron Ore"
+        case "ore_copper": return "Copper Ore"
+        case "ore_coal": return "Coal"
+        case "plate_iron": return "Iron Plate"
+        case "plate_copper": return "Copper Plate"
+        case "plate_steel": return "Steel Plate"
+        case "gear": return "Gear"
+        case "circuit": return "Circuit"
+        case "power_cell": return "Power Cell"
+        case "wall_kit": return "Wall Kit"
+        case "turret_core": return "Turret Core"
+        case "ammo_light": return "Light Ammo"
+        case "ammo_heavy": return "Heavy Ammo"
+        case "ammo_plasma": return "Plasma Ammo"
+        default: return itemID
+        }
+    }
+
+    private func statChip(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.monospacedDigit())
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(Color.white.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
     }
 }
 #endif

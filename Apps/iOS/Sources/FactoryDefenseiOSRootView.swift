@@ -141,6 +141,8 @@ private struct FactoryDefenseiOSGameplayView: View {
                             .buttonStyle(.bordered)
                     }
 
+                    ResourceHUDPanel(world: runtime.world)
+
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(alignment: .top, spacing: 10) {
                             BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in
@@ -202,6 +204,8 @@ private struct FactoryDefenseiOSGameplayView: View {
             return "Blocks"
         case .restrictedZone:
             return "Restricted"
+        case .insufficientResources:
+            return "Insufficient resources"
         }
     }
 

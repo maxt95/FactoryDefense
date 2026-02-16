@@ -156,6 +156,8 @@ private struct FactoryDefensemacOSGameplayView: View {
                         .buttonStyle(.bordered)
                     }
 
+                    ResourceHUDPanel(world: runtime.world)
+
                     HStack(alignment: .top, spacing: 10) {
                         BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in
                             buildMenu.select(entryID: entry.id)
@@ -233,6 +235,8 @@ private struct FactoryDefensemacOSGameplayView: View {
             return "Blocks path"
         case .restrictedZone:
             return "Restricted"
+        case .insufficientResources:
+            return "Insufficient resources"
         }
     }
 

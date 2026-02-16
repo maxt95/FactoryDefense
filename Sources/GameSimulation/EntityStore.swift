@@ -30,13 +30,19 @@ public struct EntityStore: Codable, Hashable, Sendable {
     }
 
     @discardableResult
-    public mutating func spawnStructure(_ structure: StructureType, at position: GridPosition) -> EntityID {
+    public mutating func spawnStructure(
+        _ structure: StructureType,
+        at position: GridPosition,
+        turretDefID: String? = nil
+    ) -> EntityID {
         let id = nextEntityID
         nextEntityID += 1
+        let resolvedTurretDefID: String? = structure == .turretMount ? (turretDefID ?? "turret_mk1") : nil
         entitiesByID[id] = Entity(
             id: id,
             category: .structure,
             structureType: structure,
+            turretDefID: resolvedTurretDefID,
             position: position,
             health: 100,
             maxHealth: 100

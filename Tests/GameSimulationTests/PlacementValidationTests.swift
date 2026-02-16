@@ -5,7 +5,8 @@ final class PlacementValidationTests: XCTestCase {
     func testValidPlacementSucceedsAndSpawnsStructure() {
         let position = GridPosition(x: 48, y: 32)
         let validator = PlacementValidator()
-        let world = WorldState.bootstrap()
+        var world = WorldState.bootstrap()
+        world.economy.inventories["wall_kit"] = 10
 
         XCTAssertEqual(validator.canPlace(.wall, at: position, in: world), .ok)
 
@@ -212,7 +213,8 @@ final class PlacementValidationTests: XCTestCase {
     }
 
     func testNearEdgePlacementTriggersExpansionAndSucceeds() {
-        let world = WorldState.bootstrap()
+        var world = WorldState.bootstrap()
+        world.economy.inventories["wall_kit"] = 10
         let position = GridPosition(x: world.board.width - 2, y: world.board.basePosition.y)
         let initialWidth = world.board.width
         let initialHeight = world.board.height
@@ -286,7 +288,8 @@ final class PlacementValidationTests: XCTestCase {
     }
 
     func testLeftTopExpansionShiftsWorldAndPreservesPath() {
-        let world = WorldState.bootstrap()
+        var world = WorldState.bootstrap()
+        world.economy.inventories["wall_kit"] = 10
         let originalBase = world.board.basePosition
         let originalSpawnEdgeX = world.board.spawnEdgeX
         let originalSpawnYMin = world.board.spawnYMin

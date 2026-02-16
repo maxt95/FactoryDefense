@@ -6,6 +6,7 @@ public enum PlacementResult: Int, Codable, Hashable, Sendable {
     case outOfBounds = 2
     case blocksCriticalPath = 3
     case restrictedZone = 4
+    case insufficientResources = 5
 }
 
 public struct PlacementValidator {
