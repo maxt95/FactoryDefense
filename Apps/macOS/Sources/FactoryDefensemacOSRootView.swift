@@ -8,13 +8,15 @@ import GamePlatform
 
 struct FactoryDefensemacOSRootView: View {
     @State private var didStartGame = false
+    @AppStorage("settings.enableDebugViews") private var enableDebugViews = false
 
     var body: some View {
         if didStartGame {
-            FactoryDefensemacOSGameplayView()
+            FactoryDefensemacOSGameplayView(enableDebugViews: enableDebugViews)
         } else {
             FactoryDefenseMainMenu(
                 title: "Factory Defense",
+                enableDebugViews: $enableDebugViews,
                 onStart: { didStartGame = true },
                 onQuit: { NSApplication.shared.terminate(nil) }
             )
@@ -24,8 +26,10 @@ struct FactoryDefensemacOSRootView: View {
 
 private struct FactoryDefenseMainMenu: View {
     let title: String
+    @Binding var enableDebugViews: Bool
     let onStart: () -> Void
     let onQuit: () -> Void
+    @State private var showsSettings = false
 
     var body: some View {
         ZStack {
@@ -46,6 +50,12 @@ private struct FactoryDefenseMainMenu: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
 
+                    Button("Settings") {
+                        showsSettings = true
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+
                     Button("Quit", action: onQuit)
                         .buttonStyle(.bordered)
                         .controlSize(.large)
@@ -55,10 +65,43 @@ private struct FactoryDefenseMainMenu: View {
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 18))
         }
+        .sheet(isPresented: $showsSettings) {
+            FactoryDefenseSettingsView(enableDebugViews: $enableDebugViews)
+        }
+    }
+}
+
+private struct FactoryDefenseSettingsView: View {
+    @Binding var enableDebugViews: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Settings")
+                .font(.title2.weight(.semibold))
+
+            Toggle("Enable Debug Views", isOn: $enableDebugViews)
+                .toggleStyle(.switch)
+
+            Text("When enabled, gameplay runs with tactical debug overlays.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer()
+                Button("Done") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 360)
     }
 }
 
 private struct FactoryDefensemacOSGameplayView: View {
+    let enableDebugViews: Bool
     @StateObject private var runtime = GameRuntimeController()
     @State private var buildMenu = BuildMenuViewModel.productionPreset
     @State private var techTree = TechTreeViewModel.productionPreset
@@ -90,6 +133,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                 MetalSurfaceView(
                     world: runtime.world,
                     cameraState: cameraState,
+                    debugMode: enableDebugViews ? .tactical : .none,
                     highlightedCell: runtime.highlightedCell,
                     highlightedStructure: runtime.highlightedCell == nil ? nil : selectedStructure,
                     placementResult: runtime.placementResult,
@@ -425,6 +469,7 @@ private struct FactoryDefensemacOSGameplayView: View {
 private struct MetalSurfaceView: NSViewRepresentable {
     var world: WorldState
     var cameraState: WhiteboxCameraState
+    var debugMode: DebugVisualizationMode
     var highlightedCell: GridPosition?
     var highlightedStructure: StructureType?
     var placementResult: PlacementResult
@@ -438,6 +483,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
         view.onScrollZoom = onScrollZoom
         view.onKeyboardPan = onKeyboardPan
         if let renderer = context.coordinator.renderer {
+            renderer.debugMode = debugMode
             renderer.attach(to: view)
         }
         view.window?.makeFirstResponder(view)
@@ -454,6 +500,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
         }
         renderer.worldState = world
         renderer.cameraState = cameraState
+        renderer.debugMode = debugMode
         renderer.setPlacementHighlight(cell: highlightedCell, structure: highlightedStructure, result: placementResult)
     }
 
