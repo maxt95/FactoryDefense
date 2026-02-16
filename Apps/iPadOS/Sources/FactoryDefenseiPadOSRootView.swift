@@ -251,6 +251,14 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                     .background(.regularMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
 
+                if interaction.isDragDrawActive {
+                    Text("Preview: \(interaction.dragPreviewPath.count) tiles")
+                        .font(.caption)
+                        .padding(10)
+                        .background(.regularMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+
                 Picker("Mode", selection: $interaction.mode) {
                     ForEach(GameplayInteractionMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)

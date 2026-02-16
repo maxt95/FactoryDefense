@@ -422,6 +422,14 @@ private struct FactoryDefenseGameplayView: View {
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
+                if interaction.isDragDrawActive {
+                    Text("Preview: \(interaction.dragPreviewPath.count) tiles")
+                        .font(.caption)
+                        .padding(8)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+
                 Picker("Mode", selection: $interaction.mode) {
                     ForEach(GameplayInteractionMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)

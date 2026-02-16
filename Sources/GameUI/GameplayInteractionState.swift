@@ -12,17 +12,20 @@ public struct GameplayInteractionState: Sendable, Hashable {
     public var pendingDemolishEntityID: EntityID?
     public var dragDrawStart: GridPosition?
     public var dragDrawCurrent: GridPosition?
+    public var dragPreviewPath: [GridPosition]
 
     public init(
         mode: GameplayInteractionMode = .interact,
         pendingDemolishEntityID: EntityID? = nil,
         dragDrawStart: GridPosition? = nil,
-        dragDrawCurrent: GridPosition? = nil
+        dragDrawCurrent: GridPosition? = nil,
+        dragPreviewPath: [GridPosition] = []
     ) {
         self.mode = mode
         self.pendingDemolishEntityID = pendingDemolishEntityID
         self.dragDrawStart = dragDrawStart
         self.dragDrawCurrent = dragDrawCurrent
+        self.dragPreviewPath = dragPreviewPath
     }
 
     public var isBuildMode: Bool {
@@ -81,16 +84,22 @@ public struct GameplayInteractionState: Sendable, Hashable {
     public mutating func beginDragDraw(at position: GridPosition) {
         dragDrawStart = position
         dragDrawCurrent = position
+        dragPreviewPath = [position]
     }
 
-    public mutating func updateDragDraw(at position: GridPosition) {
-        guard dragDrawStart != nil else { return }
+    public mutating func updateDragDraw(
+        at position: GridPosition,
+        using planner: GameplayDragDrawPlanner = GameplayDragDrawPlanner()
+    ) {
+        guard let start = dragDrawStart else { return }
         dragDrawCurrent = position
+        dragPreviewPath = planner.dominantAxisPath(from: start, to: position)
     }
 
     public mutating func cancelDragDraw() {
         dragDrawStart = nil
         dragDrawCurrent = nil
+        dragPreviewPath = []
     }
 
     public mutating func finishDragDraw(using planner: GameplayDragDrawPlanner = GameplayDragDrawPlanner()) -> [GridPosition] {

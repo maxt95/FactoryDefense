@@ -57,10 +57,12 @@ final class GameplayInteractionStateTests: XCTestCase {
         interaction.beginDragDraw(at: GridPosition(x: 2, y: 3))
         interaction.updateDragDraw(at: GridPosition(x: 6, y: 5))
         XCTAssertTrue(interaction.isDragDrawActive)
+        XCTAssertEqual(interaction.dragPreviewPath.count, 5)
 
         let path = interaction.finishDragDraw(using: planner)
         XCTAssertEqual(path.first, GridPosition(x: 2, y: 3))
         XCTAssertEqual(path.last, GridPosition(x: 6, y: 3))
         XCTAssertFalse(interaction.isDragDrawActive)
+        XCTAssertTrue(interaction.dragPreviewPath.isEmpty)
     }
 }
