@@ -295,6 +295,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                     cameraState: cameraState,
                     debugMode: enableDebugViews ? .tactical : .none,
                     highlightedCell: runtime.highlightedCell,
+                    highlightedPath: interaction.dragPreviewPath,
                     highlightedStructure: interaction.isBuildMode && runtime.highlightedCell != nil ? selectedStructure : nil,
                     placementResult: runtime.placementResult,
                     onTap: { location, viewport in
@@ -845,6 +846,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
     var cameraState: WhiteboxCameraState
     var debugMode: DebugVisualizationMode
     var highlightedCell: GridPosition?
+    var highlightedPath: [GridPosition]
     var highlightedStructure: StructureType?
     var placementResult: PlacementResult
     var onTap: (CGPoint, CGSize) -> Void
@@ -878,7 +880,12 @@ private struct MetalSurfaceView: NSViewRepresentable {
         renderer.worldState = world
         renderer.cameraState = cameraState
         renderer.debugMode = debugMode
-        renderer.setPlacementHighlight(cell: highlightedCell, structure: highlightedStructure, result: placementResult)
+        renderer.setPlacementHighlight(
+            cell: highlightedCell,
+            path: highlightedPath,
+            structure: highlightedStructure,
+            result: placementResult
+        )
     }
 
     func makeCoordinator() -> Coordinator {

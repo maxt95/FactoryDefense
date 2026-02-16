@@ -25,6 +25,7 @@ struct WhiteboxUniforms {
     uint debugModeRaw;
     int highlightedX;
     int highlightedY;
+    uint highlightedPathCount;
     uint highlightedStructureTypeRaw;
     int placementResultRaw;
     float cameraPanX;
@@ -209,6 +210,7 @@ kernel void whitebox_board(
     device const WhiteboxEntity* entities [[buffer(5)]],
     device const WhiteboxTurretOverlay* turretOverlays [[buffer(6)]],
     device const WhiteboxPathSegment* pathSegments [[buffer(7)]],
+    device const WhiteboxPoint* highlightedPath [[buffer(8)]],
     uint2 gid [[thread_position_in_grid]]
 ) {
     if (gid.x >= uniforms.viewportPixelWidth || gid.y >= uniforms.viewportPixelHeight) {
@@ -267,6 +269,10 @@ kernel void whitebox_board(
         const float borderDistance = min(min(local.x, 1.0 - local.x), min(local.y, 1.0 - local.y));
         if (borderDistance < 0.05) {
             color *= 0.68;
+        }
+
+        if (contains_cell(highlightedPath, uniforms.highlightedPathCount, cell)) {
+            color = mix(color, float3(0.08, 0.46, 0.70), 0.62);
         }
 
         if (uniforms.highlightedX >= 0 && uniforms.highlightedY >= 0) {

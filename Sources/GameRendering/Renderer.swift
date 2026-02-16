@@ -20,6 +20,7 @@ public final class FactoryRenderer: NSObject {
     public var worldState: WorldState
     public var cameraState: WhiteboxCameraState
     public var highlightedCell: GridPosition?
+    public var highlightedPath: [GridPosition]
     public var highlightedStructure: StructureType?
     public var placementResult: PlacementResult
 
@@ -50,6 +51,7 @@ public final class FactoryRenderer: NSObject {
         self.worldState = worldState
         self.cameraState = WhiteboxCameraState()
         self.highlightedCell = nil
+        self.highlightedPath = []
         self.highlightedStructure = nil
         self.placementResult = .ok
         self.camera = IsometricCamera()
@@ -93,8 +95,14 @@ public final class FactoryRenderer: NSObject {
         )
     }
 
-    public func setPlacementHighlight(cell: GridPosition?, structure: StructureType?, result: PlacementResult) {
+    public func setPlacementHighlight(
+        cell: GridPosition?,
+        path: [GridPosition] = [],
+        structure: StructureType?,
+        result: PlacementResult
+    ) {
         highlightedCell = cell
+        highlightedPath = path
         highlightedStructure = structure
         placementResult = result
     }
@@ -164,6 +172,7 @@ extension FactoryRenderer: MTKViewDelegate {
             debugMode: debugMode,
             cameraState: cameraState,
             highlightedCell: highlightedCell,
+            highlightedPath: highlightedPath,
             highlightedStructure: highlightedStructure,
             placementResult: placementResult,
             currentDrawable: drawable,

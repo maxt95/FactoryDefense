@@ -26,6 +26,7 @@ private struct WhiteboxUniforms {
     var debugModeRaw: UInt32
     var highlightedX: Int32
     var highlightedY: Int32
+    var highlightedPathCount: UInt32
     var highlightedStructureTypeRaw: UInt32
     var placementResultRaw: Int32
     var cameraPanX: Float
@@ -107,6 +108,7 @@ public final class WhiteboxRenderer {
             debugModeRaw: debugOverlays.debugModeRaw,
             highlightedX: Int32(context.highlightedCell?.x ?? -1),
             highlightedY: Int32(context.highlightedCell?.y ?? -1),
+            highlightedPathCount: UInt32(context.highlightedPath.count),
             highlightedStructureTypeRaw: highlightedStructureTypeRaw(context.highlightedStructure),
             placementResultRaw: Int32(context.placementResult.rawValue),
             cameraPanX: context.cameraState.pan.x,
@@ -122,6 +124,10 @@ public final class WhiteboxRenderer {
         let entityBuffer: MTLBuffer? = nil
         let turretOverlayBuffer = makeTurretOverlayBuffer(context.device, overlays: debugOverlays.turretOverlays)
         let pathSegmentBuffer = makePathSegmentBuffer(context.device, segments: debugOverlays.pathSegments)
+        let highlightedPathBuffer = makePointBuffer(
+            context.device,
+            points: context.highlightedPath.map { WhiteboxPoint(x: Int32($0.x), y: Int32($0.y)) }
+        )
 
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
         encoder.label = "WhiteboxBoardCompute"
@@ -135,6 +141,7 @@ public final class WhiteboxRenderer {
         encoder.setBuffer(entityBuffer, offset: 0, index: 5)
         encoder.setBuffer(turretOverlayBuffer, offset: 0, index: 6)
         encoder.setBuffer(pathSegmentBuffer, offset: 0, index: 7)
+        encoder.setBuffer(highlightedPathBuffer, offset: 0, index: 8)
 
         let threadsPerThreadgroup = MTLSize(width: 8, height: 8, depth: 1)
         let threadgroups = MTLSize(
