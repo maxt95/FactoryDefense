@@ -584,6 +584,197 @@ public struct ResourceHUDPanel: View {
     }
 }
 
+public struct TileLegendPanel: View {
+    public init() {}
+
+    public var body: some View {
+        let sample = sampleColors
+
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Tile Legend")
+                .font(.headline)
+
+            ForEach(rows) { row in
+                HStack(alignment: .top, spacing: 8) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(row.color)
+                        .frame(width: 14, height: 14)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 4)
+                                .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                        }
+                        .padding(.top, 3)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.label)
+                            .font(.subheadline.weight(.semibold))
+                        Text(row.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(row.formula)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(6)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+            }
+
+            Text(
+                "Order: walkable -> spawn blend -> blocked override -> restricted blend -> ramp boost -> base override -> border darken (x0.68 near edges) -> preview blend."
+            )
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+
+            Text(
+                "Ramp sample: walkable + 0.16 (elevation 2) = \(sample.rampSample.label)"
+            )
+            .font(.caption2.monospaced())
+            .foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var rows: [TileLegendRow] {
+        let sample = sampleColors
+        return [
+            TileLegendRow(
+                id: "walkable",
+                label: "Walkable",
+                detail: "Default buildable terrain.",
+                formula: "RGB(0.160, 0.180, 0.200)",
+                color: sample.walkable.color
+            ),
+            TileLegendRow(
+                id: "spawn",
+                label: "Spawn Lane",
+                detail: "Enemy entry edge.",
+                formula: "mix(walkable, RGB(0.360,0.200,0.180), 0.55) = \(sample.spawnLane.label)",
+                color: sample.spawnLane.color
+            ),
+            TileLegendRow(
+                id: "blocked",
+                label: "Blocked",
+                detail: "Unwalkable terrain.",
+                formula: "RGB(0.080, 0.090, 0.100) (override)",
+                color: sample.blocked.color
+            ),
+            TileLegendRow(
+                id: "restricted",
+                label: "Restricted",
+                detail: "Placement is not allowed.",
+                formula: "mix(current, RGB(0.400,0.320,0.100), 0.70) -> walkable sample \(sample.restrictedOnWalkable.label)",
+                color: sample.restrictedOnWalkable.color
+            ),
+            TileLegendRow(
+                id: "ramp",
+                label: "Ramp",
+                detail: "Adds brightness by elevation.",
+                formula: "current += min(elevation * 0.08, 0.32) per RGB channel",
+                color: sample.rampSample.color
+            ),
+            TileLegendRow(
+                id: "base",
+                label: "Base",
+                detail: "Protect this tile.",
+                formula: "RGB(0.120, 0.420, 0.460) (override)",
+                color: sample.base.color
+            ),
+            TileLegendRow(
+                id: "preview-valid",
+                label: "Preview Valid",
+                detail: "Placement footprint when valid.",
+                formula: "mix(current, RGB(0.110,0.560,0.190), 0.75) -> walkable sample \(sample.previewValidOnWalkable.label)",
+                color: sample.previewValidOnWalkable.color
+            ),
+            TileLegendRow(
+                id: "preview-invalid",
+                label: "Preview Invalid",
+                detail: "Placement footprint when invalid.",
+                formula: "mix(current, RGB(0.620,0.120,0.120), 0.75) -> walkable sample \(sample.previewInvalidOnWalkable.label)",
+                color: sample.previewInvalidOnWalkable.color
+            )
+        ]
+    }
+
+    private var sampleColors: TileLegendSampleColors {
+        let walkable = RGBColor(0.16, 0.18, 0.20)
+        let spawnTint = RGBColor(0.36, 0.20, 0.18)
+        let blocked = RGBColor(0.08, 0.09, 0.10)
+        let restrictedTint = RGBColor(0.40, 0.32, 0.10)
+        let base = RGBColor(0.12, 0.42, 0.46)
+        let previewValidAccent = RGBColor(0.11, 0.56, 0.19)
+        let previewInvalidAccent = RGBColor(0.62, 0.12, 0.12)
+
+        return TileLegendSampleColors(
+            walkable: walkable,
+            spawnLane: walkable.mixed(with: spawnTint, factor: 0.55),
+            blocked: blocked,
+            restrictedOnWalkable: walkable.mixed(with: restrictedTint, factor: 0.70),
+            rampSample: walkable.adding(0.16),
+            base: base,
+            previewValidOnWalkable: walkable.mixed(with: previewValidAccent, factor: 0.75),
+            previewInvalidOnWalkable: walkable.mixed(with: previewInvalidAccent, factor: 0.75)
+        )
+    }
+
+    private struct TileLegendSampleColors {
+        var walkable: RGBColor
+        var spawnLane: RGBColor
+        var blocked: RGBColor
+        var restrictedOnWalkable: RGBColor
+        var rampSample: RGBColor
+        var base: RGBColor
+        var previewValidOnWalkable: RGBColor
+        var previewInvalidOnWalkable: RGBColor
+    }
+
+    private struct RGBColor {
+        var r: Double
+        var g: Double
+        var b: Double
+
+        init(_ r: Double, _ g: Double, _ b: Double) {
+            self.r = r
+            self.g = g
+            self.b = b
+        }
+
+        var color: Color {
+            Color(red: r, green: g, blue: b)
+        }
+
+        var label: String {
+            String(format: "RGB(%.3f, %.3f, %.3f)", r, g, b)
+        }
+
+        func mixed(with other: RGBColor, factor: Double) -> RGBColor {
+            let t = min(max(factor, 0), 1)
+            let inverse = 1 - t
+            return RGBColor(
+                (r * inverse) + (other.r * t),
+                (g * inverse) + (other.g * t),
+                (b * inverse) + (other.b * t)
+            )
+        }
+
+        func adding(_ value: Double) -> RGBColor {
+            RGBColor(r + value, g + value, b + value)
+        }
+    }
+
+    private struct TileLegendRow: Identifiable {
+        var id: String
+        var label: String
+        var detail: String
+        var formula: String
+        var color: Color
+    }
+}
+
 public struct BuildingReferencePanel: View {
     public var world: WorldState
 

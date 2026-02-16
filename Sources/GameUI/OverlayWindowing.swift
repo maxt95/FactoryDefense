@@ -10,6 +10,7 @@ public enum GameplayOverlayWindowID: String, CaseIterable, Sendable {
     case resources
     case buildMenu
     case buildingReference
+    case tileLegend
     case techTree
     case onboarding
     case tuningDashboard
@@ -52,6 +53,7 @@ public struct GameplayOverlayLayoutState: Sendable {
             (.resources, CGPoint(x: 16, y: 124), CGSize(width: 860, height: 220)),
             (.buildMenu, CGPoint(x: 16, y: 356), CGSize(width: 320, height: 460)),
             (.buildingReference, CGPoint(x: 348, y: 356), CGSize(width: 300, height: 460)),
+            (.tileLegend, CGPoint(x: 1032, y: 356), CGSize(width: 280, height: 240)),
             (.techTree, CGPoint(x: 660, y: 356), CGSize(width: 360, height: 300)),
             (.onboarding, CGPoint(x: 660, y: 668), CGSize(width: 360, height: 300)),
             (.tuningDashboard, CGPoint(x: 660, y: 980), CGSize(width: 220, height: 220))
@@ -350,6 +352,8 @@ public struct GameplayOverlayHost<Content: View>: View {
             return CGPoint(x: 16, y: 356)
         case .buildingReference:
             return CGPoint(x: 348, y: 356)
+        case .tileLegend:
+            return CGPoint(x: 1032, y: 356)
         case .techTree:
             return CGPoint(x: 660, y: 356)
         case .onboarding:

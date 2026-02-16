@@ -185,6 +185,7 @@ private struct FactoryDefenseGameplayView: View {
             GameplayOverlayWindowDefinition(id: .resources, title: "Resources", preferredWidth: 860, preferredHeight: 260),
             GameplayOverlayWindowDefinition(id: .buildMenu, title: "Build", preferredWidth: 320, preferredHeight: 520),
             GameplayOverlayWindowDefinition(id: .buildingReference, title: "Buildings", preferredWidth: 300, preferredHeight: 520),
+            GameplayOverlayWindowDefinition(id: .tileLegend, title: "Tile Legend", preferredWidth: 300, preferredHeight: 340),
             GameplayOverlayWindowDefinition(id: .techTree, title: "Tech Tree", preferredWidth: 360, preferredHeight: 320),
             GameplayOverlayWindowDefinition(id: .onboarding, title: "Objectives", preferredWidth: 360, preferredHeight: 340),
             GameplayOverlayWindowDefinition(id: .tuningDashboard, title: "Telemetry", preferredWidth: 240, preferredHeight: 260)
@@ -230,6 +231,9 @@ private struct FactoryDefenseGameplayView: View {
         case .buildingReference:
             BuildingReferencePanel(world: runtime.world)
 
+        case .tileLegend:
+            TileLegendPanel()
+
         case .techTree:
             TechTreePanel(nodes: techTree.nodes(inventory: inventory))
 
@@ -273,6 +277,8 @@ private struct FactoryDefenseGameplayView: View {
             return CGPoint(x: 16, y: 356)
         case .buildingReference:
             return CGPoint(x: 348, y: 356)
+        case .tileLegend:
+            return CGPoint(x: 1032, y: 356)
         case .techTree:
             return CGPoint(x: 660, y: 356)
         case .onboarding:
