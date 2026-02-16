@@ -32,7 +32,12 @@ public struct CommandSystem: SimulationSystem {
                 let placementAnchor = request.position.translated(byX: expansionInsets.left, byY: expansionInsets.top)
                 var previewState = state
                 previewState.applyBoardExpansion(expansionInsets)
-                let result = placementValidator.canPlace(request.structure, at: placementAnchor, in: previewState)
+                let result = placementValidator.canPlace(
+                    request.structure,
+                    at: placementAnchor,
+                    targetPatchID: request.targetPatchID,
+                    in: previewState
+                )
                 guard result == .ok else {
                     context.emit(
                         SimEvent(
@@ -42,6 +47,27 @@ public struct CommandSystem: SimulationSystem {
                         )
                     )
                     continue
+                }
+
+                let targetPatchID: Int?
+                if request.structure == .miner {
+                    targetPatchID = placementValidator.resolvedMinerPatchID(
+                        forMinerAt: placementAnchor,
+                        targetPatchID: request.targetPatchID,
+                        in: previewState
+                    )
+                    guard targetPatchID != nil else {
+                        context.emit(
+                            SimEvent(
+                                tick: state.tick,
+                                kind: .placementRejected,
+                                value: PlacementResult.invalidMinerPlacement.rawValue
+                            )
+                        )
+                        continue
+                    }
+                } else {
+                    targetPatchID = nil
                 }
 
                 guard state.economy.consume(costs: request.structure.buildCosts) else {
@@ -61,7 +87,14 @@ public struct CommandSystem: SimulationSystem {
                     y: placementAnchor.y,
                     z: state.board.elevation(at: placementAnchor)
                 )
-                let structureID = state.entities.spawnStructure(request.structure, at: placementPosition)
+                let structureID = state.entities.spawnStructure(
+                    request.structure,
+                    at: placementPosition,
+                    boundPatchID: targetPatchID
+                )
+                if let targetPatchID {
+                    bindMiner(structureID, toPatchID: targetPatchID, state: &state)
+                }
                 context.emit(
                     SimEvent(
                         tick: state.tick,
@@ -76,6 +109,12 @@ public struct CommandSystem: SimulationSystem {
                 state.threat.nextWaveTick = state.tick
             }
         }
+    }
+
+    private func bindMiner(_ minerID: EntityID, toPatchID patchID: Int, state: inout WorldState) {
+        guard let patchIndex = state.orePatches.firstIndex(where: { $0.id == patchID }) else { return }
+        state.orePatches[patchIndex].boundMinerID = minerID
+        state.entities.updateBoundPatchID(minerID, to: patchID)
     }
 }
 
@@ -100,12 +139,18 @@ public struct EconomySystem: SimulationSystem {
     public func update(state: inout WorldState, context: SystemContext) {
         let structures = state.entities.all.filter { $0.category == .structure }
         syncLogisticsRuntime(structures: structures, state: &state)
+        syncOrePatchBindings(state: &state)
 
         var powerAvailable = 0
         var powerDemand = 0
         for entity in structures {
             guard let structureType = entity.structureType else { continue }
-            let structurePower = structureType.powerDemand
+            let structurePower: Int
+            if structureType == .miner, !minerCanExtract(entity, state: state) {
+                structurePower = 0
+            } else {
+                structurePower = structureType.powerDemand
+            }
             if structurePower < 0 {
                 powerAvailable += abs(structurePower)
             } else {
@@ -119,7 +164,7 @@ public struct EconomySystem: SimulationSystem {
         let tickDuration = context.tickDurationSeconds
 
         advanceConveyors(structures: structures, state: &state)
-        produceRawResources(state: &state, tickDuration: tickDuration, efficiency: efficiency)
+        produceRawResources(state: &state, tickDuration: tickDuration, efficiency: efficiency, context: context)
 
         runProduction(
             structures: state.entities.structures(of: .smelter),
@@ -158,13 +203,72 @@ public struct EconomySystem: SimulationSystem {
         }
     }
 
-    private func produceRawResources(state: inout WorldState, tickDuration: Double, efficiency: Double) {
-        let minerCount = Double(state.entities.structures(of: .miner).count)
-        guard minerCount > 0 else { return }
-        let effectiveMinerRate = minerCount * efficiency * tickDuration
-        state.economy.addFractional(itemID: "ore_iron", quantity: effectiveMinerRate * 1.0)
-        state.economy.addFractional(itemID: "ore_copper", quantity: effectiveMinerRate * 0.8)
-        state.economy.addFractional(itemID: "ore_coal", quantity: effectiveMinerRate * 0.6)
+    private func produceRawResources(
+        state: inout WorldState,
+        tickDuration: Double,
+        efficiency: Double,
+        context: SystemContext
+    ) {
+        let miners = state.entities.structures(of: .miner).sorted(by: { $0.id < $1.id })
+        guard !miners.isEmpty else { return }
+
+        for miner in miners {
+            guard let patchIndex = boundPatchIndex(for: miner, state: &state) else {
+                state.economy.productionProgressByStructure[miner.id] = 0
+                continue
+            }
+
+            let outputCapacity = outputBufferCapacity(for: .miner)
+            var outputBuffer = state.economy.structureOutputBuffers[miner.id, default: [:]]
+            let currentOutput = outputBuffer.values.reduce(0, +)
+            guard currentOutput < outputCapacity else { continue }
+
+            var patch = state.orePatches[patchIndex]
+            guard patch.remainingOre > 0 else {
+                state.economy.productionProgressByStructure[miner.id] = 0
+                continue
+            }
+
+            state.economy.productionProgressByStructure[miner.id, default: 0] += tickDuration * efficiency
+            var progress = state.economy.productionProgressByStructure[miner.id, default: 0]
+            var exhaustedThisTick = false
+
+            while progress + 0.000_001 >= 1.0,
+                  patch.remainingOre > 0,
+                  outputBuffer.values.reduce(0, +) < outputCapacity {
+                outputBuffer[patch.oreType, default: 0] += 1
+                patch.remainingOre -= 1
+                progress -= 1.0
+                if patch.remainingOre <= 0 {
+                    exhaustedThisTick = true
+                    break
+                }
+            }
+
+            state.economy.structureOutputBuffers[miner.id] = outputBuffer
+            state.economy.productionProgressByStructure[miner.id] = max(0, progress)
+            state.orePatches[patchIndex] = patch
+
+            if exhaustedThisTick {
+                context.emit(
+                    SimEvent(
+                        tick: state.tick,
+                        kind: .patchExhausted,
+                        entity: miner.id,
+                        value: patch.id,
+                        itemID: patch.oreType
+                    )
+                )
+                context.emit(
+                    SimEvent(
+                        tick: state.tick,
+                        kind: .minerIdled,
+                        entity: miner.id,
+                        value: patch.id
+                    )
+                )
+            }
+        }
     }
 
     private func runProduction(
@@ -369,6 +473,62 @@ public struct EconomySystem: SimulationSystem {
         state.economy.conveyorPayloadByEntity = state.economy.conveyorPayloadByEntity.filter {
             structureTypesByID[$0.key] == .conveyor
         }
+    }
+
+    private func syncOrePatchBindings(state: inout WorldState) {
+        let minerIDs = Set(state.entities.structures(of: .miner).map(\.id))
+        let patchIDs = Set(state.orePatches.map(\.id))
+
+        for patchIndex in state.orePatches.indices {
+            if let boundMinerID = state.orePatches[patchIndex].boundMinerID,
+               !minerIDs.contains(boundMinerID) {
+                state.orePatches[patchIndex].boundMinerID = nil
+            }
+        }
+
+        for miner in state.entities.structures(of: .miner) {
+            guard let patchID = miner.boundPatchID else { continue }
+            if !patchIDs.contains(patchID) {
+                state.entities.updateBoundPatchID(miner.id, to: nil)
+                state.economy.productionProgressByStructure[miner.id] = 0
+            }
+        }
+    }
+
+    private func minerCanExtract(_ miner: Entity, state: WorldState) -> Bool {
+        guard let patchID = miner.boundPatchID,
+              let patch = state.orePatches.first(where: { $0.id == patchID }) else {
+            return false
+        }
+        return patch.remainingOre > 0 && patch.boundMinerID == miner.id
+    }
+
+    private func boundPatchIndex(for miner: Entity, state: inout WorldState) -> Int? {
+        if let patchID = miner.boundPatchID,
+           let patchIndex = state.orePatches.firstIndex(where: { $0.id == patchID }),
+           isAdjacent(miner.position, state.orePatches[patchIndex].position),
+           state.orePatches[patchIndex].boundMinerID == miner.id {
+            return patchIndex
+        }
+
+        let candidates = state.orePatches.indices
+            .filter { index in
+                let patch = state.orePatches[index]
+                return patch.boundMinerID == nil && !patch.isExhausted && isAdjacent(miner.position, patch.position)
+            }
+            .sorted { lhs, rhs in
+                state.orePatches[lhs].id < state.orePatches[rhs].id
+            }
+
+        guard let selectedIndex = candidates.first else { return nil }
+        let patchID = state.orePatches[selectedIndex].id
+        state.orePatches[selectedIndex].boundMinerID = miner.id
+        state.entities.updateBoundPatchID(miner.id, to: patchID)
+        return selectedIndex
+    }
+
+    private func isAdjacent(_ lhs: GridPosition, _ rhs: GridPosition) -> Bool {
+        abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y) == 1
     }
 
     private func advanceConveyors(structures: [Entity], state: inout WorldState) {

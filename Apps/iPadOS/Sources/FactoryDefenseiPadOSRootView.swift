@@ -297,6 +297,8 @@ private struct FactoryDefenseiPadOSGameplayView: View {
             return "Restricted"
         case .insufficientResources:
             return "Insufficient resources"
+        case .invalidMinerPlacement:
+            return "Needs ore patch"
         }
     }
 

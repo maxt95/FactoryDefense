@@ -157,10 +157,12 @@ public extension StructureType {
 public struct BuildRequest: Codable, Hashable, Sendable {
     public var structure: StructureType
     public var position: GridPosition
+    public var targetPatchID: Int?
 
-    public init(structure: StructureType, position: GridPosition) {
+    public init(structure: StructureType, position: GridPosition, targetPatchID: Int? = nil) {
         self.structure = structure
         self.position = position
+        self.targetPatchID = targetPatchID
     }
 }
 
@@ -209,7 +211,8 @@ public enum CommandPayload: Codable, Hashable, Sendable {
     var sortToken: String {
         switch self {
         case .placeStructure(let build):
-            return "place:\(build.structure.rawValue):\(build.position.x):\(build.position.y):\(build.position.z)"
+            let patchToken = build.targetPatchID.map(String.init) ?? "-"
+            return "place:\(build.structure.rawValue):\(build.position.x):\(build.position.y):\(build.position.z):\(patchToken)"
         case .extract:
             return "extract"
         case .triggerWave:
@@ -252,6 +255,8 @@ public enum EventKind: String, Codable, Sendable {
     case milestoneReached
     case extracted
     case placementRejected
+    case patchExhausted
+    case minerIdled
 }
 
 public struct SimEvent: Codable, Hashable, Sendable {
@@ -281,6 +286,7 @@ public struct Entity: Codable, Hashable, Sendable {
     public var category: EntityCategory
     public var structureType: StructureType?
     public var turretDefID: String?
+    public var boundPatchID: Int?
     public var position: GridPosition
     public var health: Int
     public var maxHealth: Int
@@ -290,6 +296,7 @@ public struct Entity: Codable, Hashable, Sendable {
         category: EntityCategory,
         structureType: StructureType? = nil,
         turretDefID: String? = nil,
+        boundPatchID: Int? = nil,
         position: GridPosition,
         health: Int,
         maxHealth: Int
@@ -298,6 +305,7 @@ public struct Entity: Codable, Hashable, Sendable {
         self.category = category
         self.structureType = structureType
         self.turretDefID = turretDefID
+        self.boundPatchID = boundPatchID
         self.position = position
         self.health = health
         self.maxHealth = maxHealth
@@ -606,14 +614,28 @@ public struct OrePatch: Codable, Hashable, Sendable {
     public var position: GridPosition
     public var totalOre: Int
     public var remainingOre: Int
+    public var boundMinerID: EntityID?
 
-    public init(id: Int, oreType: ItemID, richness: OrePatchRichness, position: GridPosition, totalOre: Int, remainingOre: Int) {
+    public init(
+        id: Int,
+        oreType: ItemID,
+        richness: OrePatchRichness,
+        position: GridPosition,
+        totalOre: Int,
+        remainingOre: Int,
+        boundMinerID: EntityID? = nil
+    ) {
         self.id = id
         self.oreType = oreType
         self.richness = richness
         self.position = position
         self.totalOre = totalOre
         self.remainingOre = remainingOre
+        self.boundMinerID = boundMinerID
+    }
+
+    public var isExhausted: Bool {
+        remainingOre <= 0
     }
 }
 

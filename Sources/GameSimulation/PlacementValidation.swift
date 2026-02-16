@@ -7,18 +7,29 @@ public enum PlacementResult: Int, Codable, Hashable, Sendable {
     case blocksCriticalPath = 3
     case restrictedZone = 4
     case insufficientResources = 5
+    case invalidMinerPlacement = 6
 }
 
 public struct PlacementValidator {
     public init() {}
 
-    public func canPlace(_ structure: StructureType, at position: GridPosition, in world: WorldState) -> PlacementResult {
+    public func canPlace(
+        _ structure: StructureType,
+        at position: GridPosition,
+        targetPatchID: Int? = nil,
+        in world: WorldState
+    ) -> PlacementResult {
         let coveredCells = structure.coveredCells(anchor: position)
         guard coveredCells.allSatisfy(world.board.contains(_:)) else { return .outOfBounds }
         guard !coveredCells.contains(where: world.board.isRestricted(_:)) else { return .restrictedZone }
 
         if hasOccupiedCell(in: coveredCells, entities: world.entities) {
             return .occupied
+        }
+
+        if structure == .miner,
+           resolvedMinerPatchID(forMinerAt: position, targetPatchID: targetPatchID, in: world) == nil {
+            return .invalidMinerPlacement
         }
 
         guard structure.blocksMovement else {
@@ -67,6 +78,33 @@ public struct PlacementValidator {
         }
 
         return true
+    }
+
+    public func resolvedMinerPatchID(
+        forMinerAt minerPosition: GridPosition,
+        targetPatchID: Int?,
+        in world: WorldState
+    ) -> Int? {
+        if let targetPatchID {
+            guard let patch = world.orePatches.first(where: { $0.id == targetPatchID }) else {
+                return nil
+            }
+            guard patch.boundMinerID == nil else { return nil }
+            guard !patch.isExhausted else { return nil }
+            return isAdjacent(minerPosition, patch.position) ? patch.id : nil
+        }
+
+        let candidates = world.orePatches
+            .filter { patch in
+                patch.boundMinerID == nil && !patch.isExhausted && isAdjacent(minerPosition, patch.position)
+            }
+            .map(\.id)
+            .sorted()
+        return candidates.first
+    }
+
+    private func isAdjacent(_ lhs: GridPosition, _ rhs: GridPosition) -> Bool {
+        abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y) == 1
     }
 
     func navigationMap(for world: WorldState, pendingBlockingCells: [GridPosition] = []) -> GridMap {

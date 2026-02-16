@@ -479,6 +479,8 @@ private struct FactoryDefensemacOSGameplayView: View {
             return "Restricted"
         case .insufficientResources:
             return "Insufficient resources"
+        case .invalidMinerPlacement:
+            return "Needs adjacent ore patch"
         }
     }
 

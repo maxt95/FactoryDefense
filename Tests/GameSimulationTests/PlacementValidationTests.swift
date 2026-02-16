@@ -328,4 +328,87 @@ final class PlacementValidationTests: XCTestCase {
         let path = Pathfinder().findPath(on: map, from: spawn, to: finalWorld.board.basePosition)
         XCTAssertNotNil(path)
     }
+
+    func testMinerPlacementRequiresAdjacentUnboundPatch() {
+        let board = BoardState(
+            width: 12,
+            height: 12,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 11,
+            spawnYMin: 0,
+            spawnYMax: 0,
+            blockedCells: [],
+            restrictedCells: [GridPosition(x: 4, y: 4)],
+            ramps: []
+        )
+        let world = WorldState(
+            tick: 0,
+            board: board,
+            entities: EntityStore(),
+            orePatches: [
+                OrePatch(
+                    id: 7,
+                    oreType: "ore_iron",
+                    richness: .normal,
+                    position: GridPosition(x: 4, y: 4),
+                    totalOre: 500,
+                    remainingOre: 500
+                )
+            ],
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState(),
+            combat: CombatState(basePosition: GridPosition(x: 0, y: 0), spawnEdgeX: 11, spawnYMin: 0, spawnYMax: 0)
+        )
+
+        let validator = PlacementValidator()
+        XCTAssertEqual(
+            validator.canPlace(.miner, at: GridPosition(x: 5, y: 4), in: world),
+            .ok
+        )
+        XCTAssertEqual(
+            validator.canPlace(.miner, at: GridPosition(x: 8, y: 8), in: world),
+            .invalidMinerPlacement
+        )
+    }
+
+    func testMinerPlacementRejectsOccupiedPatchBindingTarget() {
+        let board = BoardState(
+            width: 12,
+            height: 12,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 11,
+            spawnYMin: 0,
+            spawnYMax: 0,
+            blockedCells: [],
+            restrictedCells: [GridPosition(x: 4, y: 4)],
+            ramps: []
+        )
+        let world = WorldState(
+            tick: 0,
+            board: board,
+            entities: EntityStore(),
+            orePatches: [
+                OrePatch(
+                    id: 8,
+                    oreType: "ore_copper",
+                    richness: .normal,
+                    position: GridPosition(x: 4, y: 4),
+                    totalOre: 400,
+                    remainingOre: 400,
+                    boundMinerID: 99
+                )
+            ],
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState(),
+            combat: CombatState(basePosition: GridPosition(x: 0, y: 0), spawnEdgeX: 11, spawnYMin: 0, spawnYMax: 0)
+        )
+
+        let validator = PlacementValidator()
+        XCTAssertEqual(
+            validator.canPlace(.miner, at: GridPosition(x: 5, y: 4), targetPatchID: 8, in: world),
+            .invalidMinerPlacement
+        )
+    }
 }

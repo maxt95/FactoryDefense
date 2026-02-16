@@ -188,9 +188,9 @@ Ore patch generation, reveal, depletion, and renewal are defined in `ore_patches
 | `gear` production | Exists (Milestone 0) |
 | `ammo_plasma` production | Exists (Milestone 0) |
 | `wall_kit`, `turret_core`, `repair_kit` production | Exists (Milestone 0) |
-| Miners produce from ore patches | Gap — miners produce from nothing |
-| ResourceNode entity type | Gap — no concept of ore patches |
-| Ore depletion tracking | Gap |
+| Miners produce from ore patches | Partial — miners now require adjacent patch binding and extract from finite patch ore into output buffers |
+| ResourceNode entity type | Partial — `OrePatch` runtime model exists for deterministic Ring 0 patches; reveal/renewal rings remain follow-up |
+| Ore depletion tracking | Partial — patch depletion is live with `patchExhausted`/`minerIdled` events; renewal/reveal lifecycle remains follow-up |
 
 ---
 

@@ -92,4 +92,217 @@ final class LogisticsRuntimeTests: XCTestCase {
         XCTAssertEqual(engine.worldState.economy.inventories["ammo_light", default: 0], 1)
         XCTAssertEqual(engine.worldState.economy.structureInputBuffers[turretID]?["ammo_light", default: 0], 0)
     }
+
+    func testMinerPlacementBindsRequestedPatch() {
+        let board = BoardState(
+            width: 12,
+            height: 12,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 11,
+            spawnYMin: 0,
+            spawnYMax: 0,
+            blockedCells: [],
+            restrictedCells: [GridPosition(x: 4, y: 4)],
+            ramps: []
+        )
+        let world = WorldState(
+            tick: 0,
+            board: board,
+            entities: EntityStore(),
+            orePatches: [
+                OrePatch(
+                    id: 7,
+                    oreType: "ore_iron",
+                    richness: .normal,
+                    position: GridPosition(x: 4, y: 4),
+                    totalOre: 500,
+                    remainingOre: 500
+                )
+            ],
+            economy: EconomyState(inventories: ["plate_iron": 6, "gear": 3]),
+            threat: ThreatState(),
+            run: RunState()
+        )
+        let engine = SimulationEngine(worldState: world, systems: [CommandSystem()])
+        engine.enqueue(
+            PlayerCommand(
+                tick: 0,
+                actor: PlayerID(1),
+                payload: .placeStructure(
+                    BuildRequest(
+                        structure: .miner,
+                        position: GridPosition(x: 5, y: 4),
+                        targetPatchID: 7
+                    )
+                )
+            )
+        )
+
+        _ = engine.step()
+
+        guard let miner = engine.worldState.entities.structures(of: .miner).first else {
+            XCTFail("Expected miner placement to succeed")
+            return
+        }
+        XCTAssertEqual(miner.boundPatchID, 7)
+        XCTAssertEqual(engine.worldState.orePatches.first?.boundMinerID, miner.id)
+    }
+
+    func testMinerPlacementAutoBindsAdjacentPatchWhenTargetOmitted() {
+        let board = BoardState(
+            width: 12,
+            height: 12,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 11,
+            spawnYMin: 0,
+            spawnYMax: 0,
+            blockedCells: [],
+            restrictedCells: [GridPosition(x: 4, y: 4)],
+            ramps: []
+        )
+        let world = WorldState(
+            tick: 0,
+            board: board,
+            entities: EntityStore(),
+            orePatches: [
+                OrePatch(
+                    id: 7,
+                    oreType: "ore_iron",
+                    richness: .normal,
+                    position: GridPosition(x: 4, y: 4),
+                    totalOre: 500,
+                    remainingOre: 500
+                )
+            ],
+            economy: EconomyState(inventories: ["plate_iron": 6, "gear": 3]),
+            threat: ThreatState(),
+            run: RunState()
+        )
+        let engine = SimulationEngine(worldState: world, systems: [CommandSystem()])
+        engine.enqueue(
+            PlayerCommand(
+                tick: 0,
+                actor: PlayerID(1),
+                payload: .placeStructure(
+                    BuildRequest(
+                        structure: .miner,
+                        position: GridPosition(x: 5, y: 4)
+                    )
+                )
+            )
+        )
+
+        _ = engine.step()
+
+        guard let miner = engine.worldState.entities.structures(of: .miner).first else {
+            XCTFail("Expected miner placement to succeed")
+            return
+        }
+        XCTAssertEqual(miner.boundPatchID, 7)
+        XCTAssertEqual(engine.worldState.orePatches.first?.boundMinerID, miner.id)
+    }
+
+    func testMinerPlacementRejectsInvalidPatchTarget() {
+        let board = BoardState(
+            width: 12,
+            height: 12,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 11,
+            spawnYMin: 0,
+            spawnYMax: 0,
+            blockedCells: [],
+            restrictedCells: [GridPosition(x: 4, y: 4)],
+            ramps: []
+        )
+        let world = WorldState(
+            tick: 0,
+            board: board,
+            entities: EntityStore(),
+            orePatches: [
+                OrePatch(
+                    id: 13,
+                    oreType: "ore_coal",
+                    richness: .poor,
+                    position: GridPosition(x: 4, y: 4),
+                    totalOre: 150,
+                    remainingOre: 150
+                )
+            ],
+            economy: EconomyState(inventories: ["plate_iron": 6, "gear": 3]),
+            threat: ThreatState(),
+            run: RunState()
+        )
+        let engine = SimulationEngine(worldState: world, systems: [CommandSystem()])
+        engine.enqueue(
+            PlayerCommand(
+                tick: 0,
+                actor: PlayerID(1),
+                payload: .placeStructure(
+                    BuildRequest(
+                        structure: .miner,
+                        position: GridPosition(x: 7, y: 4),
+                        targetPatchID: 13
+                    )
+                )
+            )
+        )
+
+        let events = engine.step()
+
+        XCTAssertTrue(events.contains(where: {
+            $0.kind == .placementRejected && $0.value == PlacementResult.invalidMinerPlacement.rawValue
+        }))
+        XCTAssertTrue(engine.worldState.entities.structures(of: .miner).isEmpty)
+    }
+
+    func testMinerExtractsFromBoundPatchAndEmitsDepletionEvents() {
+        let board = BoardState(
+            width: 12,
+            height: 12,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 11,
+            spawnYMin: 0,
+            spawnYMax: 0,
+            blockedCells: [],
+            restrictedCells: [GridPosition(x: 4, y: 4)],
+            ramps: []
+        )
+        var entities = EntityStore()
+        _ = entities.spawnStructure(.powerPlant, at: GridPosition(x: 0, y: 1))
+        let minerID = entities.spawnStructure(.miner, at: GridPosition(x: 5, y: 4), boundPatchID: 21)
+
+        let world = WorldState(
+            tick: 0,
+            board: board,
+            entities: entities,
+            orePatches: [
+                OrePatch(
+                    id: 21,
+                    oreType: "ore_iron",
+                    richness: .poor,
+                    position: GridPosition(x: 4, y: 4),
+                    totalOre: 2,
+                    remainingOre: 2,
+                    boundMinerID: minerID
+                )
+            ],
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState()
+        )
+
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+
+        let events = engine.run(ticks: 45)
+
+        XCTAssertEqual(engine.worldState.orePatches.first?.remainingOre, 0)
+        XCTAssertEqual(engine.worldState.economy.structureOutputBuffers[minerID]?["ore_iron", default: 0], 0)
+        XCTAssertEqual(engine.worldState.economy.inventories["ore_iron", default: 0], 2)
+        XCTAssertEqual(engine.worldState.economy.powerDemand, 0)
+        XCTAssertTrue(events.contains(where: { $0.kind == .patchExhausted && $0.entity == minerID && $0.value == 21 }))
+        XCTAssertTrue(events.contains(where: { $0.kind == .minerIdled && $0.entity == minerID && $0.value == 21 }))
+    }
 }

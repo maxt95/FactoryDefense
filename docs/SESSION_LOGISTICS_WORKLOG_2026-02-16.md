@@ -43,17 +43,49 @@ File: `Sources/GameSimulation/Systems.swift` (`CombatSystem`)
 File: `Apps/iPadOS/Info.plist`
 - Added supported interface orientations to remove iPad validation warning.
 
+### 5) Ore patch binding + miner placement validation
+Files: `Sources/GameSimulation/SimulationTypes.swift`, `Sources/GameSimulation/PlacementValidation.swift`, `Sources/GameSimulation/Systems.swift`, `Sources/GameSimulation/EntityStore.swift`
+- Extended `BuildRequest` with optional `targetPatchID` for miner placement targeting.
+- Added runtime binding fields:
+  - `Entity.boundPatchID`
+  - `OrePatch.boundMinerID` (+ `isExhausted` helper)
+- Added `PlacementResult.invalidMinerPlacement` with deterministic adjacency/binding checks in `PlacementValidator`.
+- `CommandSystem` now resolves miner patch binding at placement time and emits placement rejection when no valid adjacent patch exists.
+
+### 6) Patch-based miner extraction + depletion events
+File: `Sources/GameSimulation/Systems.swift` (`EconomySystem`)
+- Replaced placeholder global miner ore generation with patch-based extraction from bound adjacent ore patches.
+- Added deterministic binding sync/recovery each tick for miner/patch linkage.
+- Miner extraction now:
+  - advances per-tick progress using existing power efficiency
+  - outputs ore by patch ore type
+  - decrements `remainingOre` from the bound patch
+  - emits `patchExhausted` and `minerIdled` on depletion
+- Miners with no valid extractable patch no longer contribute power demand (idle miners draw 0 power).
+
+### 7) App target compile fix for new placement result
+Files: `Apps/macOS/Sources/FactoryDefensemacOSRootView.swift`, `Apps/iOS/Sources/FactoryDefenseiOSRootView.swift`, `Apps/iPadOS/Sources/FactoryDefenseiPadOSRootView.swift`, `Sources/FactoryDefense/main.swift`
+- Added placement-label handling for `.invalidMinerPlacement` across app targets to keep `switch` statements exhaustive and surface clear player feedback.
+
 ## Test coverage added
 File: `Tests/GameSimulationTests/LogisticsRuntimeTests.swift`
 - `testConveyorCarriesOutputToNeighborInputBuffer`
 - `testConnectedConveyorBackpressureBlocksOutputDrain`
 - `testTurretConsumesLocalBufferAmmoBeforeGlobalInventory`
+- `testMinerPlacementBindsRequestedPatch`
+- `testMinerPlacementAutoBindsAdjacentPatchWhenTargetOmitted`
+- `testMinerPlacementRejectsInvalidPatchTarget`
+- `testMinerExtractsFromBoundPatchAndEmitsDepletionEvents`
+
+File: `Tests/GameSimulationTests/PlacementValidationTests.swift`
+- `testMinerPlacementRequiresAdjacentUnboundPatch`
+- `testMinerPlacementRejectsOccupiedPatchBindingTarget`
 
 Also updated deterministic golden hash:
 - `Tests/GameSimulationTests/GoldenReplayTests.swift`
 
 ## Validation executed
-- `swift test` -> pass (46/46)
+- `swift test` -> pass (67/67)
 - `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_macOS -configuration Debug build` -> success
 - `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_iOS -configuration Debug CODE_SIGNING_ALLOWED=NO build` -> success
 - `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_iPadOS -configuration Debug CODE_SIGNING_ALLOWED=NO build` -> success
@@ -69,7 +101,7 @@ Not yet complete vs PRD:
 - Splitter/merger behaviors.
 - Storage hub semantics as shared logistics pool.
 - Strict item filter model per port type beyond initial turret ammo filtering.
-- Ore patch adjacency/depletion and miner extraction realism.
+- Ore reveal rings + renewal spawning lifecycle.
 
 ## Key learnings
 - Preserving deterministic sort/transfer order is straightforward and stable when conveyor movement is processed in a fixed positional order.
@@ -77,7 +109,7 @@ Not yet complete vs PRD:
 - A compatibility fallback to global inventory allows incremental migration without destabilizing existing gameplay/tests.
 
 ## Next high-value iteration
-1. Ore patch entity model + miner adjacency/depletion tied to miner output buffers.
-2. Port definition runtime (input/output sides + filters) and building rotation in placement.
-3. Splitter/merger runtime and storage hub pull/push semantics.
-4. WaveSystem authored-wave consumption from `waves.json` with deterministic schedule.
+1. Port definition runtime (input/output sides + filters) and building rotation in placement.
+2. Splitter/merger runtime and storage hub pull/push semantics.
+3. WaveSystem authored-wave consumption from `waves.json` with deterministic schedule.
+4. Ore reveal/renewal lifecycle (geology survey unlocks + renewal spawn policy).

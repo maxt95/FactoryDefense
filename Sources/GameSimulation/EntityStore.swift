@@ -63,6 +63,7 @@ public struct EntityStore: Codable, Hashable, Sendable {
         _ structure: StructureType,
         at position: GridPosition,
         turretDefID: String? = nil,
+        boundPatchID: Int? = nil,
         health: Int = 100,
         maxHealth: Int? = nil
     ) -> EntityID {
@@ -76,6 +77,7 @@ public struct EntityStore: Codable, Hashable, Sendable {
             category: .structure,
             structureType: structure,
             turretDefID: resolvedTurretDefID,
+            boundPatchID: boundPatchID,
             position: position,
             health: resolvedHealth,
             maxHealth: resolvedMaxHealth
@@ -114,6 +116,12 @@ public struct EntityStore: Codable, Hashable, Sendable {
     public mutating func updatePosition(_ id: EntityID, to position: GridPosition) {
         guard var entity = entitiesByID[id] else { return }
         entity.position = position
+        entitiesByID[id] = entity
+    }
+
+    public mutating func updateBoundPatchID(_ id: EntityID, to boundPatchID: Int?) {
+        guard var entity = entitiesByID[id] else { return }
+        entity.boundPatchID = boundPatchID
         entitiesByID[id] = entity
     }
 

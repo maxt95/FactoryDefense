@@ -303,7 +303,7 @@ The implicit message to the player: "Here's your base and some supplies. The clo
 |------|------------|----------------|-------------|
 | Bootstrap signature | `bootstrap(difficulty:seed:)` | **Done** | — |
 | HQ entity | 2×2 HQ structure (500 HP) | **Done** | Move full HQ storage semantics to logistics model (remove temporary inventory mirroring) |
-| Ring 0 ore patches | Deterministic difficulty-scaled Ring 0 generation | **Done (v1 slice)** | Add full ore patch runtime: miner adjacency, depletion, renewal, reveal rings |
+| Ring 0 ore patches | Deterministic difficulty-scaled Ring 0 generation | **Done (v1 slice+)** | Add full ore lifecycle: reveal rings + renewal spawning (miner adjacency/binding + depletion runtime now in code) |
 | Starter structures | HQ-only at tick 0 | **Done** | — |
 | Difficulty timing | Grace/trickle/gap timing from `difficulty.json` | **Done** | Shift wave composition from formula runtime to authored `waves.json` consumption |
 | Run state | Phase + seed + HQ-linked game-over flow | **Done** | Keep extraction deferred until extraction economy is designed |

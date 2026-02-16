@@ -24,10 +24,10 @@ This plan tracks implementation status against the canonical v1 product directio
 
 ### Gameplay truth
 - `[x]` Ammo truth exists (`no ammo -> no shot`) with per-turret ammo/range/fire-rate/damage differentiation.
-- `[~]` Economy loop is recipe-driven with per-structure timing/progress for smelter/assembler/ammo-module, plus first-pass structure buffers/conveyor backpressure; miner/resource-node realism and full port/filter model remain follow-up.
+- `[~]` Economy loop is recipe-driven with per-structure timing/progress for smelter/assembler/ammo-module/miner, plus first-pass structure buffers/conveyor backpressure and miner->ore-patch extraction/depletion; full ore lifecycle (reveal/renewal) and full port/filter model remain follow-up.
 - `[x]` Build cost enforcement is simulation-authoritative.
-- `[~]` Run bootstrap/session init is partially aligned: HQ-only bootstrap, difficulty+seed params, phase lifecycle events, extraction UI removal, deterministic Ring 0 patch generation, and end-of-run summary flow are in; full ore runtime remains follow-up.
-- `[ ]` Ore patch adjacency/depletion and structure-targeting threat pressure are not complete.
+- `[~]` Run bootstrap/session init is partially aligned: HQ-only bootstrap, difficulty+seed params, phase lifecycle events, extraction UI removal, deterministic Ring 0 patch generation, miner adjacency/binding + patch depletion events, and end-of-run summary flow are in; reveal/renewal rings remain follow-up.
+- `[~]` Ore patch adjacency/depletion is now implemented for Ring 0 runtime; structure-targeting threat pressure remains incomplete.
 
 ### Rendering truth
 - `[~]` Render graph scaffolding exists, but whitebox geometry draw path is still incomplete.
@@ -50,9 +50,9 @@ Exit criteria:
 ### Milestone 1 - P1 Factory and Threat Reality (Current Top Priority)
 Goal: complete the first fully legible factory-defense vertical slice.
 
-- [~] Add ore patch/resource node entities and miner adjacency requirements (Ring 0 generation exists; miner binding/adjacency still pending).
-- [ ] Add ore depletion tracking and related simulation events/telemetry.
-- [~] Implement per-structure recipe timing/progress (smelter/assembler/ammo module done; miner extraction timing remains).
+- [x] Add ore patch/resource node entities and miner adjacency requirements (Ring 0 generation + miner binding/adjacency + placement validation implemented).
+- [~] Add ore depletion tracking and related simulation events/telemetry (depletion + `patchExhausted`/`minerIdled` events implemented; telemetry/dashboard surfacing remains).
+- [x] Implement per-structure recipe timing/progress (smelter/assembler/ammo module + miner extraction timing implemented).
 - [ ] Implement wave composition from `waves.json` for authored waves.
 - [ ] Add procedural wave generation policy for post-authored endless waves.
 - [ ] Add enemy structure-targeting behaviors (raider/breacher/artillery priorities).
@@ -116,7 +116,7 @@ Exit criteria:
 
 ### Workstream C - Factory Economy and Logistics
 - [~] Starter production loop and power scaling exist.
-- [~] Recipe-timed, per-structure production model exists; output buffering and local-input consumption are now partially wired.
+- [~] Recipe-timed, per-structure production model exists; output buffering/local-input consumption are wired, and miner extraction now binds to adjacent ore patches with finite depletion.
 - [~] Conveyor-routed runtime exists for directed transfer + backpressure on standard conveyors; splitter/merger/storage hub behavior remains.
 
 ### Workstream D - Combat, Waves, AI
@@ -162,7 +162,7 @@ Exit criteria:
   - `FactoryDefense_iPadOS` (`CODE_SIGNING_ALLOWED=NO`)
 
 ## Immediate Next Actions
-- [ ] Implement ore patch/resource node entities with miner adjacency + depletion tied to miner output buffers.
 - [ ] Expand logistics from first-pass eastward lanes to full port model (filters, orientation/rotation, storage hub semantics).
 - [ ] Move WaveSystem from formula spawning to `waves.json` authored waves (1-8) with deterministic scheduling.
 - [ ] Implement structure-targeting enemy behaviors to create production-line cascade pressure.
+- [ ] Implement ore reveal/renewal lifecycle (geology survey unlocks, ring reveal state, renewal spawn policy) on top of current Ring 0 depletion runtime.
