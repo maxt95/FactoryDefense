@@ -304,17 +304,20 @@ public struct CommandSystem: SimulationSystem {
 
 public struct EconomySystem: SimulationSystem {
     private let recipesByID: [String: RecipeDef]
+    private let buildingDefsByID: [String: BuildingDef]
     private let minimumConstructionStock: [ItemID: Int]
     private let reserveProtectedRecipeIDs: Set<String>
     private let conveyorTicksPerTile: Int
 
     public init(
         recipes: [RecipeDef] = EconomySystem.defaultRecipes,
+        buildings: [BuildingDef] = EconomySystem.defaultBuildings,
         minimumConstructionStock: [ItemID: Int] = EconomySystem.defaultMinimumConstructionStock,
         reserveProtectedRecipeIDs: Set<String> = EconomySystem.defaultReserveProtectedRecipeIDs,
         conveyorTicksPerTile: Int = 5
     ) {
         self.recipesByID = Dictionary(uniqueKeysWithValues: recipes.map { ($0.id, $0) })
+        self.buildingDefsByID = Dictionary(uniqueKeysWithValues: buildings.map { ($0.id, $0) })
         self.minimumConstructionStock = minimumConstructionStock
         self.reserveProtectedRecipeIDs = reserveProtectedRecipeIDs
         self.conveyorTicksPerTile = max(1, conveyorTicksPerTile)
@@ -867,52 +870,58 @@ public struct EconomySystem: SimulationSystem {
             guard let structureType = structure.structureType else { continue }
             guard outputBufferCapacity(for: structureType) > 0 else { continue }
             guard !(state.economy.structureOutputBuffers[structure.id, default: [:]].isEmpty) else { continue }
+            var deliveredAny = false
+            var hasAdjacentConsumer = false
+            for outputPort in resolvedOutputPorts(for: structure, includeBidirectional: false) {
+                let targetPosition = structure.position.translated(by: outputPort.direction)
+                if beltNodesByPosition[targetPosition] != nil
+                    || structuresByPosition[targetPosition] != nil
+                    || wallsByPosition[targetPosition] != nil {
+                    hasAdjacentConsumer = true
+                }
+                guard let itemID = popFirstOutputItem(structureID: structure.id, matching: outputPort.filter, state: &state) else {
+                    continue
+                }
 
-            let outputTarget = structure.position.translated(byX: 1)
-
-            if let beltNodeID = beltNodesByPosition[outputTarget] {
-                guard state.economy.conveyorPayloadByEntity[beltNodeID] == nil else { continue }
-                guard let itemID = popFirstOutputItem(structureID: structure.id, state: &state) else { continue }
-                if enqueueBeltPayload(
+                var delivered = false
+                if let beltNodeID = beltNodesByPosition[targetPosition],
+                   enqueueBeltPayload(
                     itemID: itemID,
                     targetStructureID: beltNodeID,
                     sourcePosition: structure.position,
                     readySourcePositions: [],
                     nodesByID: beltNodesByID,
                     state: &state
-                ) {
-                    continue
+                   ) {
+                    delivered = true
+                } else if let targetStructure = structuresByPosition[targetPosition],
+                          let targetType = targetStructure.structureType,
+                          enqueueInputItem(
+                            itemID: itemID,
+                            structureID: targetStructure.id,
+                            structureType: targetType,
+                            sourcePosition: structure.position,
+                            state: &state
+                          ) {
+                    delivered = true
+                } else if let wallID = wallsByPosition[targetPosition],
+                          injectWallNetwork(itemID: itemID, wallID: wallID, state: &state) {
+                    delivered = true
                 }
-                var outputBuffer = state.economy.structureOutputBuffers[structure.id, default: [:]]
-                outputBuffer[itemID, default: 0] += 1
-                state.economy.structureOutputBuffers[structure.id] = outputBuffer
-                continue
-            }
 
-                if let targetStructure = structuresByPosition[outputTarget],
-                   let targetType = targetStructure.structureType,
-                   let itemID = popFirstOutputItem(structureID: structure.id, state: &state) {
-                if let wallID = wallsByPosition[outputTarget],
-                   injectWallNetwork(itemID: itemID, wallID: wallID, state: &state) {
-                    continue
-                }
-                if enqueueInputItem(
-                    itemID: itemID,
-                    structureID: targetStructure.id,
-                    structureType: targetType,
-                    sourcePosition: structure.position,
-                    state: &state
-                ) {
+                if delivered {
+                    deliveredAny = true
                     continue
                 }
 
                 var outputBuffer = state.economy.structureOutputBuffers[structure.id, default: [:]]
                 outputBuffer[itemID, default: 0] += 1
                 state.economy.structureOutputBuffers[structure.id] = outputBuffer
-                continue
             }
 
-            flushAllOutputToGlobalInventory(structureID: structure.id, state: &state)
+            if !deliveredAny && !hasAdjacentConsumer {
+                flushAllOutputToGlobalInventory(structureID: structure.id, state: &state)
+            }
         }
     }
 
@@ -940,9 +949,11 @@ public struct EconomySystem: SimulationSystem {
             .filter { $0.structureType == .storage }
             .sorted(by: { $0.id < $1.id })
         for storage in storages {
-            for outputDirection in [CardinalDirection.east, .south] {
-                let targetPosition = storage.position.translated(by: outputDirection)
-                guard let itemID = popFirstStoragePoolItem(storageID: storage.id, state: &state) else { break }
+            for outputPort in resolvedOutputPorts(for: storage, includeBidirectional: true) {
+                let targetPosition = storage.position.translated(by: outputPort.direction)
+                guard let itemID = popFirstStoragePoolItem(storageID: storage.id, matching: outputPort.filter, state: &state) else {
+                    continue
+                }
 
                 var delivered = false
                 if let beltNodeID = beltNodesByPosition[targetPosition],
@@ -1040,9 +1051,10 @@ public struct EconomySystem: SimulationSystem {
         state.economy.structureOutputBuffers[structureID] = [:]
     }
 
-    private func popFirstOutputItem(structureID: EntityID, state: inout WorldState) -> ItemID? {
+    private func popFirstOutputItem(structureID: EntityID, matching filter: ItemFilter? = nil, state: inout WorldState) -> ItemID? {
         var outputBuffer = state.economy.structureOutputBuffers[structureID, default: [:]]
-        guard let itemID = outputBuffer.keys.sorted().first else { return nil }
+        let candidates = outputBuffer.keys.sorted().filter { itemMatchesFilter(itemID: $0, filter: filter) }
+        guard let itemID = candidates.first else { return nil }
         let quantity = outputBuffer[itemID, default: 0]
         guard quantity > 0 else { return nil }
         if quantity == 1 {
@@ -1054,9 +1066,10 @@ public struct EconomySystem: SimulationSystem {
         return itemID
     }
 
-    private func popFirstStoragePoolItem(storageID: EntityID, state: inout WorldState) -> ItemID? {
+    private func popFirstStoragePoolItem(storageID: EntityID, matching filter: ItemFilter? = nil, state: inout WorldState) -> ItemID? {
         var pool = state.economy.storageSharedPoolByEntity[storageID, default: [:]]
-        guard let itemID = pool.keys.sorted().first else { return nil }
+        let candidates = pool.keys.sorted().filter { itemMatchesFilter(itemID: $0, filter: filter) }
+        guard let itemID = candidates.first else { return nil }
         let quantity = pool[itemID, default: 0]
         guard quantity > 0 else { return nil }
         if quantity == 1 {
@@ -1072,6 +1085,72 @@ public struct EconomySystem: SimulationSystem {
         var pool = state.economy.storageSharedPoolByEntity[storageID, default: [:]]
         pool[itemID, default: 0] += 1
         state.economy.storageSharedPoolByEntity[storageID] = pool
+    }
+
+    private struct ResolvedPort {
+        let id: String
+        let direction: CardinalDirection
+        let mode: PortMode
+        let filter: ItemFilter
+        let capacity: Int
+    }
+
+    private func resolvedPorts(for structure: Entity) -> [ResolvedPort] {
+        guard let structureType = structure.structureType else { return [] }
+        return resolvedPorts(for: structureType, rotation: structure.rotation)
+    }
+
+    private func resolvedPorts(for structureType: StructureType, rotation: Rotation) -> [ResolvedPort] {
+        guard let definition = buildingDefsByID[structureType.rawValue] else { return [] }
+        return definition.ports.map { port in
+            ResolvedPort(
+                id: port.id,
+                direction: rotate(portDirection: port.direction, by: rotation),
+                mode: port.mode,
+                filter: port.filter,
+                capacity: port.bufferCapacity
+            )
+        }
+    }
+
+    private func resolvedInputPorts(for structure: Entity) -> [ResolvedPort] {
+        resolvedPorts(for: structure).filter { $0.mode == .input || $0.mode == .bidirectional }
+    }
+
+    private func resolvedOutputPorts(for structure: Entity, includeBidirectional: Bool) -> [ResolvedPort] {
+        let modes: Set<PortMode> = includeBidirectional ? [.output, .bidirectional] : [.output]
+        return resolvedPorts(for: structure)
+            .filter { modes.contains($0.mode) }
+            .sorted { lhs, rhs in
+                if lhs.direction.rawValue == rhs.direction.rawValue {
+                    return lhs.id < rhs.id
+                }
+                return lhs.direction.rawValue < rhs.direction.rawValue
+            }
+    }
+
+    private func rotate(portDirection: PortDirection, by rotation: Rotation) -> CardinalDirection {
+        let base = CardinalDirection(rawValue: portDirection.rawValue) ?? .north
+        switch rotation {
+        case .north:
+            return base
+        case .east:
+            return base.right
+        case .south:
+            return base.opposite
+        case .west:
+            return base.left
+        }
+    }
+
+    private func itemMatchesFilter(itemID: ItemID, filter: ItemFilter?) -> Bool {
+        guard let filter else { return true }
+        switch filter {
+        case .any:
+            return true
+        case .allow(let allowed):
+            return allowed.contains(itemID)
+        }
     }
 
     private func injectWallNetwork(itemID: ItemID, wallID: EntityID, state: inout WorldState) -> Bool {
@@ -1232,10 +1311,12 @@ public struct EconomySystem: SimulationSystem {
         sourcePosition: GridPosition? = nil,
         state: inout WorldState
     ) -> Bool {
+        guard let structure = state.entities.entity(id: structureID) else { return false }
+
         if structureType == .storage {
-            guard acceptsStorageInput(from: sourcePosition, storageID: structureID, state: state) else { return false }
+            guard canAcceptInputViaPortModel(itemID: itemID, structure: structure, sourcePosition: sourcePosition, state: state) else { return false }
             var pool = state.economy.storageSharedPoolByEntity[structureID, default: [:]]
-            let capacity = storagePoolCapacity(for: structureType)
+            let capacity = storagePoolCapacity(for: structureType, structure: structure)
             let current = pool.values.reduce(0, +)
             guard current < capacity else { return false }
             pool[itemID, default: 0] += 1
@@ -1245,10 +1326,7 @@ public struct EconomySystem: SimulationSystem {
 
         let capacity = inputBufferCapacity(for: structureType)
         guard capacity > 0 else { return false }
-        guard acceptsInput(itemID: itemID, structureType: structureType) else { return false }
-        guard acceptsPortInput(itemID: itemID, structureType: structureType, structureID: structureID, sourcePosition: sourcePosition, state: state) else {
-            return false
-        }
+        guard canAcceptInputViaPortModel(itemID: itemID, structure: structure, sourcePosition: sourcePosition, state: state) else { return false }
 
         var inputBuffer = state.economy.structureInputBuffers[structureID, default: [:]]
         let current = inputBuffer.values.reduce(0, +)
@@ -1259,26 +1337,45 @@ public struct EconomySystem: SimulationSystem {
         return true
     }
 
-    private func acceptsStorageInput(from sourcePosition: GridPosition?, storageID: EntityID, state: WorldState) -> Bool {
-        guard let sourcePosition else { return true }
-        guard let storage = state.entities.entity(id: storageID) else { return false }
-        let west = storage.position.translated(by: .west)
-        let north = storage.position.translated(by: .north)
-        return sourcePosition == west || sourcePosition == north
-    }
-
-    private func acceptsPortInput(
+    private func canAcceptInputViaPortModel(
         itemID: ItemID,
-        structureType: StructureType,
-        structureID: EntityID,
+        structure: Entity,
         sourcePosition: GridPosition?,
         state: WorldState
     ) -> Bool {
-        guard let sourcePosition,
-              let structure = state.entities.entity(id: structureID) else {
-            return true
+        let inputPorts = resolvedInputPorts(for: structure)
+        if !inputPorts.isEmpty {
+            let sideMatchedPorts = inputPorts.filter { port in
+                guard let sourcePosition else { return true }
+                return sourcePosition == structure.position.translated(by: port.direction)
+            }
+            guard !sideMatchedPorts.isEmpty else { return false }
+            return sideMatchedPorts.contains(where: { itemMatchesFilter(itemID: itemID, filter: $0.filter) })
         }
 
+        return acceptsInputFallback(itemID: itemID, structureType: structure.structureType, structure: structure, sourcePosition: sourcePosition, state: state)
+    }
+
+    private func acceptsInputFallback(
+        itemID: ItemID,
+        structureType: StructureType?,
+        structure: Entity,
+        sourcePosition: GridPosition?,
+        state: WorldState
+    ) -> Bool {
+        guard let structureType else { return false }
+        guard acceptsInputByStructureType(itemID: itemID, structureType: structureType) else { return false }
+        guard acceptsPortInputFallback(structureType: structureType, structure: structure, sourcePosition: sourcePosition, state: state) else { return false }
+        return true
+    }
+
+    private func acceptsPortInputFallback(
+        structureType: StructureType,
+        structure: Entity,
+        sourcePosition: GridPosition?,
+        state: WorldState
+    ) -> Bool {
+        guard let sourcePosition else { return true }
         let west = structure.position.translated(by: .west)
         let north = structure.position.translated(by: .north)
         switch structureType {
@@ -1293,11 +1390,13 @@ public struct EconomySystem: SimulationSystem {
         }
     }
 
-    private func storagePoolCapacity(for structureType: StructureType) -> Int {
-        structureType == .storage ? 48 : 0
+    private func storagePoolCapacity(for structureType: StructureType, structure: Entity) -> Int {
+        guard structureType == .storage else { return 0 }
+        let inputCap = resolvedInputPorts(for: structure).reduce(0) { $0 + $1.capacity }
+        return inputCap > 0 ? inputCap : 48
     }
 
-    private func acceptsInput(itemID: ItemID, structureType: StructureType) -> Bool {
+    private func acceptsInputByStructureType(itemID: ItemID, structureType: StructureType) -> Bool {
         switch structureType {
         case .smelter:
             return itemID == "ore_iron" || itemID == "ore_copper" || itemID == "ore_coal" || itemID == "plate_iron"
@@ -1428,6 +1527,13 @@ public struct EconomySystem: SimulationSystem {
                 seconds: 2.0
             )
         ]
+    }
+
+    public static var defaultBuildings: [BuildingDef] {
+        if let loaded = CanonicalBootstrapContent.bundle?.buildings, !loaded.isEmpty {
+            return loaded
+        }
+        return []
     }
 
     public static let defaultMinimumConstructionStock: [ItemID: Int] = [
