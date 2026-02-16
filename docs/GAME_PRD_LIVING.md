@@ -19,6 +19,7 @@ It is intentionally high level; linked PRDs provide detailed design and implemen
 - `docs/prd/ore_patches_resource_nodes.md` defines ore patch generation, depletion, renewal, reveal rings, and miner–patch binding. Authoritative for Ring 0 composition guarantees and richness distribution.
 - `docs/prd/run_bootstrap_session_init.md` defines run lifecycle, bootstrap sequence, difficulty parameterization, map layout, and grace period. Authoritative for the HQ-only bootstrap model.
 - `docs/prd/build_interaction_flow.md` defines build/rotate/demolish interaction model, inspect/build modes, conveyor drag-draw, and command flow from UI to simulation.
+- `docs/prd/coop_multiplayer.md` defines 2-player online co-op: shared-base gameplay, deterministic lockstep networking, session lifecycle, wave scaling, ping communication, and Apple platform integration. Authoritative for co-op multiplayer design.
 - `docs/WHITEBOX_ASSET_STRATEGY.md` defines the whitebox rendering path for early playable visuals.
 - `docs/prd/asset_pipeline.md` defines the full DCC-to-runtime asset pipeline: interchange formats, texture strategy, LOD generation, memory/streaming budgets, and distribution packaging.
 
@@ -202,6 +203,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Build Interaction Flow PRD: `docs/prd/build_interaction_flow.md`
 - Whitebox Asset Strategy: `docs/WHITEBOX_ASSET_STRATEGY.md`
 - Asset Pipeline PRD: `docs/prd/asset_pipeline.md`
+- Co-op Multiplayer PRD: `docs/prd/coop_multiplayer.md`
 
 ## Change Control
 When updating this file:
@@ -237,4 +239,5 @@ All individual PRDs have been updated to align with the locked decisions above (
 - 2026-02-16: Landed bootstrap/session-init reconciliation in code: `WorldState.bootstrap(difficulty:seed:)`, `hq.json` + `difficulty.json` loading/validation, HQ entity + phase-based run lifecycle events (`runStarted`, `gracePeriodEnded`, `gameOver`), deterministic Ring 0 patch generation, and extraction UI/command removal for T0.
 - 2026-02-16: Landed ore runtime v1 slice in code: miner placement now requires/binds adjacent ore patches (optional targeted patch ID), miner extraction consumes finite bound patch richness into miner output buffers, depletion emits `patchExhausted` + `minerIdled`, and idle miners stop drawing power. Added simulation coverage for placement/binding/depletion paths.
 - 2026-02-16: Locked remaining bootstrap decisions: fixed map orientation (factory-west/spawn-east), grace-period skip disabled in v1, and current `hq.json` starting-resource tables retained as baseline pending telemetry tuning.
+- 2026-02-16: Added Co-op Multiplayer PRD. Defines 2-player online co-op with shared single base, deterministic lockstep networking over Network.framework, invite code session discovery, co-op wave scaling (1.5x budget, +1 trickle, +30s grace), ping communication system, and 3-phase implementation plan (local LAN → internet → polish/Game Center).
 - 2026-02-16: Rebalanced HQ starting resources across all difficulties to include processed starter components (`plate_copper`, `plate_steel`, `gear`, `circuit`, `turret_core`) and higher initial wall/ammo budgets; updated PRDs and tests to match the new baseline.
