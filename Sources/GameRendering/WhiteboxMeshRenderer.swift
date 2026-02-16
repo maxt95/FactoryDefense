@@ -3,22 +3,6 @@ import Metal
 import simd
 import GameSimulation
 
-private struct PackedWhiteboxVertex {
-    var px: Float
-    var py: Float
-    var pz: Float
-    var nx: UInt16
-    var ny: UInt16
-    var nz: UInt16
-    var _pad: UInt16 = 0
-}
-
-private struct WhiteboxMesh {
-    var vertexBuffer: MTLBuffer
-    var indexBuffer: MTLBuffer
-    var indexCount: Int
-}
-
 private struct InstanceUniforms {
     var modelViewProjection: simd_float4x4
     var modelMatrix: simd_float4x4
@@ -35,7 +19,8 @@ public final class WhiteboxMeshRenderer {
     private let sceneBuilder = WhiteboxSceneBuilder()
     private var pipelineState: MTLRenderPipelineState?
     private var depthState: MTLDepthStencilState?
-    private var cubeMesh: WhiteboxMesh?
+    private var meshLibrary: WhiteboxMeshLibrary?
+    private var meshLibraryDeviceID: ObjectIdentifier?
     private var pipelineKey: PipelineKey?
     private var hasLoggedResourceIssue = false
 
@@ -43,7 +28,10 @@ public final class WhiteboxMeshRenderer {
 
     public func encode(context: RenderContext, encoder: MTLRenderCommandEncoder) {
         let colorPixelFormat = context.currentDrawable?.texture.pixelFormat ?? .bgra8Unorm_srgb
-        let depthPixelFormat = context.renderResources.depthTexture?.pixelFormat ?? .depth32Float
+        let depthPixelFormat = context.renderResources.drawableDepthTexture?.pixelFormat
+            ?? context.renderResources.depthTexture?.pixelFormat
+            ?? .depth32Float
+
         guard prepareResources(
             device: context.device,
             colorPixelFormat: colorPixelFormat,
@@ -51,35 +39,41 @@ public final class WhiteboxMeshRenderer {
         ) else {
             return
         }
-        guard let pipelineState, let depthState, let cubeMesh else { return }
+
+        guard let pipelineState, let depthState, let meshLibrary else { return }
 
         let viewProjection = makeViewProjectionMatrix(context: context)
         let scene = sceneBuilder.build(from: context.worldState)
-        var instances = makeInstanceUniforms(scene: scene, context: context, viewProjection: viewProjection)
-        guard !instances.isEmpty else { return }
-
-        guard let instanceBuffer = context.device.makeBuffer(
-            bytes: &instances,
-            length: MemoryLayout<InstanceUniforms>.stride * instances.count
-        ) else {
-            logResourceIssue("Failed to allocate whitebox instance buffer.")
-            return
-        }
+        let batches = makeInstanceBatches(scene: scene, context: context, viewProjection: viewProjection)
+        guard !batches.isEmpty else { return }
 
         encoder.setRenderPipelineState(pipelineState)
         encoder.setDepthStencilState(depthState)
         encoder.setCullMode(.none)
         encoder.setFrontFacing(.counterClockwise)
-        encoder.setVertexBuffer(cubeMesh.vertexBuffer, offset: 0, index: 0)
-        encoder.setVertexBuffer(instanceBuffer, offset: 0, index: 1)
-        encoder.drawIndexedPrimitives(
-            type: .triangle,
-            indexCount: cubeMesh.indexCount,
-            indexType: .uint16,
-            indexBuffer: cubeMesh.indexBuffer,
-            indexBufferOffset: 0,
-            instanceCount: instances.count
-        )
+
+        for batch in batches {
+            guard let mesh = meshLibrary.mesh(for: batch.meshID), !batch.instances.isEmpty else { continue }
+            var instances = batch.instances
+            guard let instanceBuffer = context.device.makeBuffer(
+                bytes: &instances,
+                length: MemoryLayout<InstanceUniforms>.stride * instances.count
+            ) else {
+                logResourceIssue("Failed to allocate whitebox instance buffer.")
+                return
+            }
+
+            encoder.setVertexBuffer(mesh.vertexBuffer, offset: 0, index: 0)
+            encoder.setVertexBuffer(instanceBuffer, offset: 0, index: 1)
+            encoder.drawIndexedPrimitives(
+                type: .triangle,
+                indexCount: mesh.indexCount,
+                indexType: .uint16,
+                indexBuffer: mesh.indexBuffer,
+                indexBufferOffset: 0,
+                instanceCount: instances.count
+            )
+        }
     }
 
     private func prepareResources(
@@ -93,47 +87,50 @@ public final class WhiteboxMeshRenderer {
             depthPixelFormat: depthPixelFormat
         )
 
-        if pipelineKey == key, pipelineState != nil, depthState != nil, cubeMesh != nil {
-            return true
-        }
+        if pipelineKey != key || pipelineState == nil || depthState == nil {
+            do {
+                let library = try device.makeDefaultLibrary(bundle: .module)
+                guard let vertex = library.makeFunction(name: "pbr_vertex"),
+                      let fragment = library.makeFunction(name: "pbr_fragment") else {
+                    logResourceIssue("Missing pbr shader functions in default Metal library.")
+                    return false
+                }
 
-        do {
-            let library = try device.makeDefaultLibrary(bundle: .module)
-            guard let vertex = library.makeFunction(name: "pbr_vertex"),
-                  let fragment = library.makeFunction(name: "pbr_fragment") else {
-                logResourceIssue("Missing pbr shader functions in default Metal library.")
+                let descriptor = MTLRenderPipelineDescriptor()
+                descriptor.label = "WhiteboxPBRPipeline"
+                descriptor.vertexFunction = vertex
+                descriptor.fragmentFunction = fragment
+                descriptor.vertexDescriptor = makeWhiteboxVertexDescriptor()
+                descriptor.colorAttachments[0].pixelFormat = colorPixelFormat
+                descriptor.depthAttachmentPixelFormat = depthPixelFormat
+
+                let depthDescriptor = MTLDepthStencilDescriptor()
+                depthDescriptor.label = "WhiteboxDepthStencil"
+                depthDescriptor.depthCompareFunction = .less
+                depthDescriptor.isDepthWriteEnabled = true
+
+                let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
+                guard let depthState = device.makeDepthStencilState(descriptor: depthDescriptor) else {
+                    logResourceIssue("Failed to create depth stencil state.")
+                    return false
+                }
+
+                self.pipelineState = pipeline
+                self.depthState = depthState
+                self.pipelineKey = key
+            } catch {
+                logResourceIssue("Failed to build whitebox mesh pipeline: \(error.localizedDescription)")
                 return false
             }
-
-            let descriptor = MTLRenderPipelineDescriptor()
-            descriptor.label = "WhiteboxPBRPipeline"
-            descriptor.vertexFunction = vertex
-            descriptor.fragmentFunction = fragment
-            descriptor.vertexDescriptor = makeWhiteboxVertexDescriptor()
-            descriptor.colorAttachments[0].pixelFormat = colorPixelFormat
-            descriptor.depthAttachmentPixelFormat = depthPixelFormat
-
-            let depthDescriptor = MTLDepthStencilDescriptor()
-            depthDescriptor.label = "WhiteboxDepthStencil"
-            depthDescriptor.depthCompareFunction = .less
-            depthDescriptor.isDepthWriteEnabled = true
-
-            let cubeMesh = try makeCubeMesh(device: device)
-            let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
-            guard let depthState = device.makeDepthStencilState(descriptor: depthDescriptor) else {
-                logResourceIssue("Failed to create depth stencil state.")
-                return false
-            }
-
-            self.cubeMesh = cubeMesh
-            self.pipelineState = pipeline
-            self.depthState = depthState
-            self.pipelineKey = key
-            return true
-        } catch {
-            logResourceIssue("Failed to build whitebox mesh pipeline: \(error.localizedDescription)")
-            return false
         }
+
+        let deviceID = ObjectIdentifier(device as AnyObject)
+        if meshLibrary == nil || meshLibraryDeviceID != deviceID {
+            meshLibrary = WhiteboxMeshLibrary(device: device)
+            meshLibraryDeviceID = deviceID
+        }
+
+        return meshLibrary != nil
     }
 
     private func makeViewProjectionMatrix(context: RenderContext) -> simd_float4x4 {
@@ -168,13 +165,12 @@ public final class WhiteboxMeshRenderer {
         ))
     }
 
-    private func makeInstanceUniforms(
+    private func makeInstanceBatches(
         scene: WhiteboxSceneData,
         context: RenderContext,
         viewProjection: simd_float4x4
-    ) -> [InstanceUniforms] {
-        var instances: [InstanceUniforms] = []
-        instances.reserveCapacity(scene.structures.count + scene.entities.count)
+    ) -> [MeshInstanceBatch] {
+        var grouped: [MeshID: [InstanceUniforms]] = [:]
 
         for structure in scene.structures {
             let width = max(1, Int(structure.footprintWidth))
@@ -189,20 +185,17 @@ public final class WhiteboxMeshRenderer {
                 )
             )
 
-            let size = SIMD3<Float>(
-                Float(width) * 0.86,
-                structureHeight(typeRaw: structure.typeRaw),
-                Float(depth) * 0.86
-            )
+            let meshID = MeshID(structureTypeRaw: structure.typeRaw)
+            let footprintScale = SIMD3<Float>(Float(width) * 0.92, 1.0, Float(depth) * 0.92)
             let model = simd_float4x4.translation(
-                SIMD3<Float>(centerX, baseElevation + (size.y * 0.5), centerZ)
-            ) * simd_float4x4.scale(size)
+                SIMD3<Float>(centerX, baseElevation, centerZ)
+            ) * simd_float4x4.scale(footprintScale)
 
-            instances.append(
+            grouped[meshID, default: []].append(
                 InstanceUniforms(
                     modelViewProjection: viewProjection * model,
                     modelMatrix: model,
-                    tintColor: SIMD4<Float>(structureColor(typeRaw: structure.typeRaw), 1)
+                    tintColor: SIMD4<Float>(WhiteboxColors.color(for: structure.typeRaw), 1)
                 )
             )
         }
@@ -216,83 +209,36 @@ public final class WhiteboxMeshRenderer {
                 )
             )
 
-            let size: SIMD3<Float>
-            let tint: SIMD3<Float>
+            let meshID: MeshID
+            let instanceScale: SIMD3<Float>
+            let verticalOffset: Float
+
             if marker.category == WhiteboxEntityCategory.enemy.rawValue {
-                size = SIMD3<Float>(0.34, 0.34, 0.34)
-                tint = SIMD3<Float>(0.93, 0.27, 0.18)
+                meshID = .swarmling
+                instanceScale = SIMD3<Float>(1.0, 1.0, 1.0)
+                verticalOffset = 0.0
             } else {
-                size = SIMD3<Float>(0.14, 0.14, 0.14)
-                tint = SIMD3<Float>(1.0, 0.82, 0.30)
+                meshID = .lightBallisticProjectile
+                instanceScale = SIMD3<Float>(1.0, 1.0, 1.0)
+                verticalOffset = 0.16
             }
 
             let model = simd_float4x4.translation(
-                SIMD3<Float>(centerX, baseElevation + (size.y * 0.5) + 0.04, centerZ)
-            ) * simd_float4x4.scale(size)
+                SIMD3<Float>(centerX, baseElevation + verticalOffset, centerZ)
+            ) * simd_float4x4.scale(instanceScale)
 
-            instances.append(
+            grouped[meshID, default: []].append(
                 InstanceUniforms(
                     modelViewProjection: viewProjection * model,
                     modelMatrix: model,
-                    tintColor: SIMD4<Float>(tint, 1)
+                    tintColor: SIMD4<Float>(WhiteboxColors.color(for: meshID), 1)
                 )
             )
         }
 
-        return instances
-    }
-
-    private func structureHeight(typeRaw: UInt32) -> Float {
-        switch typeRaw {
-        case WhiteboxStructureTypeID.wall.rawValue:
-            return 0.40
-        case WhiteboxStructureTypeID.turretMount.rawValue:
-            return 1.10
-        case WhiteboxStructureTypeID.miner.rawValue:
-            return 0.70
-        case WhiteboxStructureTypeID.smelter.rawValue:
-            return 0.80
-        case WhiteboxStructureTypeID.assembler.rawValue:
-            return 0.70
-        case WhiteboxStructureTypeID.ammoModule.rawValue:
-            return 0.62
-        case WhiteboxStructureTypeID.powerPlant.rawValue:
-            return 1.20
-        case WhiteboxStructureTypeID.conveyor.rawValue:
-            return 0.15
-        case WhiteboxStructureTypeID.storage.rawValue:
-            return 0.80
-        case WhiteboxStructureTypeID.hq.rawValue:
-            return 1.35
-        default:
-            return 0.6
-        }
-    }
-
-    private func structureColor(typeRaw: UInt32) -> SIMD3<Float> {
-        switch typeRaw {
-        case WhiteboxStructureTypeID.wall.rawValue:
-            return SIMD3<Float>(0.60, 0.60, 0.60)
-        case WhiteboxStructureTypeID.turretMount.rawValue:
-            return SIMD3<Float>(0.20, 0.50, 0.80)
-        case WhiteboxStructureTypeID.miner.rawValue:
-            return SIMD3<Float>(0.80, 0.60, 0.20)
-        case WhiteboxStructureTypeID.smelter.rawValue:
-            return SIMD3<Float>(0.90, 0.30, 0.10)
-        case WhiteboxStructureTypeID.assembler.rawValue:
-            return SIMD3<Float>(0.30, 0.70, 0.30)
-        case WhiteboxStructureTypeID.ammoModule.rawValue:
-            return SIMD3<Float>(0.80, 0.20, 0.20)
-        case WhiteboxStructureTypeID.powerPlant.rawValue:
-            return SIMD3<Float>(0.90, 0.90, 0.20)
-        case WhiteboxStructureTypeID.conveyor.rawValue:
-            return SIMD3<Float>(0.50, 0.50, 0.70)
-        case WhiteboxStructureTypeID.storage.rawValue:
-            return SIMD3<Float>(0.60, 0.40, 0.20)
-        case WhiteboxStructureTypeID.hq.rawValue:
-            return SIMD3<Float>(0.25, 0.80, 0.90)
-        default:
-            return SIMD3<Float>(0.72, 0.74, 0.78)
+        return MeshID.renderOrder.compactMap { meshID in
+            guard let instances = grouped[meshID], !instances.isEmpty else { return nil }
+            return MeshInstanceBatch(meshID: meshID, instances: instances)
         }
     }
 
@@ -310,127 +256,44 @@ public final class WhiteboxMeshRenderer {
         return descriptor
     }
 
-    private func makeCubeMesh(device: MTLDevice) throws -> WhiteboxMesh {
-        if MemoryLayout<PackedWhiteboxVertex>.stride != 20 {
-            throw NSError(
-                domain: "WhiteboxMeshRenderer",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "PackedWhiteboxVertex stride is \(MemoryLayout<PackedWhiteboxVertex>.stride), expected 20."]
-            )
-        }
-
-        let faces: [(normal: SIMD3<Float>, corners: [SIMD3<Float>])] = [
-            (
-                SIMD3<Float>(0, 0, 1),
-                [
-                    SIMD3<Float>(-0.5, -0.5, 0.5),
-                    SIMD3<Float>(0.5, -0.5, 0.5),
-                    SIMD3<Float>(0.5, 0.5, 0.5),
-                    SIMD3<Float>(-0.5, 0.5, 0.5)
-                ]
-            ),
-            (
-                SIMD3<Float>(0, 0, -1),
-                [
-                    SIMD3<Float>(0.5, -0.5, -0.5),
-                    SIMD3<Float>(-0.5, -0.5, -0.5),
-                    SIMD3<Float>(-0.5, 0.5, -0.5),
-                    SIMD3<Float>(0.5, 0.5, -0.5)
-                ]
-            ),
-            (
-                SIMD3<Float>(-1, 0, 0),
-                [
-                    SIMD3<Float>(-0.5, -0.5, -0.5),
-                    SIMD3<Float>(-0.5, -0.5, 0.5),
-                    SIMD3<Float>(-0.5, 0.5, 0.5),
-                    SIMD3<Float>(-0.5, 0.5, -0.5)
-                ]
-            ),
-            (
-                SIMD3<Float>(1, 0, 0),
-                [
-                    SIMD3<Float>(0.5, -0.5, 0.5),
-                    SIMD3<Float>(0.5, -0.5, -0.5),
-                    SIMD3<Float>(0.5, 0.5, -0.5),
-                    SIMD3<Float>(0.5, 0.5, 0.5)
-                ]
-            ),
-            (
-                SIMD3<Float>(0, 1, 0),
-                [
-                    SIMD3<Float>(-0.5, 0.5, 0.5),
-                    SIMD3<Float>(0.5, 0.5, 0.5),
-                    SIMD3<Float>(0.5, 0.5, -0.5),
-                    SIMD3<Float>(-0.5, 0.5, -0.5)
-                ]
-            ),
-            (
-                SIMD3<Float>(0, -1, 0),
-                [
-                    SIMD3<Float>(-0.5, -0.5, -0.5),
-                    SIMD3<Float>(0.5, -0.5, -0.5),
-                    SIMD3<Float>(0.5, -0.5, 0.5),
-                    SIMD3<Float>(-0.5, -0.5, 0.5)
-                ]
-            )
-        ]
-
-        var vertices: [PackedWhiteboxVertex] = []
-        var indices: [UInt16] = []
-        vertices.reserveCapacity(24)
-        indices.reserveCapacity(36)
-
-        for face in faces {
-            let baseIndex = UInt16(vertices.count)
-            for corner in face.corners {
-                vertices.append(
-                    PackedWhiteboxVertex(
-                        px: corner.x,
-                        py: corner.y,
-                        pz: corner.z,
-                        nx: packHalf(face.normal.x),
-                        ny: packHalf(face.normal.y),
-                        nz: packHalf(face.normal.z)
-                    )
-                )
-            }
-
-            indices.append(contentsOf: [
-                baseIndex, baseIndex + 1, baseIndex + 2,
-                baseIndex + 2, baseIndex + 3, baseIndex
-            ])
-        }
-
-        guard let vertexBuffer = device.makeBuffer(
-            bytes: vertices,
-            length: MemoryLayout<PackedWhiteboxVertex>.stride * vertices.count
-        ) else {
-            throw NSError(domain: "WhiteboxMeshRenderer", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to allocate vertex buffer."])
-        }
-
-        guard let indexBuffer = device.makeBuffer(
-            bytes: indices,
-            length: MemoryLayout<UInt16>.stride * indices.count
-        ) else {
-            throw NSError(domain: "WhiteboxMeshRenderer", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to allocate index buffer."])
-        }
-
-        return WhiteboxMesh(
-            vertexBuffer: vertexBuffer,
-            indexBuffer: indexBuffer,
-            indexCount: indices.count
-        )
-    }
-
-    private func packHalf(_ value: Float) -> UInt16 {
-        Float16(value).bitPattern
-    }
-
     private func logResourceIssue(_ message: String) {
         guard !hasLoggedResourceIssue else { return }
         hasLoggedResourceIssue = true
         fputs("FactoryDefense WhiteboxMeshRenderer: \(message)\n", stderr)
         RenderDiagnostics.post("Whitebox mesh renderer issue: \(message)")
+    }
+}
+
+private struct MeshInstanceBatch {
+    var meshID: MeshID
+    var instances: [InstanceUniforms]
+}
+
+private extension MeshID {
+    init(structureTypeRaw: UInt32) {
+        switch structureTypeRaw {
+        case WhiteboxStructureTypeID.wall.rawValue:
+            self = .wall
+        case WhiteboxStructureTypeID.turretMount.rawValue:
+            self = .turretMount
+        case WhiteboxStructureTypeID.miner.rawValue:
+            self = .miner
+        case WhiteboxStructureTypeID.smelter.rawValue:
+            self = .smelter
+        case WhiteboxStructureTypeID.assembler.rawValue:
+            self = .assembler
+        case WhiteboxStructureTypeID.ammoModule.rawValue:
+            self = .ammoModule
+        case WhiteboxStructureTypeID.powerPlant.rawValue:
+            self = .powerPlant
+        case WhiteboxStructureTypeID.conveyor.rawValue:
+            self = .conveyor
+        case WhiteboxStructureTypeID.storage.rawValue:
+            self = .storage
+        case WhiteboxStructureTypeID.hq.rawValue:
+            self = .hq
+        default:
+            self = .wall
+        }
     }
 }
