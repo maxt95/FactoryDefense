@@ -61,6 +61,10 @@ let package = Package(
         .testTarget(
             name: "GamePlatformTests",
             dependencies: ["GamePlatform", "GameSimulation"]
+        ),
+        .testTarget(
+            name: "GameUITests",
+            dependencies: ["GameUI"]
         )
     ]
 )
