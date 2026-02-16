@@ -18,10 +18,10 @@
   - Directional conveyor transfer across all four facings with belt-node-aware handoff.
   - Splitter output alternation and merger alternating input pull runtime state.
   - Storage shared-pool runtime (`storageSharedPoolByEntity`) using content-defined bidirectional ports.
-  - Content-driven port transfer validation from `buildings.json` (input/output side resolution by rotation + per-port item filters) with fallback guards for legacy defaults.
+  - Content-driven port transfer validation from `buildings.json` (input/output side resolution by rotation + per-port item filters).
+  - Removed logistics transport fallback to global inventory; produced items remain in routed buffers/pools until physically consumed.
   - Golden replay fingerprint regeneration and new command/snapshot/removal tests.
 - Still in progress / remaining for parity:
-  - Removal of transport fallback to global inventory (except HUD aggregation).
   - Shared cross-platform gameplay interaction module + drag-draw parity + canonical rejection UX timing.
 
 ## Locked Decisions

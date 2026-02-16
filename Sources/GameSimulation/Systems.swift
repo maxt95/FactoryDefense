@@ -870,15 +870,8 @@ public struct EconomySystem: SimulationSystem {
             guard let structureType = structure.structureType else { continue }
             guard outputBufferCapacity(for: structureType) > 0 else { continue }
             guard !(state.economy.structureOutputBuffers[structure.id, default: [:]].isEmpty) else { continue }
-            var deliveredAny = false
-            var hasAdjacentConsumer = false
             for outputPort in resolvedOutputPorts(for: structure, includeBidirectional: false) {
                 let targetPosition = structure.position.translated(by: outputPort.direction)
-                if beltNodesByPosition[targetPosition] != nil
-                    || structuresByPosition[targetPosition] != nil
-                    || wallsByPosition[targetPosition] != nil {
-                    hasAdjacentConsumer = true
-                }
                 guard let itemID = popFirstOutputItem(structureID: structure.id, matching: outputPort.filter, state: &state) else {
                     continue
                 }
@@ -910,17 +903,12 @@ public struct EconomySystem: SimulationSystem {
                 }
 
                 if delivered {
-                    deliveredAny = true
                     continue
                 }
 
                 var outputBuffer = state.economy.structureOutputBuffers[structure.id, default: [:]]
                 outputBuffer[itemID, default: 0] += 1
                 state.economy.structureOutputBuffers[structure.id] = outputBuffer
-            }
-
-            if !deliveredAny && !hasAdjacentConsumer {
-                flushAllOutputToGlobalInventory(structureID: structure.id, state: &state)
             }
         }
     }
@@ -1036,19 +1024,6 @@ public struct EconomySystem: SimulationSystem {
 
     private func isBeltNode(_ structureType: StructureType) -> Bool {
         structureType == .conveyor || structureType == .splitter || structureType == .merger
-    }
-
-    private func flushAllOutputToGlobalInventory(structureID: EntityID, state: inout WorldState) {
-        let outputBuffer = state.economy.structureOutputBuffers[structureID, default: [:]]
-        guard !outputBuffer.isEmpty else { return }
-
-        for itemID in outputBuffer.keys.sorted() {
-            let quantity = outputBuffer[itemID, default: 0]
-            if quantity > 0 {
-                state.economy.add(itemID: itemID, quantity: quantity)
-            }
-        }
-        state.economy.structureOutputBuffers[structureID] = [:]
     }
 
     private func popFirstOutputItem(structureID: EntityID, matching filter: ItemFilter? = nil, state: inout WorldState) -> ItemID? {

@@ -509,8 +509,8 @@ final class LogisticsRuntimeTests: XCTestCase {
         let events = engine.run(ticks: 45)
 
         XCTAssertEqual(engine.worldState.orePatches.first?.remainingOre, 0)
-        XCTAssertEqual(engine.worldState.economy.structureOutputBuffers[minerID]?["ore_iron", default: 0], 0)
-        XCTAssertEqual(engine.worldState.economy.inventories["ore_iron", default: 0], 2)
+        XCTAssertEqual(engine.worldState.economy.structureOutputBuffers[minerID]?["ore_iron", default: 0], 2)
+        XCTAssertEqual(engine.worldState.economy.inventories["ore_iron", default: 0], 0)
         XCTAssertEqual(engine.worldState.economy.powerDemand, 0)
         XCTAssertTrue(events.contains(where: { $0.kind == .patchExhausted && $0.entity == minerID && $0.value == 21 }))
         XCTAssertTrue(events.contains(where: { $0.kind == .minerIdled && $0.entity == minerID && $0.value == 21 }))

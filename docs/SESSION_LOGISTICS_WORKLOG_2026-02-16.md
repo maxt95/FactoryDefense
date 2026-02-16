@@ -133,13 +133,18 @@ Aligned with `docs/prd/building_specifications.md` in this session:
 
 Not yet complete vs PRD:
 - Full multi-port model + directional rotation semantics.
-- Full strict item filter model per declared port schema (`buildings.json`) rather than current structure-level side checks.
 - Ore reveal rings + renewal spawning lifecycle.
 
 ## Key learnings
 - Preserving deterministic sort/transfer order is straightforward and stable when conveyor movement is processed in a fixed positional order.
 - Introducing snapshot-visible logistics state early avoids replay migration pain later.
-- A compatibility fallback to global inventory allows incremental migration without destabilizing existing gameplay/tests.
+- Removing global-inventory transport fallback shifts correctness burden to topology and is now reflected in simulation tests.
+
+### 10) Removed logistics global-inventory transport fallback
+Files: `Sources/GameSimulation/Systems.swift`, `Tests/GameSimulationTests/EconomyThroughputTests.swift`, `Tests/GameSimulationTests/LogisticsRuntimeTests.swift`
+- Production outputs no longer auto-flush into `economy.inventories` when no routed consumer is present.
+- Throughput/miner tests were updated to assert against structure output buffers (or routed consumers) instead of global inventory side effects.
+- This aligns runtime behavior with PRD logistics intent: physical transport pathing is required for item movement.
 
 ## Next high-value iteration
 1. Port definition runtime (input/output sides + filters) and building rotation in placement.

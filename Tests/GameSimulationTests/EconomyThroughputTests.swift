@@ -5,7 +5,7 @@ final class EconomyThroughputTests: XCTestCase {
     func testRecipeTimingRequiresFullDurationBeforeOutput() {
         var entities = EntityStore()
         _ = entities.spawnStructure(.powerPlant, at: GridPosition(x: 0, y: 0))
-        _ = entities.spawnStructure(.smelter, at: GridPosition(x: 1, y: 0))
+        let smelterID = entities.spawnStructure(.smelter, at: GridPosition(x: 1, y: 0))
 
         let world = WorldState(
             tick: 0,
@@ -17,10 +17,10 @@ final class EconomyThroughputTests: XCTestCase {
 
         let engine = SimulationEngine(worldState: world, systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])])
         _ = engine.run(ticks: 39)
-        XCTAssertEqual(engine.worldState.economy.inventories["plate_iron", default: 0], 0)
+        XCTAssertEqual(engine.worldState.economy.structureOutputBuffers[smelterID]?["plate_iron", default: 0] ?? 0, 0)
 
         _ = engine.step()
-        XCTAssertEqual(engine.worldState.economy.inventories["plate_iron", default: 0], 1)
+        XCTAssertEqual(engine.worldState.economy.structureOutputBuffers[smelterID]?["plate_iron", default: 0] ?? 0, 1)
     }
 
     func testMissingProductionChainsAreProducedByRecipeSystem() {
@@ -60,7 +60,7 @@ final class EconomyThroughputTests: XCTestCase {
     ) -> Int {
         var entities = EntityStore()
         _ = entities.spawnStructure(.powerPlant, at: GridPosition(x: 0, y: 0))
-        _ = entities.spawnStructure(structure, at: GridPosition(x: 1, y: 0))
+        let structureID = entities.spawnStructure(structure, at: GridPosition(x: 1, y: 0))
 
         let world = WorldState(
             tick: 0,
@@ -72,6 +72,6 @@ final class EconomyThroughputTests: XCTestCase {
 
         let engine = SimulationEngine(worldState: world, systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])])
         _ = engine.run(ticks: ticks)
-        return engine.worldState.economy.inventories[outputItemID, default: 0]
+        return engine.worldState.economy.structureOutputBuffers[structureID]?[outputItemID, default: 0] ?? 0
     }
 }
