@@ -227,7 +227,7 @@ public struct GameplayOverlayWindowChrome<Content: View>: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
             .gesture(
-                DragGesture(minimumDistance: 1)
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
                     .onChanged { value in
                         onDragChanged(value.translation)
                     }
@@ -266,8 +266,6 @@ public struct GameplayOverlayHost<Content: View>: View {
     private var windowDefinitions: [GameplayOverlayWindowDefinition]
     private var content: (GameplayOverlayWindowID) -> Content
 
-    @State private var dragStartOriginByWindow: [GameplayOverlayWindowID: CGPoint] = [:]
-
     public init(
         layoutState: Binding<GameplayOverlayLayoutState>,
         viewportSize: CGSize,
@@ -286,25 +284,25 @@ public struct GameplayOverlayHost<Content: View>: View {
         ZStack(alignment: .topLeading) {
             ForEach(windowDefinitions) { definition in
                 if let state = layoutState.windowState(for: definition.id) {
-                    GameplayOverlayWindowChrome(
+                    GameplayOverlayWindowInstance(
+                        state: state,
                         title: definition.title,
+                        viewportSize: viewportSize,
+                        safeAreaInsets: safeAreaInsets,
                         onFocus: {
                             layoutState.focus(windowID: definition.id)
                         },
-                        onDragChanged: { translation in
-                            applyDrag(windowID: definition.id, translation: translation)
-                        },
-                        onDragEnded: { translation in
-                            applyDrag(windowID: definition.id, translation: translation)
-                            dragStartOriginByWindow[definition.id] = nil
+                        onCommit: { finalOrigin in
+                            layoutState.setDragPosition(
+                                windowID: definition.id,
+                                origin: finalOrigin,
+                                viewportSize: viewportSize,
+                                safeAreaInsets: safeAreaInsets
+                            )
                         }
                     ) {
                         content(definition.id)
                     }
-                    .frame(width: state.size.width, height: state.size.height, alignment: .topLeading)
-                    .clipped()
-                    .contentShape(Rectangle())
-                    .offset(x: state.origin.x, y: state.origin.y)
                     .zIndex(layoutState.zIndex(for: definition.id))
                     .simultaneousGesture(
                         TapGesture().onEnded {
@@ -328,22 +326,6 @@ public struct GameplayOverlayHost<Content: View>: View {
         let margin: CGFloat = 12
         let available = max(180, viewportSize.width - safeAreaInsets.leading - safeAreaInsets.trailing - (margin * 2))
         return min(definition.preferredWidth, available)
-    }
-
-    private func applyDrag(windowID: GameplayOverlayWindowID, translation: CGSize) {
-        guard let state = layoutState.windowState(for: windowID) else { return }
-        if dragStartOriginByWindow[windowID] == nil {
-            dragStartOriginByWindow[windowID] = state.origin
-            layoutState.focus(windowID: windowID)
-        }
-        guard let start = dragStartOriginByWindow[windowID] else { return }
-        let next = CGPoint(x: start.x + translation.width, y: start.y + translation.height)
-        layoutState.setDragPosition(
-            windowID: windowID,
-            origin: next,
-            viewportSize: viewportSize,
-            safeAreaInsets: safeAreaInsets
-        )
     }
 
     private func bootstrapWindows() {
@@ -375,6 +357,81 @@ public struct GameplayOverlayHost<Content: View>: View {
         case .tuningDashboard:
             return CGPoint(x: 660, y: 980)
         }
+    }
+}
+
+private struct GameplayOverlayWindowInstance<Content: View>: View {
+    var state: GameplayOverlayWindowState
+    var title: String
+    var viewportSize: CGSize
+    var safeAreaInsets: SafeAreaInsets
+    var onFocus: () -> Void
+    var onCommit: (CGPoint) -> Void
+    @ViewBuilder var content: Content
+
+    @State private var dragStartOrigin: CGPoint?
+    @State private var dragTranslation: CGSize = .zero
+
+    var body: some View {
+        let origin = resolvedOrigin
+        GameplayOverlayWindowChrome(
+            title: title,
+            onFocus: onFocus,
+            onDragChanged: { translation in
+                if dragStartOrigin == nil {
+                    dragStartOrigin = state.origin
+                    onFocus()
+                }
+                dragTranslation = translation
+            },
+            onDragEnded: { translation in
+                if dragStartOrigin == nil {
+                    dragStartOrigin = state.origin
+                    onFocus()
+                }
+                dragTranslation = translation
+                let finalOrigin = resolvedOrigin
+                onCommit(finalOrigin)
+                dragStartOrigin = nil
+                dragTranslation = .zero
+            }
+        ) {
+            content
+        }
+        .frame(width: state.size.width, height: state.size.height, alignment: .topLeading)
+        .clipped()
+        .contentShape(Rectangle())
+        .offset(x: origin.x, y: origin.y)
+        .onChange(of: state.origin) { _, _ in
+            guard dragStartOrigin == nil else { return }
+            dragTranslation = .zero
+        }
+    }
+
+    private var resolvedOrigin: CGPoint {
+        let base = dragStartOrigin ?? state.origin
+        let next = CGPoint(
+            x: base.x + dragTranslation.width,
+            y: base.y + dragTranslation.height
+        )
+        return clamped(origin: next, windowSize: state.size)
+    }
+
+    private func clamped(origin: CGPoint, windowSize: CGSize) -> CGPoint {
+        let margin: CGFloat = 12
+        #if os(macOS)
+        let topInset: CGFloat = 0
+        #else
+        let topInset = safeAreaInsets.top
+        #endif
+        let minX = safeAreaInsets.leading + margin
+        let minY = topInset + margin
+        let maxX = viewportSize.width - safeAreaInsets.trailing - windowSize.width - margin
+        let maxY = viewportSize.height - safeAreaInsets.bottom - windowSize.height - margin
+        return CGPoint(
+            x: min(max(origin.x, minX), max(minX, maxX)),
+            y: min(max(origin.y, minY), max(minY, maxY))
+        )
     }
 }
 #endif
