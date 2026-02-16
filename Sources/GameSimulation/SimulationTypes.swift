@@ -138,6 +138,7 @@ public enum EventKind: String, Codable, Sendable {
     case notEnoughAmmo
     case milestoneReached
     case extracted
+    case placementRejected
 }
 
 public struct SimEvent: Codable, Hashable, Sendable {
@@ -359,6 +360,7 @@ public struct RunState: Codable, Hashable, Sendable {
 
 public struct WorldState: Codable, Hashable, Sendable {
     public var tick: UInt64
+    public var board: BoardState
     public var entities: EntityStore
     public var economy: EconomyState
     public var threat: ThreatState
@@ -367,6 +369,7 @@ public struct WorldState: Codable, Hashable, Sendable {
 
     public init(
         tick: UInt64,
+        board: BoardState = .bootstrap(),
         entities: EntityStore,
         economy: EconomyState,
         threat: ThreatState,
@@ -374,6 +377,7 @@ public struct WorldState: Codable, Hashable, Sendable {
         combat: CombatState = CombatState()
     ) {
         self.tick = tick
+        self.board = board
         self.entities = entities
         self.economy = economy
         self.threat = threat
@@ -382,20 +386,28 @@ public struct WorldState: Codable, Hashable, Sendable {
     }
 
     public static func bootstrap() -> WorldState {
+        let board = BoardState.bootstrap()
         var store = EntityStore()
-        _ = store.spawnStructure(.powerPlant, at: GridPosition(x: 0, y: 0))
-        _ = store.spawnStructure(.miner, at: GridPosition(x: 1, y: 0))
-        _ = store.spawnStructure(.smelter, at: GridPosition(x: 2, y: 0))
-        _ = store.spawnStructure(.ammoModule, at: GridPosition(x: 3, y: 0))
-        _ = store.spawnStructure(.turretMount, at: GridPosition(x: 4, y: 0))
+        _ = store.spawnStructure(.powerPlant, at: GridPosition(x: 1, y: 5))
+        _ = store.spawnStructure(.miner, at: GridPosition(x: 2, y: 5))
+        _ = store.spawnStructure(.smelter, at: GridPosition(x: 3, y: 5))
+        _ = store.spawnStructure(.ammoModule, at: GridPosition(x: 4, y: 5))
+        _ = store.spawnStructure(.turretMount, at: GridPosition(x: 5, y: 6))
+        _ = store.spawnStructure(.turretMount, at: GridPosition(x: 5, y: 8))
 
         return WorldState(
             tick: 0,
+            board: board,
             entities: store,
-            economy: EconomyState(inventories: ["ore_iron": 10]),
+            economy: EconomyState(inventories: ["ore_iron": 10, "ammo_light": 80]),
             threat: ThreatState(),
             run: RunState(),
-            combat: CombatState(basePosition: GridPosition(x: 0, y: 0), spawnEdgeX: 18, spawnYMin: 1, spawnYMax: 12)
+            combat: CombatState(
+                basePosition: board.basePosition,
+                spawnEdgeX: board.spawnEdgeX,
+                spawnYMin: board.spawnYMin,
+                spawnYMax: board.spawnYMax
+            )
         )
     }
 }

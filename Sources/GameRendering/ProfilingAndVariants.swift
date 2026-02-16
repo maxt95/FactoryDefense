@@ -61,7 +61,7 @@ public struct RenderFrameTiming: Sendable {
     }
 }
 
-public final class FrameTimingCapture {
+public final class FrameTimingCapture: @unchecked Sendable {
     private let lock = NSLock()
 
     private var frameStartTime: CFAbsoluteTime = 0

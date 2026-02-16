@@ -1,0 +1,124 @@
+import Combine
+import Foundation
+import GameSimulation
+
+@MainActor
+public final class GameRuntimeController: ObservableObject {
+    @Published public private(set) var world: WorldState
+    @Published public private(set) var latestEvents: [SimEvent]
+    @Published public private(set) var highlightedCell: GridPosition?
+    @Published public private(set) var placementResult: PlacementResult
+
+    public let actor: PlayerID
+
+    private let tickRate: UInt64
+    private let engine: SimulationEngine
+    private var tickTask: Task<Void, Never>?
+    private let placementValidator = PlacementValidator()
+
+    public init(
+        initialWorld: WorldState = .bootstrap(),
+        actor: PlayerID = PlayerID(1),
+        tickRate: UInt64 = 20
+    ) {
+        self.world = initialWorld
+        self.latestEvents = []
+        self.highlightedCell = nil
+        self.placementResult = .ok
+        self.actor = actor
+        self.tickRate = max(1, tickRate)
+        self.engine = SimulationEngine(worldState: initialWorld, tickRate: max(1, tickRate))
+    }
+
+    deinit {
+        tickTask?.cancel()
+    }
+
+    public func start() {
+        guard tickTask == nil else { return }
+
+        let intervalNS = UInt64(1_000_000_000 / max(1, tickRate))
+        tickTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: intervalNS)
+                guard let self else { return }
+                _ = self.advanceTick()
+            }
+        }
+    }
+
+    public func stop() {
+        tickTask?.cancel()
+        tickTask = nil
+    }
+
+    @discardableResult
+    public func advanceTick() -> [SimEvent] {
+        let events = engine.step()
+        world = engine.worldState
+        latestEvents = events
+        return events
+    }
+
+    public func advanceTicks(_ ticks: Int) {
+        guard ticks > 0 else { return }
+        for _ in 0..<ticks {
+            _ = advanceTick()
+        }
+    }
+
+    public func previewPlacement(structure: StructureType, at position: GridPosition) {
+        highlightedCell = position
+        placementResult = placementValidator.canPlace(structure, at: position, in: world)
+    }
+
+    public func clearPlacementPreview() {
+        highlightedCell = nil
+        placementResult = .ok
+    }
+
+    public func placeStructure(_ structure: StructureType, at position: GridPosition) {
+        previewPlacement(structure: structure, at: position)
+        guard placementResult == .ok else { return }
+
+        enqueue(
+            payload: .placeStructure(
+                BuildRequest(
+                    structure: structure,
+                    position: position
+                )
+            )
+        )
+    }
+
+    public func triggerWave() {
+        enqueue(payload: .triggerWave)
+    }
+
+    public func extract() {
+        enqueue(payload: .extract)
+    }
+
+    public func enqueue(payload: CommandPayload) {
+        let command = PlayerCommand(
+            tick: world.tick,
+            actor: actor,
+            payload: payload
+        )
+        engine.enqueue(command)
+    }
+
+    public func apply(
+        input event: InputEvent,
+        mapper: InputMapper = DefaultInputMapper()
+    ) {
+        guard let command = mapper.map(event: event, tick: world.tick, actor: actor) else {
+            return
+        }
+        engine.enqueue(command)
+    }
+
+    public func snapshot() -> WorldSnapshot {
+        engine.makeSnapshot()
+    }
+}

@@ -34,10 +34,21 @@ public protocol InputMapper {
 }
 
 public struct DefaultInputMapper: InputMapper {
-    public init() {}
+    public var defaultStructureOnTap: StructureType?
+
+    public init(defaultStructureOnTap: StructureType? = nil) {
+        self.defaultStructureOnTap = defaultStructureOnTap
+    }
 
     public func map(event: InputEvent, tick: UInt64, actor: PlayerID) -> PlayerCommand? {
         switch event.gesture {
+        case .tapGrid(let position):
+            guard let structure = defaultStructureOnTap else { return nil }
+            return PlayerCommand(
+                tick: tick,
+                actor: actor,
+                payload: .placeStructure(BuildRequest(structure: structure, position: position))
+            )
         case .placeStructure(let type, let position):
             return PlayerCommand(
                 tick: tick,
@@ -48,7 +59,7 @@ public struct DefaultInputMapper: InputMapper {
             return PlayerCommand(tick: tick, actor: actor, payload: .triggerWave)
         case .extract:
             return PlayerCommand(tick: tick, actor: actor, payload: .extract)
-        case .tapGrid, .dragPan, .pinch:
+        case .dragPan, .pinch:
             return nil
         }
     }

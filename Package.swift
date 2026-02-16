@@ -40,7 +40,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "FactoryDefense",
-            dependencies: ["GameSimulation", "GameRendering", "GameUI"]
+            dependencies: ["GameSimulation", "GameRendering", "GameUI", "GamePlatform"]
         ),
         .executableTarget(
             name: "FactoryDefensePrototype",

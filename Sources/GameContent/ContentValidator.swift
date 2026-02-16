@@ -5,6 +5,7 @@ public enum ContentValidationError: Error, Equatable, Sendable {
     case circularRecipeDependency([String])
     case invalidWaveComposition(waveIndex: Int, reason: String)
     case unreachableTechNode(String)
+    case invalidBoard(reason: String)
 }
 
 public struct ContentValidator {
@@ -16,6 +17,7 @@ public struct ContentValidator {
         errors += validateWaves(bundle: bundle)
         errors += validateRecipeCycles(bundle: bundle)
         errors += validateTechReachability(bundle: bundle)
+        errors += validateBoard(bundle.board)
         return errors
     }
 
@@ -169,5 +171,62 @@ public struct ContentValidator {
             .map(\.id)
             .filter { !visited.contains($0) }
             .map(ContentValidationError.unreachableTechNode)
+    }
+
+    private func validateBoard(_ board: BoardDef) -> [ContentValidationError] {
+        var errors: [ContentValidationError] = []
+
+        if board.width <= 0 || board.height <= 0 {
+            errors.append(.invalidBoard(reason: "board dimensions must be positive"))
+            return errors
+        }
+
+        func isInBounds(_ point: BoardPointDef) -> Bool {
+            point.x >= 0 && point.x < board.width && point.y >= 0 && point.y < board.height
+        }
+
+        if !isInBounds(board.basePosition) {
+            errors.append(.invalidBoard(reason: "base position is out of bounds"))
+        }
+
+        if board.spawnEdgeX < 0 || board.spawnEdgeX >= board.width {
+            errors.append(.invalidBoard(reason: "spawnEdgeX is out of bounds"))
+        }
+
+        if board.spawnYMin < 0 || board.spawnYMax >= board.height || board.spawnYMin > board.spawnYMax {
+            errors.append(.invalidBoard(reason: "spawn Y range is invalid"))
+        }
+
+        for blocked in board.blockedCells where !isInBounds(blocked) {
+            errors.append(.invalidBoard(reason: "blocked cell (\(blocked.x),\(blocked.y)) is out of bounds"))
+        }
+
+        for restricted in board.restrictedCells where !isInBounds(restricted) {
+            errors.append(.invalidBoard(reason: "restricted cell (\(restricted.x),\(restricted.y)) is out of bounds"))
+        }
+
+        for ramp in board.ramps where !isInBounds(ramp.position) {
+            errors.append(.invalidBoard(reason: "ramp cell (\(ramp.position.x),\(ramp.position.y)) is out of bounds"))
+        }
+
+        let blocked = Set(board.blockedCells.map { "\($0.x):\($0.y)" })
+        let restricted = Set(board.restrictedCells.map { "\($0.x):\($0.y)" })
+        if blocked.contains("\(board.basePosition.x):\(board.basePosition.y)") {
+            errors.append(.invalidBoard(reason: "base position cannot be blocked"))
+        }
+
+        if board.spawnYMin <= board.spawnYMax {
+            for y in board.spawnYMin...board.spawnYMax {
+                if blocked.contains("\(board.spawnEdgeX):\(y)") {
+                    errors.append(.invalidBoard(reason: "spawn edge cell (\(board.spawnEdgeX),\(y)) cannot be blocked"))
+                }
+            }
+        }
+
+        for ramp in board.ramps where restricted.contains("\(ramp.position.x):\(ramp.position.y)") {
+            errors.append(.invalidBoard(reason: "ramp cell (\(ramp.position.x),\(ramp.position.y)) cannot also be restricted"))
+        }
+
+        return errors
     }
 }

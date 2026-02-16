@@ -119,6 +119,84 @@ public struct TechNodeDef: Codable, Hashable, Sendable {
     }
 }
 
+public struct BoardPointDef: Codable, Hashable, Sendable {
+    public var x: Int
+    public var y: Int
+    public var z: Int
+
+    public init(x: Int, y: Int, z: Int = 0) {
+        self.x = x
+        self.y = y
+        self.z = z
+    }
+}
+
+public struct BoardRampDef: Codable, Hashable, Sendable {
+    public var position: BoardPointDef
+    public var elevation: Int
+
+    public init(position: BoardPointDef, elevation: Int) {
+        self.position = position
+        self.elevation = elevation
+    }
+}
+
+public struct BoardDef: Codable, Hashable, Sendable {
+    public var width: Int
+    public var height: Int
+    public var basePosition: BoardPointDef
+    public var spawnEdgeX: Int
+    public var spawnYMin: Int
+    public var spawnYMax: Int
+    public var blockedCells: [BoardPointDef]
+    public var restrictedCells: [BoardPointDef]
+    public var ramps: [BoardRampDef]
+
+    public init(
+        width: Int,
+        height: Int,
+        basePosition: BoardPointDef,
+        spawnEdgeX: Int,
+        spawnYMin: Int,
+        spawnYMax: Int,
+        blockedCells: [BoardPointDef] = [],
+        restrictedCells: [BoardPointDef] = [],
+        ramps: [BoardRampDef] = []
+    ) {
+        self.width = width
+        self.height = height
+        self.basePosition = basePosition
+        self.spawnEdgeX = spawnEdgeX
+        self.spawnYMin = spawnYMin
+        self.spawnYMax = spawnYMax
+        self.blockedCells = blockedCells
+        self.restrictedCells = restrictedCells
+        self.ramps = ramps
+    }
+
+    public static let starter = BoardDef(
+        width: 20,
+        height: 14,
+        basePosition: BoardPointDef(x: 2, y: 7, z: 0),
+        spawnEdgeX: 18,
+        spawnYMin: 2,
+        spawnYMax: 11,
+        blockedCells: [],
+        restrictedCells: [
+            BoardPointDef(x: 2, y: 7),
+            BoardPointDef(x: 1, y: 7),
+            BoardPointDef(x: 3, y: 7),
+            BoardPointDef(x: 2, y: 6),
+            BoardPointDef(x: 2, y: 8)
+        ],
+        ramps: [
+            BoardRampDef(position: BoardPointDef(x: 9, y: 6), elevation: 1),
+            BoardRampDef(position: BoardPointDef(x: 9, y: 7), elevation: 1),
+            BoardRampDef(position: BoardPointDef(x: 9, y: 8), elevation: 1)
+        ]
+    )
+}
+
 public struct GameContentBundle: Codable, Sendable {
     public var items: [ItemDef]
     public var recipes: [RecipeDef]
@@ -126,6 +204,7 @@ public struct GameContentBundle: Codable, Sendable {
     public var enemies: [EnemyDef]
     public var waves: [WaveDef]
     public var techNodes: [TechNodeDef]
+    public var board: BoardDef
 
     public init(
         items: [ItemDef],
@@ -133,7 +212,8 @@ public struct GameContentBundle: Codable, Sendable {
         turrets: [TurretDef],
         enemies: [EnemyDef],
         waves: [WaveDef],
-        techNodes: [TechNodeDef]
+        techNodes: [TechNodeDef],
+        board: BoardDef = .starter
     ) {
         self.items = items
         self.recipes = recipes
@@ -141,6 +221,7 @@ public struct GameContentBundle: Codable, Sendable {
         self.enemies = enemies
         self.waves = waves
         self.techNodes = techNodes
+        self.board = board
     }
 
     public static let empty = GameContentBundle(
@@ -149,7 +230,8 @@ public struct GameContentBundle: Codable, Sendable {
         turrets: [],
         enemies: [],
         waves: [],
-        techNodes: []
+        techNodes: [],
+        board: .starter
     )
 }
 

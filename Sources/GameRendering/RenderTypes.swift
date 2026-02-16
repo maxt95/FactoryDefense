@@ -22,35 +22,56 @@ public enum DebugVisualizationMode: String, Codable, CaseIterable, Sendable {
 public struct RenderContext {
     public var device: MTLDevice
     public var drawableSize: CGSize
+    public var viewSizePoints: CGSize
+    public var drawableScaleX: Float
+    public var drawableScaleY: Float
     public var worldState: WorldState
     public var qualityPreset: QualityPreset
     public var debugMode: DebugVisualizationMode
+    public var cameraState: WhiteboxCameraState
+    public var highlightedCell: GridPosition?
+    public var placementResult: PlacementResult
 
     public var currentDrawable: CAMetalDrawable?
     public var renderResources: RenderResources
     public var timingCapture: FrameTimingCapture
     public var shaderVariants: ShaderVariantLibrary
+    public var whiteboxRenderer: WhiteboxRenderer
 
     public init(
         device: MTLDevice,
         drawableSize: CGSize,
+        viewSizePoints: CGSize,
+        drawableScaleX: Float,
+        drawableScaleY: Float,
         worldState: WorldState,
         qualityPreset: QualityPreset,
         debugMode: DebugVisualizationMode,
+        cameraState: WhiteboxCameraState = WhiteboxCameraState(),
+        highlightedCell: GridPosition? = nil,
+        placementResult: PlacementResult = .ok,
         currentDrawable: CAMetalDrawable?,
         renderResources: RenderResources,
         timingCapture: FrameTimingCapture,
-        shaderVariants: ShaderVariantLibrary
+        shaderVariants: ShaderVariantLibrary,
+        whiteboxRenderer: WhiteboxRenderer
     ) {
         self.device = device
         self.drawableSize = drawableSize
+        self.viewSizePoints = viewSizePoints
+        self.drawableScaleX = drawableScaleX
+        self.drawableScaleY = drawableScaleY
         self.worldState = worldState
         self.qualityPreset = qualityPreset
         self.debugMode = debugMode
+        self.cameraState = cameraState
+        self.highlightedCell = highlightedCell
+        self.placementResult = placementResult
         self.currentDrawable = currentDrawable
         self.renderResources = renderResources
         self.timingCapture = timingCapture
         self.shaderVariants = shaderVariants
+        self.whiteboxRenderer = whiteboxRenderer
     }
 }
 
@@ -166,6 +187,17 @@ public struct PostProcessingNode: RenderPassNode {
             label: "PostProcessing"
         )
         encoder?.endEncoding()
+        commandBuffer.popDebugGroup()
+    }
+}
+
+public struct WhiteboxBoardNode: RenderPassNode {
+    public let id = "whitebox_board"
+    public init() {}
+
+    public func encode(context: RenderContext, commandBuffer: MTLCommandBuffer) {
+        commandBuffer.pushDebugGroup("WhiteboxBoard")
+        context.whiteboxRenderer.encode(context: context, commandBuffer: commandBuffer)
         commandBuffer.popDebugGroup()
     }
 }

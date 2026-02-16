@@ -5,10 +5,27 @@ public struct CommandSystem: SimulationSystem {
     public init() {}
 
     public func update(state: inout WorldState, context: SystemContext) {
+        let placementValidator = PlacementValidator()
         for command in context.commands {
             switch command.payload {
             case .placeStructure(let request):
-                _ = state.entities.spawnStructure(request.structure, at: request.position)
+                let result = placementValidator.canPlace(request.structure, at: request.position, in: state)
+                if result == .ok {
+                    let placementPosition = GridPosition(
+                        x: request.position.x,
+                        y: request.position.y,
+                        z: state.board.elevation(at: request.position)
+                    )
+                    _ = state.entities.spawnStructure(request.structure, at: placementPosition)
+                } else {
+                    context.emit(
+                        SimEvent(
+                            tick: state.tick,
+                            kind: .placementRejected,
+                            value: result.rawValue
+                        )
+                    )
+                }
             case .extract:
                 state.run.extracted = true
                 context.emit(SimEvent(tick: state.tick, kind: .extracted, value: state.economy.currency))
@@ -315,27 +332,7 @@ public struct EnemyMovementSystem: SimulationSystem {
     }
 
     private func buildNavigationMap(state: WorldState) -> GridMap {
-        var maxX = max(state.combat.basePosition.x, state.combat.spawnEdgeX)
-        var maxY = max(state.combat.basePosition.y, state.combat.spawnYMax)
-
-        for entity in state.entities.all {
-            maxX = max(maxX, entity.position.x)
-            maxY = max(maxY, entity.position.y)
-        }
-
-        let width = max(12, maxX + 6)
-        let height = max(12, maxY + 6)
-        var map = GridMap(width: width, height: height)
-
-        for wall in state.entities.structures(of: .wall) {
-            map.setTile(GridTile(walkable: false, elevation: wall.position.z), at: wall.position)
-        }
-
-        if map.contains(state.combat.basePosition) {
-            map.setTile(GridTile(walkable: true, elevation: state.combat.basePosition.z), at: state.combat.basePosition)
-        }
-
-        return map
+        PlacementValidator().navigationMap(for: state)
     }
 
     private func applyBaseHit(state: inout WorldState, context: SystemContext, enemyID: EntityID, damage: Int) {

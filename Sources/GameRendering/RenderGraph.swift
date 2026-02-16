@@ -30,6 +30,7 @@ public final class RenderGraph {
             TransparentVFXNode(),
             VolumetricFogNode(),
             PostProcessingNode(),
+            WhiteboxBoardNode(),
             UICompositeNode()
         ])
     }
