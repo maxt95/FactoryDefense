@@ -210,8 +210,6 @@ private struct FactoryDefenseiOSGameplayView: View {
 
                 Button("Wave") { runtime.triggerWave() }
                     .buttonStyle(.borderedProminent)
-                Button("Extract") { runtime.extract() }
-                    .buttonStyle(.bordered)
             }
             .padding(10)
             .background(.ultraThinMaterial)

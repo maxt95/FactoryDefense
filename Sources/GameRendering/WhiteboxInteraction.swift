@@ -199,9 +199,12 @@ public enum WhiteboxStructureTypeID: UInt32, Sendable {
     case powerPlant = 7
     case conveyor = 8
     case storage = 9
+    case hq = 10
 
     public init(structureType: StructureType) {
         switch structureType {
+        case .hq:
+            self = .hq
         case .wall:
             self = .wall
         case .turretMount:

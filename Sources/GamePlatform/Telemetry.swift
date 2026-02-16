@@ -131,7 +131,7 @@ public final class PerformanceScenarioRunner {
             let sample = SimulationTelemetrySample(
                 timestamp: Date(),
                 tick: world.tick,
-                baseIntegrity: world.run.baseIntegrity,
+                baseIntegrity: world.hqHealth,
                 enemyCount: world.combat.enemies.count,
                 projectileCount: world.combat.projectiles.count,
                 currency: world.economy.currency

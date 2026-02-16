@@ -239,8 +239,7 @@ public struct OnboardingGuideViewModel: Sendable {
         OnboardingStep(id: "mine", title: "Start Mining", detail: "Place miners and gather iron/copper ore."),
         OnboardingStep(id: "power", title: "Stabilize Power", detail: "Keep available power above demand."),
         OnboardingStep(id: "ammo", title: "Automate Ammo", detail: "Build ammo modules before wave spikes."),
-        OnboardingStep(id: "defense", title: "Fortify", detail: "Add walls and turret mounts on weak lanes."),
-        OnboardingStep(id: "extract", title: "Extract", detail: "Reach milestone and extract to bank rewards.")
+        OnboardingStep(id: "defense", title: "Fortify", detail: "Add walls and turret mounts on weak lanes.")
     ])
 
     public mutating func update(from world: WorldState) {
@@ -255,8 +254,6 @@ public struct OnboardingGuideViewModel: Sendable {
                 steps[index].isComplete = world.economy.inventories["ammo_light", default: 0] >= 25
             case "defense":
                 steps[index].isComplete = world.entities.structures(of: .wall).count >= 3 && world.entities.structures(of: .turretMount).count >= 2
-            case "extract":
-                steps[index].isComplete = world.run.extracted
             default:
                 break
             }
@@ -284,7 +281,7 @@ public struct TuningDashboardSnapshot: Sendable {
             ammoStock: world.economy.inventories["ammo_light", default: 0],
             enemyCount: world.combat.enemies.count,
             projectileCount: world.combat.projectiles.count,
-            baseIntegrity: world.run.baseIntegrity,
+            baseIntegrity: world.hqHealth,
             powerHeadroom: world.economy.powerAvailable - world.economy.powerDemand
         )
     }
@@ -466,7 +463,7 @@ public struct ResourceHUDPanel: View {
             HStack(spacing: 10) {
                 statChip(title: "Tick", value: "\(world.tick)")
                 statChip(title: "Currency", value: "\(world.economy.currency)")
-                statChip(title: "Base", value: "\(world.run.baseIntegrity)")
+                statChip(title: "Base", value: "\(world.hqHealth)")
                 statChip(title: "Wave", value: waveLabel)
                 statChip(title: "Power", value: powerLabel)
             }
@@ -833,6 +830,7 @@ public struct BuildingReferencePanel: View {
 
     private func structureLabel(_ structure: StructureType) -> String {
         switch structure {
+        case .hq: return "Headquarters"
         case .wall: return "Wall"
         case .turretMount: return "Turret Mount"
         case .miner: return "Miner"
@@ -847,6 +845,8 @@ public struct BuildingReferencePanel: View {
 
     private func structureColor(_ structure: StructureType) -> Color {
         switch structure {
+        case .hq:
+            return Color(red: 0.18, green: 0.62, blue: 0.62)
         case .wall:
             return Color(red: 0.60, green: 0.60, blue: 0.60)
         case .turretMount:

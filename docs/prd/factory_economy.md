@@ -107,7 +107,7 @@ Build menu organized by category: Defense, Production, Logistics, Utility.
 | Ammo truth (turrets check inventory) | Exists |
 | Build cost enforcement | Exists — simulation-enforced (Milestone 0) |
 | Continuous threat model UI | Gap — no grace period countdown, no surge wave timer |
-| Warning banner system | Partial — `HUDViewModel.build()` generates `baseCritical`, `lowAmmo` warnings from `WorldState`; gap: warnings not rendered in gameplay view, `powerShortage` and `patchExhausted` warning types missing, `raidImminent` to be replaced by `surgeImminent` |
+| Warning banner system | Partial — `HUDViewModel.build()` generates `baseCritical`, `lowAmmo`, and `surgeImminent` from `WorldState`; gap: warnings are not yet rendered in gameplay view, and `powerShortage` / `patchExhausted` are still missing |
 
 ### 1.6 Open Questions
 
@@ -616,24 +616,22 @@ The economy must produce a tight experience where the player is ALMOST overwhelm
 
 **Starting state** (Normal difficulty, from `run_bootstrap_session_init.md`):
 - HQ only (2×2, 500 HP, 24-slot storage, 0 power)
-- Starting resources in HQ storage: 20 ore_iron, 12 ore_copper, 6 ore_coal, 4 plate_iron, 4 wall_kit, 12 ammo_light
+- Starting resources in HQ storage: 20 ore_iron, 12 ore_copper, 6 ore_coal, 14 plate_iron, 6 plate_copper, 8 plate_steel, 4 gear, 4 circuit, 1 turret_core, 6 wall_kit, 16 ammo_light
 - Grace period: 120s (2400 ticks) — no enemies
 - Ring 0 ore patches: 5 (with guaranteed iron, copper, and coal)
 
 **Player's first-minute bootstrap sequence (example):**
-1. Place power plant (cost: 2 circuit + 4 plate_copper — **not affordable from starting resources without a smelter**).
-   - **Issue:** Starting resources include only raw ores and 4 plate_iron. Player needs to place a miner + smelter first, then produce plates/circuits to afford a power plant.
-   - Alternative: Starting resources may need to include a small amount of plate_copper and circuit to enable the first power plant placement. This is an open balance question.
+1. Place power plant (cost: 2 circuit + 4 plate_copper), immediately affordable from the processed starter bundle.
 2. Place miner adjacent to iron ore patch, smelter, ammo module.
-3. Build initial wall line with starting wall_kits (4 walls on Normal).
-4. Start producing ammo before grace period ends.
+3. Build initial wall line with starting wall_kits (6 walls on Normal) and at least one turret mount (1 turret_core + 2 plate_steel).
+4. Start producing ammo before grace period ends and buffer for trickle pressure.
 
 **Grace period production potential (Normal, 120s, with recipe timing):**
 - Assumes player places 1 miner + 1 smelter + 1 ammo module within first 30s
 - Remaining 90s of production: ~45 ore_iron → ~22 plate_iron → ~88 ammo_light
-- Plus starting 12 ammo_light = ~100 ammo_light at grace period end
+- Plus starting 16 ammo_light = ~104 ammo_light at grace period end
 
-**Starting resource balance is an open question.** The HQ-only bootstrap with current Normal-difficulty starting resources may be too tight for placing a power plant + miner + smelter + initial defenses. Playtesting will determine if starting resources need to be more generous.
+**Starting resource baseline (T0) is now intentionally front-loaded with processed components.** This removes the dead-start risk on Normal and ensures the player can place power + first defense before trickle begins. Fine-tuning remains playtest/telemetry-driven.
 
 ### 8.3 Early Game (Waves 1-3)
 
@@ -645,7 +643,7 @@ The economy must produce a tight experience where the player is ALMOST overwhelm
 | 2 | 8 swarmlings + 4 scouts | 160 | ~18 shots |
 | 3 | 6 scouts + 1 raider (45hp) | 165 | ~16 shots |
 
-**Ammo budget (Normal difficulty, proposed timing):** ~100 ammo available at grace period end (12 starting + ~88 produced). Trickle scouts (1–2 swarmlings every 12s) begin immediately. Early waves are survivable with modest ammo reserves if the player has at least 1 wall-mounted turret online.
+**Ammo budget (Normal difficulty, proposed timing):** ~104 ammo available at grace period end (16 starting + ~88 produced). Trickle scouts (1–2 swarmlings every 12s) begin immediately. Early waves are survivable with modest ammo reserves if the player has at least 1 wall-mounted turret online.
 
 **Player goals in early game:**
 - Use grace period to establish the core production chain (miner > smelter > ammo module)
@@ -831,3 +829,4 @@ budget(w) = 10 + 4w + floor(0.5w²)
 - 2026-02-15: Accuracy pass — fixed recipe times (craft_wall_kit 1.2s, craft_turret_core 2.5s, craft_repair_kit 2.0s), corrected bootstrap state (2 turrets, 80 starting ammo), fixed placement validation status (PlacementValidator exists), clarified current vs proposed production rates in balance framework, corrected balance ratio table turret counts.
 - 2026-02-16: Post-Milestone-0 status update — marked completed P0 items (build cost enforcement, per-turret combat, recipe-driven production, all production chains). Replaced superseded section 5 (zone-based logistics) with pointer to `building_specifications.md`. Fixed storage power draw from +1 to 0 per building specs. Added status column to Appendix B priority matrix.
 - 2026-02-16: Major cross-PRD alignment pass. Replaced build/wave phase model with continuous threat model (per wave_threat_system.md). Updated system execution order to 8 systems. Updated bootstrap from 6 starter structures to HQ-only (per run_bootstrap_session_init.md). Replaced starting inventory (80 ammo_light) with difficulty-scaled resources from wave_threat. Replaced linear wave formula with quadratic budget. Removed "Raid Imminent" warning (no raid subsystem). Updated turret ammo model from global inventory to wall network pools (per building_specifications.md). Updated enemy targeting from probability-based to deterministic behavioral conditions. Updated HUD requirements for grace period countdown and HQ health.
+- 2026-02-16: Starting-resource rebalance pass. Updated Normal bootstrap analysis to include processed starter components (plate_copper, plate_steel, gear, circuit, turret_core), revised opening sequence to immediate power + first turret viability, and refreshed grace-period ammo forecast from ~100 to ~104.

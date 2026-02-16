@@ -26,6 +26,7 @@ This plan tracks implementation status against the canonical v1 product directio
 - `[x]` Ammo truth exists (`no ammo -> no shot`) with per-turret ammo/range/fire-rate/damage differentiation.
 - `[~]` Economy loop is recipe-driven with per-structure timing/progress for smelter/assembler/ammo-module, plus first-pass structure buffers/conveyor backpressure; miner/resource-node realism and full port/filter model remain follow-up.
 - `[x]` Build cost enforcement is simulation-authoritative.
+- `[~]` Run bootstrap/session init is partially aligned: HQ-only bootstrap, difficulty+seed params, phase lifecycle events, extraction UI removal, and deterministic Ring 0 patch generation are in; summary flow and full ore runtime remain follow-up.
 - `[ ]` Ore patch adjacency/depletion and structure-targeting threat pressure are not complete.
 
 ### Rendering truth
@@ -49,7 +50,7 @@ Exit criteria:
 ### Milestone 1 - P1 Factory and Threat Reality (Current Top Priority)
 Goal: complete the first fully legible factory-defense vertical slice.
 
-- [ ] Add ore patch/resource node entities and miner adjacency requirements.
+- [~] Add ore patch/resource node entities and miner adjacency requirements (Ring 0 generation exists; miner binding/adjacency still pending).
 - [ ] Add ore depletion tracking and related simulation events/telemetry.
 - [~] Implement per-structure recipe timing/progress (smelter/assembler/ammo module done; miner extraction timing remains).
 - [ ] Implement wave composition from `waves.json` for authored waves.
@@ -119,7 +120,7 @@ Exit criteria:
 - [~] Conveyor-routed runtime exists for directed transfer + backpressure on standard conveyors; splitter/merger/storage hub behavior remains.
 
 ### Workstream D - Combat, Waves, AI
-- [~] Base wave cadence exists.
+- [~] Grace period + trickle + compressed wave cadence exists (still formula-spawned; not yet authored-wave driven).
 - [x] Per-turret stat and ammo differentiation.
 - [ ] Authored-wave consumption from `waves.json` + endless procedural continuation.
 - [ ] Structure-targeting enemy behaviors and cascade pressure.
@@ -153,7 +154,7 @@ Exit criteria:
 - `swift test` passes locally.
 - Deterministic replay remains stable after gameplay-truth refactors.
 - Build costs, ammo truth, and recipe-driven production are simulation-enforced.
-- Author-time data (`recipes.json`, `turrets.json`, `waves.json`) drives runtime behavior for core loops.
+- Author-time data (`recipes.json`, `turrets.json`, `hq.json`, `difficulty.json`) drives runtime behavior for core loops; `waves.json` authored consumption remains in progress.
 - Whitebox rendering displays active simulation entities and supports tuning readability.
 - App targets compile via `xcodebuild -project FactoryDefense.xcodeproj` for:
   - `FactoryDefense_macOS`

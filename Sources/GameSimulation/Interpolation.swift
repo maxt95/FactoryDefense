@@ -12,8 +12,8 @@ public struct InterpolatedWorldFrame: Sendable {
     }
 
     public var blendedBaseIntegrity: Double {
-        let p = Double(previous.run.baseIntegrity)
-        let c = Double(current.run.baseIntegrity)
+        let p = Double(previous.hqHealth)
+        let c = Double(current.hqHealth)
         return p + ((c - p) * alpha)
     }
 

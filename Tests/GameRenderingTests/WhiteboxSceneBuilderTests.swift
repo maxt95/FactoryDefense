@@ -9,12 +9,12 @@ final class WhiteboxSceneBuilderTests: XCTestCase {
 
         XCTAssertEqual(scene.summary.boardCellCount, 6144)
         XCTAssertEqual(scene.summary.blockedCellCount, 0)
-        XCTAssertEqual(scene.summary.restrictedCellCount, 5)
+        XCTAssertEqual(scene.summary.restrictedCellCount, 9)
         XCTAssertEqual(scene.summary.rampCount, 3)
-        XCTAssertEqual(scene.summary.structureCount, 6)
+        XCTAssertEqual(scene.summary.structureCount, 1)
         XCTAssertEqual(scene.summary.enemyCount, 0)
         XCTAssertEqual(scene.summary.projectileCount, 0)
-        XCTAssertEqual(scene.structures.count, 6)
+        XCTAssertEqual(scene.structures.count, 1)
         XCTAssertEqual(scene.entities.count, 0)
     }
 
@@ -22,16 +22,16 @@ final class WhiteboxSceneBuilderTests: XCTestCase {
         let world = WorldState.bootstrap()
         let scene = WhiteboxSceneBuilder().build(from: world)
 
-        let turretMarkers = scene.structures.filter { $0.typeRaw == WhiteboxStructureTypeID.turretMount.rawValue }
-        XCTAssertEqual(turretMarkers.count, 2)
-        XCTAssertTrue(turretMarkers.allSatisfy { $0.footprintWidth == 2 && $0.footprintHeight == 2 })
+        let hqMarkers = scene.structures.filter { $0.typeRaw == WhiteboxStructureTypeID.hq.rawValue }
+        XCTAssertEqual(hqMarkers.count, 1)
+        XCTAssertTrue(hqMarkers.allSatisfy { $0.footprintWidth == 2 && $0.footprintHeight == 2 })
 
-        guard let powerPlant = scene.structures.first(where: { $0.typeRaw == WhiteboxStructureTypeID.powerPlant.rawValue }) else {
-            return XCTFail("Expected power plant structure marker")
+        guard let hq = scene.structures.first(where: { $0.typeRaw == WhiteboxStructureTypeID.hq.rawValue }) else {
+            return XCTFail("Expected HQ structure marker")
         }
-        XCTAssertEqual(powerPlant.anchorX, 39)
-        XCTAssertEqual(powerPlant.anchorY, 30)
-        XCTAssertEqual(powerPlant.footprintWidth, 2)
-        XCTAssertEqual(powerPlant.footprintHeight, 2)
+        XCTAssertEqual(hq.anchorX, 40)
+        XCTAssertEqual(hq.anchorY, 32)
+        XCTAssertEqual(hq.footprintWidth, 2)
+        XCTAssertEqual(hq.footprintHeight, 2)
     }
 }

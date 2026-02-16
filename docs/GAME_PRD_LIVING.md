@@ -47,7 +47,9 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 | Bootstrap | HQ-only start; player places all structures during the grace period using HQ storage resources |
 | HQ | 2×2 entity, 500 HP, 24-slot storage with 4 bidirectional ports (output for resources, input for repair_kit delivery); run ends when HQ health reaches 0 |
 | Grace period | Difficulty-scaled (Easy 180s / Normal 120s / Hard 60s); no enemies during this window |
+| Grace skip | Disabled in v1 (no early-end command/button) |
 | Waves | Continuous threat model: grace period → trickle pressure → timed surge waves; no separate raid subsystem |
+| Map orientation | Fixed in v1: factory-west, spawn-east |
 | Defense topology | Turrets mount on wall segments (1:1); wall networks carry ammo to turrets via shared pools; wall line defines defensive territory |
 | Ore patches | Finite deposits with depletion; Ring 0 guarantees iron + copper + coal; outer rings revealed via geology survey tech |
 | Progression | Resource + research tech tree unlocks (Lab building, item-cost research, gating and passive bonuses) |
@@ -65,6 +67,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 
 ## Session Structure
 - Boot phase: HQ placed at map center with difficulty-scaled starting resources in its storage buffer; Ring 0 ore patches (iron + copper + coal guaranteed) visible; difficulty-scaled grace period with no enemy spawns (Easy 180s / Normal 120s / Hard 60s).
+- Orientation: fixed for v1 (factory-west / spawn-east) for deterministic readability and consistent tuning.
 - Continuous pressure: trickle scouts begin immediately after grace period ends and persist for the rest of the run.
 - Wave surges: timed attacks with inter-wave gap compression over time (base gap: Easy 120s / Normal 90s / Hard 60s, shrinking by 2s per wave to a floor).
 - Endless escalation: hand-authored waves 1–8 transition to procedural budget-based composition (quadratic scaling: `budget(w) = 10 + 4w + floor(0.5w²)`).
@@ -202,8 +205,6 @@ When updating this file:
 - Long-run scaling: when to introduce elite/flying/siege enemy variants.
 - Should wave-survived rewards be explicit (currency/resources) or remain pressure-only progression?
 - Maximum concurrent enemy cap by platform tier and quality preset (recommended: 500 per wave_threat_system.md).
-- Map rotation: should the factory-west / spawn-east orientation be fixed or vary per run?
-- Starting resource balance: HQ-only bootstrap with wave_threat's starting resources (12 ammo_light on Normal) needs playtesting to confirm viability for placing power plant + miner + smelter + defenses.
 
 ## Cross-PRD Reconciliation Status
 All individual PRDs have been updated to align with the locked decisions above (completed 2026-02-16):
@@ -222,3 +223,6 @@ All individual PRDs have been updated to align with the locked decisions above (
 - 2026-02-16: Re-aligned living PRD threat model to `wave_threat_system.md` (continuous pressure, no separate raid subsystem, no build-phase gating).
 - 2026-02-16: Major cross-PRD alignment pass. Resolved ~20 conflicts across individual PRDs. Locked decisions: HQ-only bootstrap (supersedes factory_economy 6-structure start), wall-mounted turrets with wall network ammo pools (supersedes building_specifications standalone turret), difficulty-scaled grace period 60–180s (supersedes factory_economy 20s), quadratic wave budget formula (supersedes factory_economy linear), Ring 0 guarantees iron+copper+coal with varied richness. Added HQ, Ore Patches, Tech Tree, and Build Interaction subsections to systems model. Added cross-PRD reconciliation tracker. Updated system execution order to 8 systems.
 - 2026-02-16: Completed cross-PRD reconciliation. Updated all 5 individual PRDs to align with living PRD locked decisions: factory_economy (continuous model, HQ-only bootstrap, quadratic formula, wall-mounted turrets, deterministic targeting), building_specifications (wall-mounted turret rewrite), run_bootstrap_session_init (coal guarantee, varied richness, ore colors), build_interaction_flow (ammo module ports), combat_rendering_vfx (M0 status, deterministic targeting).
+- 2026-02-16: Landed bootstrap/session-init reconciliation in code: `WorldState.bootstrap(difficulty:seed:)`, `hq.json` + `difficulty.json` loading/validation, HQ entity + phase-based run lifecycle events (`runStarted`, `gracePeriodEnded`, `gameOver`), deterministic Ring 0 patch generation, and extraction UI/command removal for T0.
+- 2026-02-16: Locked remaining bootstrap decisions: fixed map orientation (factory-west/spawn-east), grace-period skip disabled in v1, and current `hq.json` starting-resource tables retained as baseline pending telemetry tuning.
+- 2026-02-16: Rebalanced HQ starting resources across all difficulties to include processed starter components (`plate_copper`, `plate_steel`, `gear`, `circuit`, `turret_core`) and higher initial wall/ammo budgets; updated PRDs and tests to match the new baseline.

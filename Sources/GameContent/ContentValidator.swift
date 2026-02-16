@@ -6,6 +6,8 @@ public enum ContentValidationError: Error, Equatable, Sendable {
     case invalidWaveComposition(waveIndex: Int, reason: String)
     case unreachableTechNode(String)
     case invalidBoard(reason: String)
+    case invalidHQ(reason: String)
+    case invalidDifficulty(reason: String)
 }
 
 public struct ContentValidator {
@@ -18,6 +20,8 @@ public struct ContentValidator {
         errors += validateRecipeCycles(bundle: bundle)
         errors += validateTechReachability(bundle: bundle)
         errors += validateBoard(bundle.board)
+        errors += validateHQ(bundle.hq, itemIDs: bundle.itemIDs)
+        errors += validateDifficulty(bundle.difficulty)
         return errors
     }
 
@@ -225,6 +229,86 @@ public struct ContentValidator {
 
         for ramp in board.ramps where restricted.contains("\(ramp.position.x):\(ramp.position.y)") {
             errors.append(.invalidBoard(reason: "ramp cell (\(ramp.position.x),\(ramp.position.y)) cannot also be restricted"))
+        }
+
+        return errors
+    }
+
+    private func validateHQ(_ hq: HQDef, itemIDs: Set<ItemID>) -> [ContentValidationError] {
+        var errors: [ContentValidationError] = []
+
+        if hq.health <= 0 {
+            errors.append(.invalidHQ(reason: "hq health must be positive"))
+        }
+        if hq.storageCapacity <= 0 {
+            errors.append(.invalidHQ(reason: "hq storageCapacity must be positive"))
+        }
+        if hq.footprint.width != 2 || hq.footprint.height != 2 {
+            errors.append(.invalidHQ(reason: "hq footprint must be 2x2"))
+        }
+
+        let resourcesByDifficulty: [(DifficultyID, [ItemID: Int])] = [
+            (.easy, hq.startingResources.easy),
+            (.normal, hq.startingResources.normal),
+            (.hard, hq.startingResources.hard)
+        ]
+        for (difficulty, resources) in resourcesByDifficulty {
+            for (itemID, quantity) in resources {
+                if !itemIDs.contains(itemID) {
+                    errors.append(.invalidHQ(reason: "starting resource item '\(itemID)' is missing for \(difficulty.rawValue)"))
+                }
+                if quantity < 0 {
+                    errors.append(.invalidHQ(reason: "starting resource quantity for '\(itemID)' must be non-negative"))
+                }
+            }
+        }
+
+        return errors
+    }
+
+    private func validateDifficulty(_ difficulty: DifficultyConfigDef) -> [ContentValidationError] {
+        var errors: [ContentValidationError] = []
+
+        let valuesByLabel: [(String, DifficultyDef)] = [
+            ("easy", difficulty.easy),
+            ("normal", difficulty.normal),
+            ("hard", difficulty.hard)
+        ]
+
+        for (label, value) in valuesByLabel {
+            if value.gracePeriodSeconds <= 0 {
+                errors.append(.invalidDifficulty(reason: "\(label): gracePeriodSeconds must be positive"))
+            }
+            if value.interWaveGapBase <= 0 {
+                errors.append(.invalidDifficulty(reason: "\(label): interWaveGapBase must be positive"))
+            }
+            if value.interWaveGapFloor <= 0 {
+                errors.append(.invalidDifficulty(reason: "\(label): interWaveGapFloor must be positive"))
+            }
+            if value.interWaveGapFloor > value.interWaveGapBase {
+                errors.append(.invalidDifficulty(reason: "\(label): interWaveGapFloor cannot exceed interWaveGapBase"))
+            }
+            if value.gapCompressionPerWave < 0 {
+                errors.append(.invalidDifficulty(reason: "\(label): gapCompressionPerWave must be non-negative"))
+            }
+            if value.trickleIntervalSeconds <= 0 {
+                errors.append(.invalidDifficulty(reason: "\(label): trickleIntervalSeconds must be positive"))
+            }
+            if value.trickleSize.count != 2 {
+                errors.append(.invalidDifficulty(reason: "\(label): trickleSize must contain [min,max]"))
+            } else {
+                let minSize = value.trickleSize[0]
+                let maxSize = value.trickleSize[1]
+                if minSize <= 0 || maxSize <= 0 {
+                    errors.append(.invalidDifficulty(reason: "\(label): trickleSize values must be positive"))
+                }
+                if minSize > maxSize {
+                    errors.append(.invalidDifficulty(reason: "\(label): trickleSize min cannot exceed max"))
+                }
+            }
+            if value.waveBudgetMultiplier <= 0 {
+                errors.append(.invalidDifficulty(reason: "\(label): waveBudgetMultiplier must be positive"))
+            }
         }
 
         return errors

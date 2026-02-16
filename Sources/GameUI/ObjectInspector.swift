@@ -265,6 +265,8 @@ public struct ObjectInspectorBuilder: Sendable {
 
     private func structureLabel(_ structureType: StructureType) -> String {
         switch structureType {
+        case .hq:
+            return "Headquarters"
         case .wall:
             return "Wall"
         case .turretMount:

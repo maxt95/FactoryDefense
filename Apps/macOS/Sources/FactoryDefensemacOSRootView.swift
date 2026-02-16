@@ -242,11 +242,6 @@ private struct FactoryDefensemacOSGameplayView: View {
                     runtime.triggerWave()
                 }
                 .buttonStyle(.borderedProminent)
-
-                Button("Extract") {
-                    runtime.extract()
-                }
-                .buttonStyle(.bordered)
             }
             .padding(10)
             .background(.ultraThinMaterial)

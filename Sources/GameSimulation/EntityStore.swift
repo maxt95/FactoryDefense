@@ -62,19 +62,23 @@ public struct EntityStore: Codable, Hashable, Sendable {
     public mutating func spawnStructure(
         _ structure: StructureType,
         at position: GridPosition,
-        turretDefID: String? = nil
+        turretDefID: String? = nil,
+        health: Int = 100,
+        maxHealth: Int? = nil
     ) -> EntityID {
         let id = nextEntityID
         nextEntityID += 1
         let resolvedTurretDefID: String? = structure == .turretMount ? (turretDefID ?? "turret_mk1") : nil
+        let resolvedMaxHealth = max(1, maxHealth ?? health)
+        let resolvedHealth = min(max(1, health), resolvedMaxHealth)
         entitiesByID[id] = Entity(
             id: id,
             category: .structure,
             structureType: structure,
             turretDefID: resolvedTurretDefID,
             position: position,
-            health: 100,
-            maxHealth: 100
+            health: resolvedHealth,
+            maxHealth: resolvedMaxHealth
         )
         return id
     }

@@ -247,6 +247,11 @@ public extension WorldState {
         guard shiftX != 0 || shiftY != 0 else { return }
 
         entities.translateAll(byX: shiftX, byY: shiftY)
+        orePatches = orePatches.map { patch in
+            var translated = patch
+            translated.position = translated.position.translated(byX: shiftX, byY: shiftY)
+            return translated
+        }
         combat.basePosition = combat.basePosition.translated(byX: shiftX, byY: shiftY)
         combat.spawnEdgeX += shiftX
         combat.spawnYMin += shiftY
@@ -266,7 +271,7 @@ public extension StructureType {
         switch self {
         case .conveyor:
             return false
-        case .wall, .turretMount, .miner, .smelter, .assembler, .ammoModule, .powerPlant, .storage:
+        case .hq, .wall, .turretMount, .miner, .smelter, .assembler, .ammoModule, .powerPlant, .storage:
             return true
         }
     }

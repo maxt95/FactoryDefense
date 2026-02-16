@@ -326,6 +326,6 @@ Assets/Whitebox/
 
 After implementation, verify by:
 1. `swift test` — all existing tests should still pass (render tests create resources but don't draw)
-2. `swift run FactoryDefense` — the macOS app should show color-coded boxes on a grid matching `WorldState.bootstrap()` (power plant, miner, smelter, ammo module, turret at positions 0-4)
+2. `swift run FactoryDefense` — the macOS app should show HQ-only bootstrap state at tick 0 (single HQ structure + Ring 0 ore patch markers; no pre-placed production/defense structures)
 3. Run the prototype with `swift run FactoryDefensePrototype` and load the saved snapshot to verify the renderer can display a mid-game state with enemies and projectiles
 4. Toggle `DebugVisualizationMode` values to verify debug rendering still works alongside whitebox geometry
