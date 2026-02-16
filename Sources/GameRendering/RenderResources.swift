@@ -4,8 +4,10 @@ import Metal
 
 public final class RenderResources {
     public private(set) var scaledSize: CGSize = .zero
+    public private(set) var drawablePixelSize: CGSize = .zero
 
     public private(set) var depthTexture: MTLTexture?
+    public private(set) var drawableDepthTexture: MTLTexture?
     public private(set) var shadowTexture: MTLTexture?
     public private(set) var opaqueTexture: MTLTexture?
     public private(set) var transparentTexture: MTLTexture?
@@ -35,12 +37,17 @@ public final class RenderResources {
 
         let width = max(1, Int((drawableSize.width * scale).rounded(.toNearestOrEven)))
         let height = max(1, Int((drawableSize.height * scale).rounded(.toNearestOrEven)))
+        let drawableWidth = max(1, Int(drawableSize.width.rounded(.toNearestOrEven)))
+        let drawableHeight = max(1, Int(drawableSize.height.rounded(.toNearestOrEven)))
 
         let newSize = CGSize(width: width, height: height)
-        guard newSize != scaledSize else { return }
+        let newDrawablePixelSize = CGSize(width: drawableWidth, height: drawableHeight)
+        guard newSize != scaledSize || newDrawablePixelSize != drawablePixelSize else { return }
 
         scaledSize = newSize
+        drawablePixelSize = newDrawablePixelSize
         depthTexture = makeTexture(device: device, width: width, height: height, pixelFormat: depthPixelFormat, usage: [.renderTarget])
+        drawableDepthTexture = makeTexture(device: device, width: drawableWidth, height: drawableHeight, pixelFormat: depthPixelFormat, usage: [.renderTarget])
         shadowTexture = makeTexture(device: device, width: width, height: height, pixelFormat: .r32Float, usage: [.renderTarget, .shaderRead])
         opaqueTexture = makeTexture(device: device, width: width, height: height, pixelFormat: drawablePixelFormat, usage: [.renderTarget, .shaderRead])
         transparentTexture = makeTexture(device: device, width: width, height: height, pixelFormat: drawablePixelFormat, usage: [.renderTarget, .shaderRead])
@@ -78,6 +85,21 @@ public final class RenderResources {
         descriptor.depthAttachment.texture = depthTexture
         descriptor.depthAttachment.loadAction = .load
         descriptor.depthAttachment.storeAction = .store
+        return descriptor
+    }
+
+    public func drawableOpaqueDescriptor(drawableTexture: MTLTexture?) -> MTLRenderPassDescriptor? {
+        guard let drawableTexture else { return nil }
+        let depthAttachmentTexture = drawableDepthTexture ?? depthTexture
+        guard let depthAttachmentTexture else { return nil }
+        let descriptor = MTLRenderPassDescriptor()
+        descriptor.colorAttachments[0].texture = drawableTexture
+        descriptor.colorAttachments[0].loadAction = .load
+        descriptor.colorAttachments[0].storeAction = .store
+        descriptor.depthAttachment.texture = depthAttachmentTexture
+        descriptor.depthAttachment.loadAction = .clear
+        descriptor.depthAttachment.storeAction = .dontCare
+        descriptor.depthAttachment.clearDepth = 1.0
         return descriptor
     }
 

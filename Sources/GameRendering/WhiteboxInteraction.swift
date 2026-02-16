@@ -227,6 +227,36 @@ public enum WhiteboxStructureTypeID: UInt32, Sendable {
     }
 }
 
+public enum WhiteboxEnemyTypeID: UInt32, Sendable {
+    case swarmling = 1
+    case droneScout = 2
+    case raider = 3
+    case breacher = 4
+    case artilleryBug = 5
+    case overseer = 6
+
+    init(archetype: EnemyArchetype) {
+        switch archetype {
+        case .swarmling:
+            self = .swarmling
+        case .droneScout:
+            self = .droneScout
+        case .raider:
+            self = .raider
+        case .breacher:
+            self = .breacher
+        case .overseer:
+            self = .overseer
+        }
+    }
+}
+
+public enum WhiteboxProjectileTypeID: UInt32, Sendable {
+    case lightBallistic = 1
+    case heavyBallistic = 2
+    case plasma = 3
+}
+
 public struct WhiteboxPoint: Hashable, Sendable {
     public var x: Int32
     public var y: Int32
@@ -250,14 +280,18 @@ public struct WhiteboxRampPoint: Hashable, Sendable {
 }
 
 public struct WhiteboxEntityMarker: Hashable, Sendable {
+    public var id: Int64
     public var x: Int32
     public var y: Int32
     public var category: UInt32
+    public var subtypeRaw: UInt32
 
-    public init(x: Int32, y: Int32, category: UInt32) {
+    public init(id: Int64, x: Int32, y: Int32, category: UInt32, subtypeRaw: UInt32 = 0) {
+        self.id = id
         self.x = x
         self.y = y
         self.category = category
+        self.subtypeRaw = subtypeRaw
     }
 }
 
@@ -337,19 +371,25 @@ public struct WhiteboxSceneBuilder {
                     )
                 )
             case .enemy:
+                let subtypeRaw = whiteboxEnemyTypeRaw(entityID: entity.id, world: world)
                 entities.append(
                     WhiteboxEntityMarker(
+                        id: Int64(entity.id),
                         x: Int32(entity.position.x),
                         y: Int32(entity.position.y),
-                        category: WhiteboxEntityCategory.enemy.rawValue
+                        category: WhiteboxEntityCategory.enemy.rawValue,
+                        subtypeRaw: subtypeRaw
                     )
                 )
             case .projectile:
+                let subtypeRaw = whiteboxProjectileTypeRaw(entityID: entity.id, world: world)
                 entities.append(
                     WhiteboxEntityMarker(
+                        id: Int64(entity.id),
                         x: Int32(entity.position.x),
                         y: Int32(entity.position.y),
-                        category: WhiteboxEntityCategory.projectile.rawValue
+                        category: WhiteboxEntityCategory.projectile.rawValue,
+                        subtypeRaw: subtypeRaw
                     )
                 )
             }
@@ -373,6 +413,39 @@ public struct WhiteboxSceneBuilder {
             structures: structures,
             entities: entities
         )
+    }
+
+    private func whiteboxEnemyTypeRaw(entityID: EntityID, world: WorldState) -> UInt32 {
+        guard let runtime = world.combat.enemies[entityID] else {
+            return WhiteboxEnemyTypeID.swarmling.rawValue
+        }
+        return WhiteboxEnemyTypeID(archetype: runtime.archetype).rawValue
+    }
+
+    private func whiteboxProjectileTypeRaw(entityID: EntityID, world: WorldState) -> UInt32 {
+        guard let runtime = world.combat.projectiles[entityID] else {
+            return WhiteboxProjectileTypeID.lightBallistic.rawValue
+        }
+
+        if let turret = world.entities.entity(id: runtime.sourceTurretID),
+           let turretDefID = turret.turretDefID {
+            switch turretDefID {
+            case "turret_mk2":
+                return WhiteboxProjectileTypeID.heavyBallistic.rawValue
+            case "plasma_sentinel":
+                return WhiteboxProjectileTypeID.plasma.rawValue
+            default:
+                return WhiteboxProjectileTypeID.lightBallistic.rawValue
+            }
+        }
+
+        if runtime.damage >= 40 {
+            return WhiteboxProjectileTypeID.plasma.rawValue
+        }
+        if runtime.damage >= 20 {
+            return WhiteboxProjectileTypeID.heavyBallistic.rawValue
+        }
+        return WhiteboxProjectileTypeID.lightBallistic.rawValue
     }
 }
 
