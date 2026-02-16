@@ -14,6 +14,7 @@ It is intentionally high level; linked PRDs provide detailed design and implemen
 - `docs/prd/factory_economy.md` defines economy/combat balance and priorities.
 - `docs/prd/building_specifications.md` defines the conveyor-routed building/port/buffer model and supersedes older abstract logistics assumptions.
 - `docs/prd/combat_rendering_vfx.md` defines projectile physics, enemy pathfinding, instanced GPU rendering, and VFX particle system architecture.
+- `docs/prd/tech_tree_runtime.md` defines the tech tree runtime: Lab building, research flow, node effects, gating rules, and simulation integration.
 - `docs/WHITEBOX_ASSET_STRATEGY.md` defines the whitebox rendering path for early playable visuals.
 
 ## Product Pillars
@@ -137,6 +138,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Factory & Economy PRD: `docs/prd/factory_economy.md`
 - Building Specifications PRD: `docs/prd/building_specifications.md`
 - Combat, Rendering & VFX PRD: `docs/prd/combat_rendering_vfx.md`
+- Tech Tree Runtime PRD: `docs/prd/tech_tree_runtime.md`
 - Whitebox Asset Strategy: `docs/WHITEBOX_ASSET_STRATEGY.md`
 
 ## Change Control
@@ -155,3 +157,4 @@ When updating this file:
 - 2026-02-15: Added Factory & Economy PRD link.
 - 2026-02-16: Initialized living PRD from approved high-level product direction and implemented architecture baseline.
 - 2026-02-16: Aligned high-level living PRD with economy/building/whitebox PRDs; set conveyor + per-building buffer model as canonical v1 logistics direction.
+- 2026-02-15: Added Tech Tree Runtime PRD link.
