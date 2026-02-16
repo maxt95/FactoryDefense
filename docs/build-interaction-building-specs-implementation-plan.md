@@ -21,9 +21,10 @@
   - Content-driven port transfer validation from `buildings.json` (input/output side resolution by rotation + per-port item filters).
   - Removed logistics transport fallback to global inventory; produced items remain in routed buffers/pools until physically consumed.
   - `GameRuntimeController` command helper expansion (`placeConveyor`, `rotateBuilding`, `pinRecipe`, `removeStructure`) and rotation-aware place APIs for shared platform wiring.
+  - Introduced shared `GameplayInteractionState` in `GameUI` and adopted it across macOS/iOS/iPadOS/CLI gameplay roots for unified build/interact mode and build-menu selection transitions.
   - Golden replay fingerprint regeneration and new command/snapshot/removal tests.
 - Still in progress / remaining for parity:
-  - Shared cross-platform gameplay interaction module + drag-draw parity + canonical rejection UX timing.
+  - Shared interaction module follow-through: drag-draw parity, demolish confirmation flow, and canonical rejection-feedback timing.
 
 ## Locked Decisions
 1. Scope: full PRD parity for both target PRDs.

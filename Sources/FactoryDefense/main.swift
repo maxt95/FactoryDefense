@@ -250,18 +250,11 @@ private struct FactoryDefenseRunSummaryView: View {
 }
 
 private struct FactoryDefenseGameplayView: View {
-    private enum InteractionMode: String, CaseIterable, Identifiable {
-        case interact = "Interact"
-        case build = "Build"
-
-        var id: Self { self }
-    }
-
     @StateObject private var runtime: GameRuntimeController
     @State private var buildMenu = BuildMenuViewModel.productionPreset
     @State private var techTree = TechTreeViewModel.productionPreset
     @State private var onboarding = OnboardingGuideViewModel.starter
-    @State private var interactionMode: InteractionMode = .interact
+    @State private var interaction = GameplayInteractionState()
     @State private var overlayLayout = GameplayOverlayLayoutState.defaultLayout(
         viewportSize: CGSize(width: 1280, height: 720)
     )
@@ -286,7 +279,7 @@ private struct FactoryDefenseGameplayView: View {
     private static let keyboardPanStep: Float = 56
 
     private var selectedStructure: StructureType {
-        buildMenu.selectedEntry()?.structure ?? .wall
+        interaction.selectedStructure(from: buildMenu)
     }
 
     private var inventory: [String: Int] {
@@ -301,7 +294,7 @@ private struct FactoryDefenseGameplayView: View {
                     cameraState: cameraState,
                     debugMode: enableDebugViews ? .tactical : .none,
                     highlightedCell: runtime.highlightedCell,
-                    highlightedStructure: interactionMode == .build && runtime.highlightedCell != nil ? selectedStructure : nil,
+                    highlightedStructure: interaction.isBuildMode && runtime.highlightedCell != nil ? selectedStructure : nil,
                     placementResult: runtime.placementResult,
                     onKeyboardPan: { dx, dy, viewport in
                         handleKeyboardPan(deltaX: dx, deltaY: dy, viewport: viewport)
@@ -376,13 +369,13 @@ private struct FactoryDefenseGameplayView: View {
                 reconcileCameraForBoardChange(from: oldBoard, to: newBoard, viewport: proxy.size)
             }
             .onChange(of: buildMenu.selectedEntryID) { _, _ in
-                if interactionMode == .build, let highlighted = runtime.highlightedCell {
+                if interaction.isBuildMode, let highlighted = runtime.highlightedCell {
                     runtime.previewPlacement(structure: selectedStructure, at: highlighted)
                 } else {
                     runtime.clearPlacementPreview()
                 }
             }
-            .onChange(of: interactionMode) { _, mode in
+            .onChange(of: interaction.mode) { _, mode in
                 switch mode {
                 case .build:
                     if let highlighted = runtime.highlightedCell {
@@ -429,8 +422,8 @@ private struct FactoryDefenseGameplayView: View {
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                Picker("Mode", selection: $interactionMode) {
-                    ForEach(InteractionMode.allCases) { mode in
+                Picker("Mode", selection: $interaction.mode) {
+                    ForEach(GameplayInteractionMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
                 }
@@ -451,8 +444,7 @@ private struct FactoryDefenseGameplayView: View {
 
         case .buildMenu:
             BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in
-                buildMenu.select(entryID: entry.id)
-                interactionMode = .build
+                interaction.selectBuildEntry(entry.id, in: &buildMenu)
             }
 
         case .buildingReference:
@@ -544,20 +536,19 @@ private struct FactoryDefenseGameplayView: View {
             return
         }
 
-        guard interactionMode == .build else {
+        guard interaction.isBuildMode else {
             runtime.clearPlacementPreview()
             return
         }
 
         runtime.placeStructure(selectedStructure, at: position)
-        if runtime.placementResult == .ok {
-            interactionMode = .interact
+        if interaction.completePlacementIfSuccessful(runtime.placementResult) {
             runtime.clearPlacementPreview()
         }
     }
 
     private func previewPlacement(at location: CGPoint, viewport: CGSize) {
-        guard interactionMode == .build else {
+        guard interaction.isBuildMode else {
             runtime.clearPlacementPreview()
             return
         }

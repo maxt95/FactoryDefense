@@ -52,13 +52,6 @@ private struct FactoryDefenseMainMenu: View {
 }
 
 private struct FactoryDefenseiPadOSGameplayView: View {
-    private enum InteractionMode: String, CaseIterable, Identifiable {
-        case interact = "Interact"
-        case build = "Build"
-
-        var id: Self { self }
-    }
-
     private enum SelectionTarget: Equatable {
         case entity(EntityID)
         case orePatch(Int)
@@ -68,7 +61,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     @State private var buildMenu = BuildMenuViewModel.productionPreset
     @State private var techTree = TechTreeViewModel.productionPreset
     @State private var onboarding = OnboardingGuideViewModel.starter
-    @State private var interactionMode: InteractionMode = .interact
+    @State private var interaction = GameplayInteractionState()
     @State private var overlayLayout = GameplayOverlayLayoutState.defaultLayout(
         viewportSize: CGSize(width: 1280, height: 900)
     )
@@ -83,7 +76,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     private let orePatchInspectorBuilder = OrePatchInspectorBuilder()
 
     private var selectedStructure: StructureType {
-        buildMenu.selectedEntry()?.structure ?? .wall
+        interaction.selectedStructure(from: buildMenu)
     }
 
     private var inventory: [String: Int] {
@@ -97,7 +90,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                     world: runtime.world,
                     cameraState: cameraState,
                     highlightedCell: runtime.highlightedCell,
-                    highlightedStructure: interactionMode == .build && runtime.highlightedCell != nil ? selectedStructure : nil,
+                    highlightedStructure: interaction.isBuildMode && runtime.highlightedCell != nil ? selectedStructure : nil,
                     placementResult: runtime.placementResult,
                     onKeyboardPan: { dx, dy, viewport in
                         handleKeyboardPan(deltaX: dx, deltaY: dy, viewport: viewport)
@@ -139,7 +132,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                         }
                 )
 
-                if interactionMode == .interact {
+                if interaction.mode == .interact {
                     if let inspector = selectedEntityInspectorModel() {
                         ObjectInspectorPopup(
                             model: inspector,
@@ -188,7 +181,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
             .onChange(of: buildMenu.selectedEntryID) { _, _ in
                 refreshPlacementPreview(viewport: proxy.size)
             }
-            .onChange(of: interactionMode) { _, mode in
+            .onChange(of: interaction.mode) { _, mode in
                 switch mode {
                 case .build:
                     selectedTarget = nil
@@ -234,8 +227,8 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                     .background(.regularMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
 
-                Picker("Mode", selection: $interactionMode) {
-                    ForEach(InteractionMode.allCases) { mode in
+                Picker("Mode", selection: $interaction.mode) {
+                    ForEach(GameplayInteractionMode.allCases) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
                 }
@@ -256,8 +249,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
 
         case .buildMenu:
             BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in
-                buildMenu.select(entryID: entry.id)
-                interactionMode = .build
+                interaction.selectBuildEntry(entry.id, in: &buildMenu)
             }
 
         case .buildingReference:
@@ -348,7 +340,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
             return
         }
 
-        switch interactionMode {
+        switch interaction.mode {
         case .interact:
             runtime.clearPlacementPreview()
             if let tappedEntity = runtime.world.entities.selectableEntity(at: position) {
@@ -369,15 +361,14 @@ private struct FactoryDefenseiPadOSGameplayView: View {
         case .build:
             selectedTarget = nil
             runtime.placeStructure(selectedStructure, at: position)
-            if runtime.placementResult == .ok {
-                interactionMode = .interact
+            if interaction.completePlacementIfSuccessful(runtime.placementResult) {
                 runtime.clearPlacementPreview()
             }
         }
     }
 
     private func previewPlacement(at location: CGPoint, viewport: CGSize) {
-        guard interactionMode == .build else {
+        guard interaction.isBuildMode else {
             runtime.clearPlacementPreview()
             return
         }
@@ -389,7 +380,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     }
 
     private func refreshPlacementPreview(viewport: CGSize) {
-        guard interactionMode == .build else {
+        guard interaction.isBuildMode else {
             runtime.clearPlacementPreview()
             return
         }
