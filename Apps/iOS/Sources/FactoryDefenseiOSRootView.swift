@@ -5,6 +5,51 @@ import GameSimulation
 import GameUI
 
 struct FactoryDefenseiOSRootView: View {
+    @State private var didStartGame = false
+
+    var body: some View {
+        if didStartGame {
+            FactoryDefenseiOSGameplayView()
+        } else {
+            FactoryDefenseMainMenu(
+                title: "Factory Defense",
+                onStart: { didStartGame = true }
+            )
+        }
+    }
+}
+
+private struct FactoryDefenseMainMenu: View {
+    let title: String
+    let onStart: () -> Void
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.08, green: 0.11, blue: 0.19), Color(red: 0.04, green: 0.06, blue: 0.11)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                Text(title)
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Button("Start", action: onStart)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+            .padding(34)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .padding()
+        }
+    }
+}
+
+private struct FactoryDefenseiOSGameplayView: View {
     @State private var buildMenu = BuildMenuViewModel.productionPreset
     @State private var techTree = TechTreeViewModel.productionPreset
     @State private var onboarding = OnboardingGuideViewModel.starter

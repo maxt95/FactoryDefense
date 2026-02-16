@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "GameRendering", targets: ["GameRendering"]),
         .library(name: "GameUI", targets: ["GameUI"]),
         .library(name: "GamePlatform", targets: ["GamePlatform"]),
+        .executable(name: "FactoryDefense", targets: ["FactoryDefense"]),
         .executable(name: "FactoryDefensePrototype", targets: ["FactoryDefensePrototype"])
     ],
     targets: [
@@ -36,6 +37,10 @@ let package = Package(
         .target(
             name: "GamePlatform",
             dependencies: ["GameSimulation"]
+        ),
+        .executableTarget(
+            name: "FactoryDefense",
+            dependencies: ["GameSimulation", "GameRendering", "GameUI"]
         ),
         .executableTarget(
             name: "FactoryDefensePrototype",

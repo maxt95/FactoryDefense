@@ -1,19 +1,32 @@
+import AppKit
 import MetalKit
 import SwiftUI
 import GameRendering
 import GameSimulation
 import GameUI
 
-struct FactoryDefenseiPadOSRootView: View {
+@main
+struct FactoryDefenseApp: App {
+    var body: some Scene {
+        WindowGroup {
+            FactoryDefenseRootView()
+                .frame(minWidth: 1024, minHeight: 640)
+        }
+        .windowResizability(.contentSize)
+    }
+}
+
+private struct FactoryDefenseRootView: View {
     @State private var didStartGame = false
 
     var body: some View {
         if didStartGame {
-            FactoryDefenseiPadOSGameplayView()
+            FactoryDefenseGameplayView()
         } else {
             FactoryDefenseMainMenu(
                 title: "Factory Defense",
-                onStart: { didStartGame = true }
+                onStart: { didStartGame = true },
+                onQuit: { NSApplication.shared.terminate(nil) }
             )
         }
     }
@@ -22,11 +35,12 @@ struct FactoryDefenseiPadOSRootView: View {
 private struct FactoryDefenseMainMenu: View {
     let title: String
     let onStart: () -> Void
+    let onQuit: () -> Void
 
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(red: 0.08, green: 0.11, blue: 0.19), Color(red: 0.04, green: 0.06, blue: 0.11)],
+                colors: [Color(red: 0.09, green: 0.12, blue: 0.18), Color(red: 0.05, green: 0.07, blue: 0.11)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -37,31 +51,36 @@ private struct FactoryDefenseMainMenu: View {
                     .font(.system(size: 38, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
 
-                Button("Start", action: onStart)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                VStack(spacing: 10) {
+                    Button("Start", action: onStart)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+
+                    Button("Quit", action: onQuit)
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                }
             }
             .padding(40)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 18))
-            .padding()
         }
     }
 }
 
-private struct FactoryDefenseiPadOSGameplayView: View {
+private struct FactoryDefenseGameplayView: View {
     @State private var buildMenu = BuildMenuViewModel.productionPreset
     @State private var techTree = TechTreeViewModel.productionPreset
     @State private var onboarding = OnboardingGuideViewModel.starter
     @State private var inventory: [String: Int] = [
-        "plate_iron": 50,
-        "plate_steel": 28,
-        "gear": 30,
-        "circuit": 22,
-        "ammo_light": 120,
-        "ammo_heavy": 30,
-        "wall_kit": 18,
-        "turret_core": 10
+        "plate_iron": 70,
+        "plate_steel": 40,
+        "gear": 44,
+        "circuit": 34,
+        "ammo_light": 180,
+        "ammo_heavy": 45,
+        "wall_kit": 26,
+        "turret_core": 16
     ]
 
     private let previewWorld = WorldState.bootstrap()
@@ -69,15 +88,14 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     var body: some View {
         ZStack {
             MetalSurfaceView()
-                .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("Factory Defense iPadOS")
+                    Text("Factory Defense")
                         .font(.headline)
-                        .padding(10)
-                        .background(.regularMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .padding(8)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     Spacer()
                 }
 
@@ -90,12 +108,14 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                     VStack(spacing: 10) {
                         TechTreePanel(nodes: techTree.nodes(inventory: inventory))
                         OnboardingPanel(steps: onboarding.steps)
+                        TuningDashboardPanel(snapshot: .from(world: previewWorld))
                     }
+                    .frame(maxWidth: .infinity)
                 }
 
-                TuningDashboardPanel(snapshot: .from(world: previewWorld))
+                Spacer()
             }
-            .padding()
+            .padding(16)
         }
         .onAppear {
             onboarding.update(from: previewWorld)
@@ -103,8 +123,8 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     }
 }
 
-private struct MetalSurfaceView: UIViewRepresentable {
-    func makeUIView(context: Context) -> MTKView {
+private struct MetalSurfaceView: NSViewRepresentable {
+    func makeNSView(context: Context) -> MTKView {
         let view = MTKView(frame: .zero)
         if let renderer = context.coordinator.renderer {
             renderer.attach(to: view)
@@ -112,7 +132,7 @@ private struct MetalSurfaceView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: MTKView, context: Context) {}
+    func updateNSView(_ nsView: MTKView, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
