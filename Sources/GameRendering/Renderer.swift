@@ -98,6 +98,14 @@ public final class FactoryRenderer: NSObject {
         highlightedStructure = structure
         placementResult = result
     }
+
+    public func useProceduralMeshes() {
+        whiteboxMeshRenderer.useProceduralMeshes()
+    }
+
+    public func useModelIOMeshes(assetURLs: [MeshID: URL]) {
+        whiteboxMeshRenderer.useModelIOMeshes(assetURLs: assetURLs)
+    }
 }
 
 @MainActor

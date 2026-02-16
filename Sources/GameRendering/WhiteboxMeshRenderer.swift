@@ -24,8 +24,9 @@ public final class WhiteboxMeshRenderer {
     private let sceneBuilder = WhiteboxSceneBuilder()
     private var pipelineState: MTLRenderPipelineState?
     private var depthState: MTLDepthStencilState?
-    private var meshLibrary: WhiteboxMeshLibrary?
-    private var meshLibraryDeviceID: ObjectIdentifier?
+    private var meshProvider: (any MeshProvider)?
+    private var meshProviderFactory: ((MTLDevice) -> any MeshProvider)?
+    private var meshProviderDeviceID: ObjectIdentifier?
     private var pipelineKey: PipelineKey?
     private var hasLoggedResourceIssue = false
 
@@ -38,6 +39,20 @@ public final class WhiteboxMeshRenderer {
     public init() {
         self.instanceBuffers = Array(repeating: nil, count: inFlightInstanceBufferCount)
         self.instanceBufferCapacities = Array(repeating: 0, count: inFlightInstanceBufferCount)
+    }
+
+    public func useProceduralMeshes() {
+        meshProviderFactory = nil
+        meshProvider = nil
+        meshProviderDeviceID = nil
+    }
+
+    public func useModelIOMeshes(assetURLs: [MeshID: URL]) {
+        meshProviderFactory = { device in
+            ModelIOMeshLibrary(device: device, assetURLs: assetURLs)
+        }
+        meshProvider = nil
+        meshProviderDeviceID = nil
     }
 
     public func encode(context: RenderContext, encoder: MTLRenderCommandEncoder) {
@@ -54,7 +69,7 @@ public final class WhiteboxMeshRenderer {
             return
         }
 
-        guard let pipelineState, let depthState, let meshLibrary else { return }
+        guard let pipelineState, let depthState, let meshProvider else { return }
 
         let viewProjection = makeViewProjectionMatrix(context: context)
         let scene = sceneBuilder.build(from: context.worldState)
@@ -92,7 +107,7 @@ public final class WhiteboxMeshRenderer {
 #endif
 
         for batch in batches {
-            guard let mesh = meshLibrary.mesh(for: batch.meshID) else { continue }
+            guard let mesh = meshProvider.mesh(for: batch.meshID) else { continue }
             let instanceCount = batch.instanceRange.count
             guard instanceCount > 0 else { continue }
 
@@ -189,12 +204,18 @@ public final class WhiteboxMeshRenderer {
         }
 
         let deviceID = ObjectIdentifier(device as AnyObject)
-        if meshLibrary == nil || meshLibraryDeviceID != deviceID {
-            meshLibrary = WhiteboxMeshLibrary(device: device)
-            meshLibraryDeviceID = deviceID
+        if meshProvider == nil || meshProviderDeviceID != deviceID {
+            let proceduralProvider: any MeshProvider = WhiteboxMeshLibrary(device: device)
+            if let meshProviderFactory {
+                let dccProvider = meshProviderFactory(device)
+                meshProvider = CompositeMeshProvider(primary: dccProvider, fallback: proceduralProvider)
+            } else {
+                meshProvider = proceduralProvider
+            }
+            meshProviderDeviceID = deviceID
         }
 
-        return meshLibrary != nil
+        return meshProvider != nil
     }
 
     private func makeViewProjectionMatrix(context: RenderContext) -> simd_float4x4 {

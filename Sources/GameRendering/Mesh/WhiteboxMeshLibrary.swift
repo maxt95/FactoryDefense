@@ -17,6 +17,20 @@ public protocol MeshProvider {
     func mesh(for id: MeshID) -> WhiteboxMeshGPU?
 }
 
+public final class CompositeMeshProvider: MeshProvider {
+    private let primary: any MeshProvider
+    private let fallback: any MeshProvider
+
+    public init(primary: any MeshProvider, fallback: any MeshProvider) {
+        self.primary = primary
+        self.fallback = fallback
+    }
+
+    public func mesh(for id: MeshID) -> WhiteboxMeshGPU? {
+        primary.mesh(for: id) ?? fallback.mesh(for: id)
+    }
+}
+
 public enum MeshID: Int, CaseIterable, Hashable, Sendable {
     case wall
     case turretMount
