@@ -76,19 +76,24 @@ public struct EconomySystem: SimulationSystem {
     private let recipesByID: [String: RecipeDef]
     private let minimumConstructionStock: [ItemID: Int]
     private let reserveProtectedRecipeIDs: Set<String>
+    private let conveyorTicksPerTile: Int
 
     public init(
         recipes: [RecipeDef] = EconomySystem.defaultRecipes,
         minimumConstructionStock: [ItemID: Int] = EconomySystem.defaultMinimumConstructionStock,
-        reserveProtectedRecipeIDs: Set<String> = EconomySystem.defaultReserveProtectedRecipeIDs
+        reserveProtectedRecipeIDs: Set<String> = EconomySystem.defaultReserveProtectedRecipeIDs,
+        conveyorTicksPerTile: Int = 5
     ) {
         self.recipesByID = Dictionary(uniqueKeysWithValues: recipes.map { ($0.id, $0) })
         self.minimumConstructionStock = minimumConstructionStock
         self.reserveProtectedRecipeIDs = reserveProtectedRecipeIDs
+        self.conveyorTicksPerTile = max(1, conveyorTicksPerTile)
     }
 
     public func update(state: inout WorldState, context: SystemContext) {
         let structures = state.entities.all.filter { $0.category == .structure }
+        syncLogisticsRuntime(structures: structures, state: &state)
+
         var powerAvailable = 0
         var powerDemand = 0
         for entity in structures {
@@ -106,6 +111,7 @@ public struct EconomySystem: SimulationSystem {
         let efficiency = powerDemand == 0 ? 1.0 : min(1.0, Double(powerAvailable) / Double(powerDemand))
         let tickDuration = context.tickDurationSeconds
 
+        advanceConveyors(structures: structures, state: &state)
         produceRawResources(state: &state, tickDuration: tickDuration, efficiency: efficiency)
 
         runProduction(
@@ -137,7 +143,8 @@ public struct EconomySystem: SimulationSystem {
             efficiency: efficiency
         )
 
-        pruneProductionState(for: Set(structures.map(\.id)), state: &state)
+        drainStructureOutputBuffers(structures: structures, state: &state)
+        pruneRuntimeState(for: structures, state: &state)
 
         if state.threat.isWaveActive {
             state.economy.currency += 1
@@ -162,7 +169,13 @@ public struct EconomySystem: SimulationSystem {
     ) {
         for structure in structures.sorted(by: { $0.id < $1.id }) {
             let structureID = structure.id
-            guard let selectedRecipe = selectRecipe(prioritizedRecipeIDs: prioritizedRecipeIDs, inventory: state.economy.inventories) else {
+            guard let structureType = structure.structureType else { continue }
+
+            guard let selectedRecipe = selectRecipe(
+                prioritizedRecipeIDs: prioritizedRecipeIDs,
+                structureID: structureID,
+                state: state
+            ) else {
                 state.economy.activeRecipeByStructure.removeValue(forKey: structureID)
                 state.economy.productionProgressByStructure[structureID] = 0
                 continue
@@ -180,11 +193,11 @@ public struct EconomySystem: SimulationSystem {
             let recipeSeconds = Double(selectedRecipe.seconds)
             guard recipeSeconds > 0 else { continue }
 
-            while progress + 0.000_001 >= recipeSeconds, state.economy.canAfford(selectedRecipe.inputs) {
-                _ = state.economy.consume(costs: selectedRecipe.inputs)
-                for output in selectedRecipe.outputs {
-                    state.economy.add(itemID: output.itemID, quantity: output.quantity)
-                }
+            while progress + 0.000_001 >= recipeSeconds,
+                  canAffordRecipeInputs(selectedRecipe.inputs, structureID: structureID, state: state),
+                  canStoreRecipeOutputs(selectedRecipe.outputs, structureID: structureID, structureType: structureType, state: state) {
+                _ = consumeRecipeInputs(selectedRecipe.inputs, structureID: structureID, state: &state)
+                storeRecipeOutputs(selectedRecipe.outputs, structureID: structureID, structureType: structureType, state: &state)
                 progress -= recipeSeconds
             }
 
@@ -192,14 +205,110 @@ public struct EconomySystem: SimulationSystem {
         }
     }
 
-    private func selectRecipe(prioritizedRecipeIDs: [String], inventory: [ItemID: Int]) -> RecipeDef? {
+    private func selectRecipe(
+        prioritizedRecipeIDs: [String],
+        structureID: EntityID,
+        state: WorldState
+    ) -> RecipeDef? {
+        let inventory = combinedInventory(for: structureID, state: state)
         for recipeID in prioritizedRecipeIDs {
             guard let recipe = recipesByID[recipeID] else { continue }
             guard recipe.inputs.allSatisfy({ inventory[$0.itemID, default: 0] >= $0.quantity }) else { continue }
-            guard canRunRecipeWithoutBreachingConstructionStock(recipe: recipe, inventory: inventory) else { continue }
+            guard canRunRecipeWithoutBreachingConstructionStock(recipe: recipe, inventory: state.economy.inventories) else { continue }
             return recipe
         }
         return nil
+    }
+
+    private func combinedInventory(for structureID: EntityID, state: WorldState) -> [ItemID: Int] {
+        var combined = state.economy.inventories
+        for (itemID, quantity) in state.economy.structureInputBuffers[structureID, default: [:]] where quantity > 0 {
+            combined[itemID, default: 0] += quantity
+        }
+        return combined
+    }
+
+    private func canAffordRecipeInputs(_ inputs: [ItemStack], structureID: EntityID, state: WorldState) -> Bool {
+        let localBuffer = state.economy.structureInputBuffers[structureID, default: [:]]
+        for input in inputs {
+            let local = localBuffer[input.itemID, default: 0]
+            let global = state.economy.inventories[input.itemID, default: 0]
+            if local + global < input.quantity {
+                return false
+            }
+        }
+        return true
+    }
+
+    @discardableResult
+    private func consumeRecipeInputs(
+        _ inputs: [ItemStack],
+        structureID: EntityID,
+        state: inout WorldState
+    ) -> Bool {
+        guard canAffordRecipeInputs(inputs, structureID: structureID, state: state) else {
+            return false
+        }
+
+        var localBuffer = state.economy.structureInputBuffers[structureID, default: [:]]
+        for input in inputs {
+            var remaining = input.quantity
+            let localAvailable = localBuffer[input.itemID, default: 0]
+            if localAvailable > 0 {
+                let localConsumption = min(localAvailable, remaining)
+                localBuffer[input.itemID] = localAvailable - localConsumption
+                if localBuffer[input.itemID] == 0 {
+                    localBuffer.removeValue(forKey: input.itemID)
+                }
+                remaining -= localConsumption
+            }
+
+            if remaining > 0 {
+                _ = state.economy.consume(itemID: input.itemID, quantity: remaining)
+            }
+        }
+
+        if inputBufferCapacity(for: structureID, state: state) > 0 || !localBuffer.isEmpty {
+            state.economy.structureInputBuffers[structureID] = localBuffer
+        } else {
+            state.economy.structureInputBuffers.removeValue(forKey: structureID)
+        }
+        return true
+    }
+
+    private func canStoreRecipeOutputs(
+        _ outputs: [ItemStack],
+        structureID: EntityID,
+        structureType: StructureType,
+        state: WorldState
+    ) -> Bool {
+        let capacity = outputBufferCapacity(for: structureType)
+        guard capacity > 0 else { return true }
+
+        let current = state.economy.structureOutputBuffers[structureID, default: [:]].values.reduce(0, +)
+        let additional = outputs.reduce(0) { $0 + max(0, $1.quantity) }
+        return current + additional <= capacity
+    }
+
+    private func storeRecipeOutputs(
+        _ outputs: [ItemStack],
+        structureID: EntityID,
+        structureType: StructureType,
+        state: inout WorldState
+    ) {
+        let capacity = outputBufferCapacity(for: structureType)
+        guard capacity > 0 else {
+            for output in outputs {
+                state.economy.add(itemID: output.itemID, quantity: output.quantity)
+            }
+            return
+        }
+
+        var outputBuffer = state.economy.structureOutputBuffers[structureID, default: [:]]
+        for output in outputs where output.quantity > 0 {
+            outputBuffer[output.itemID, default: 0] += output.quantity
+        }
+        state.economy.structureOutputBuffers[structureID] = outputBuffer
     }
 
     private func canRunRecipeWithoutBreachingConstructionStock(recipe: RecipeDef, inventory: [ItemID: Int]) -> Bool {
@@ -221,9 +330,248 @@ public struct EconomySystem: SimulationSystem {
         return true
     }
 
-    private func pruneProductionState(for validStructureIDs: Set<EntityID>, state: inout WorldState) {
+    private func syncLogisticsRuntime(structures: [Entity], state: inout WorldState) {
+        let structureTypesByID: [EntityID: StructureType] = Dictionary(
+            uniqueKeysWithValues: structures.compactMap { structure in
+                guard let structureType = structure.structureType else { return nil }
+                return (structure.id, structureType)
+            }
+        )
+
+        for (structureID, structureType) in structureTypesByID {
+            if inputBufferCapacity(for: structureType) > 0 {
+                _ = state.economy.structureInputBuffers[structureID, default: [:]]
+            } else {
+                state.economy.structureInputBuffers.removeValue(forKey: structureID)
+            }
+
+            if outputBufferCapacity(for: structureType) > 0 {
+                _ = state.economy.structureOutputBuffers[structureID, default: [:]]
+            } else {
+                state.economy.structureOutputBuffers.removeValue(forKey: structureID)
+            }
+
+            if structureType != .conveyor {
+                state.economy.conveyorPayloadByEntity.removeValue(forKey: structureID)
+            }
+        }
+
+        let validStructureIDs = Set(structureTypesByID.keys)
+        state.economy.structureInputBuffers = state.economy.structureInputBuffers.filter { validStructureIDs.contains($0.key) }
+        state.economy.structureOutputBuffers = state.economy.structureOutputBuffers.filter { validStructureIDs.contains($0.key) }
+        state.economy.conveyorPayloadByEntity = state.economy.conveyorPayloadByEntity.filter {
+            structureTypesByID[$0.key] == .conveyor
+        }
+    }
+
+    private func advanceConveyors(structures: [Entity], state: inout WorldState) {
+        let conveyors = structures
+            .filter { $0.structureType == .conveyor }
+            .sorted { lhs, rhs in
+                if lhs.position.x != rhs.position.x { return lhs.position.x > rhs.position.x }
+                if lhs.position.y != rhs.position.y { return lhs.position.y < rhs.position.y }
+                return lhs.id < rhs.id
+            }
+
+        guard !conveyors.isEmpty else { return }
+
+        var conveyorsByPosition: [GridPosition: EntityID] = [:]
+        for conveyor in conveyors {
+            if conveyorsByPosition[conveyor.position] == nil {
+                conveyorsByPosition[conveyor.position] = conveyor.id
+            }
+        }
+
+        var structuresByPosition: [GridPosition: Entity] = [:]
+        for structure in structures.sorted(by: { $0.id < $1.id }) {
+            if structuresByPosition[structure.position] == nil {
+                structuresByPosition[structure.position] = structure
+            }
+        }
+
+        for conveyor in conveyors {
+            guard var payload = state.economy.conveyorPayloadByEntity[conveyor.id] else { continue }
+            payload.progressTicks = min(conveyorTicksPerTile, payload.progressTicks + 1)
+            state.economy.conveyorPayloadByEntity[conveyor.id] = payload
+        }
+
+        for conveyor in conveyors {
+            guard let payload = state.economy.conveyorPayloadByEntity[conveyor.id] else { continue }
+            guard payload.progressTicks >= conveyorTicksPerTile else { continue }
+
+            let targetPosition = conveyor.position.translated(byX: 1)
+
+            if let targetConveyorID = conveyorsByPosition[targetPosition],
+               state.economy.conveyorPayloadByEntity[targetConveyorID] == nil {
+                state.economy.conveyorPayloadByEntity[targetConveyorID] = ConveyorPayload(itemID: payload.itemID, progressTicks: 0)
+                state.economy.conveyorPayloadByEntity.removeValue(forKey: conveyor.id)
+                continue
+            }
+
+            if let targetStructure = structuresByPosition[targetPosition],
+               let targetType = targetStructure.structureType,
+               enqueueInputItem(itemID: payload.itemID, structureID: targetStructure.id, structureType: targetType, state: &state) {
+                state.economy.conveyorPayloadByEntity.removeValue(forKey: conveyor.id)
+            }
+        }
+    }
+
+    private func drainStructureOutputBuffers(structures: [Entity], state: inout WorldState) {
+        var conveyorsByPosition: [GridPosition: EntityID] = [:]
+        var structuresByPosition: [GridPosition: Entity] = [:]
+        for structure in structures.sorted(by: { $0.id < $1.id }) {
+            if structuresByPosition[structure.position] == nil {
+                structuresByPosition[structure.position] = structure
+            }
+            if structure.structureType == .conveyor, conveyorsByPosition[structure.position] == nil {
+                conveyorsByPosition[structure.position] = structure.id
+            }
+        }
+
+        for structure in structures.sorted(by: { $0.id < $1.id }) {
+            guard let structureType = structure.structureType else { continue }
+            guard outputBufferCapacity(for: structureType) > 0 else { continue }
+            guard !(state.economy.structureOutputBuffers[structure.id, default: [:]].isEmpty) else { continue }
+
+            let outputTarget = structure.position.translated(byX: 1)
+
+            if let conveyorID = conveyorsByPosition[outputTarget] {
+                guard state.economy.conveyorPayloadByEntity[conveyorID] == nil else { continue }
+                guard let itemID = popFirstOutputItem(structureID: structure.id, state: &state) else { continue }
+                state.economy.conveyorPayloadByEntity[conveyorID] = ConveyorPayload(itemID: itemID, progressTicks: 0)
+                continue
+            }
+
+            if let targetStructure = structuresByPosition[outputTarget],
+               let targetType = targetStructure.structureType,
+               let itemID = popFirstOutputItem(structureID: structure.id, state: &state) {
+                if enqueueInputItem(itemID: itemID, structureID: targetStructure.id, structureType: targetType, state: &state) {
+                    continue
+                }
+
+                var outputBuffer = state.economy.structureOutputBuffers[structure.id, default: [:]]
+                outputBuffer[itemID, default: 0] += 1
+                state.economy.structureOutputBuffers[structure.id] = outputBuffer
+                continue
+            }
+
+            flushAllOutputToGlobalInventory(structureID: structure.id, state: &state)
+        }
+    }
+
+    private func flushAllOutputToGlobalInventory(structureID: EntityID, state: inout WorldState) {
+        let outputBuffer = state.economy.structureOutputBuffers[structureID, default: [:]]
+        guard !outputBuffer.isEmpty else { return }
+
+        for itemID in outputBuffer.keys.sorted() {
+            let quantity = outputBuffer[itemID, default: 0]
+            if quantity > 0 {
+                state.economy.add(itemID: itemID, quantity: quantity)
+            }
+        }
+        state.economy.structureOutputBuffers[structureID] = [:]
+    }
+
+    private func popFirstOutputItem(structureID: EntityID, state: inout WorldState) -> ItemID? {
+        var outputBuffer = state.economy.structureOutputBuffers[structureID, default: [:]]
+        guard let itemID = outputBuffer.keys.sorted().first else { return nil }
+        let quantity = outputBuffer[itemID, default: 0]
+        guard quantity > 0 else { return nil }
+        if quantity == 1 {
+            outputBuffer.removeValue(forKey: itemID)
+        } else {
+            outputBuffer[itemID] = quantity - 1
+        }
+        state.economy.structureOutputBuffers[structureID] = outputBuffer
+        return itemID
+    }
+
+    @discardableResult
+    private func enqueueInputItem(
+        itemID: ItemID,
+        structureID: EntityID,
+        structureType: StructureType,
+        state: inout WorldState
+    ) -> Bool {
+        let capacity = inputBufferCapacity(for: structureType)
+        guard capacity > 0 else { return false }
+        guard acceptsInput(itemID: itemID, structureType: structureType) else { return false }
+
+        var inputBuffer = state.economy.structureInputBuffers[structureID, default: [:]]
+        let current = inputBuffer.values.reduce(0, +)
+        guard current < capacity else { return false }
+
+        inputBuffer[itemID, default: 0] += 1
+        state.economy.structureInputBuffers[structureID] = inputBuffer
+        return true
+    }
+
+    private func acceptsInput(itemID: ItemID, structureType: StructureType) -> Bool {
+        switch structureType {
+        case .smelter:
+            return itemID == "ore_iron" || itemID == "ore_copper" || itemID == "ore_coal" || itemID == "plate_iron"
+        case .assembler:
+            return itemID == "plate_iron"
+                || itemID == "plate_copper"
+                || itemID == "plate_steel"
+                || itemID == "ore_coal"
+                || itemID == "gear"
+                || itemID == "circuit"
+        case .ammoModule:
+            return itemID == "plate_iron"
+                || itemID == "plate_steel"
+                || itemID == "ammo_light"
+                || itemID == "power_cell"
+                || itemID == "circuit"
+        case .storage:
+            return true
+        case .turretMount:
+            return itemID.hasPrefix("ammo_")
+        default:
+            return false
+        }
+    }
+
+    private func inputBufferCapacity(for structureID: EntityID, state: WorldState) -> Int {
+        guard let structureType = state.entities.entity(id: structureID)?.structureType else { return 0 }
+        return inputBufferCapacity(for: structureType)
+    }
+
+    private func inputBufferCapacity(for structureType: StructureType) -> Int {
+        switch structureType {
+        case .smelter, .assembler, .ammoModule:
+            return 12
+        case .storage:
+            return 24
+        case .turretMount:
+            return 6
+        default:
+            return 0
+        }
+    }
+
+    private func outputBufferCapacity(for structureType: StructureType) -> Int {
+        switch structureType {
+        case .miner:
+            return 8
+        case .smelter, .assembler:
+            return 4
+        case .ammoModule:
+            return 8
+        case .storage:
+            return 24
+        default:
+            return 0
+        }
+    }
+
+    private func pruneRuntimeState(for structures: [Entity], state: inout WorldState) {
+        let validStructureIDs = Set(structures.map(\.id))
         state.economy.activeRecipeByStructure = state.economy.activeRecipeByStructure.filter { validStructureIDs.contains($0.key) }
         state.economy.productionProgressByStructure = state.economy.productionProgressByStructure.filter { validStructureIDs.contains($0.key) }
+        state.economy.structureInputBuffers = state.economy.structureInputBuffers.filter { validStructureIDs.contains($0.key) }
+        state.economy.structureOutputBuffers = state.economy.structureOutputBuffers.filter { validStructureIDs.contains($0.key) }
+        state.economy.conveyorPayloadByEntity = state.economy.conveyorPayloadByEntity.filter { validStructureIDs.contains($0.key) }
     }
 
     public static var defaultRecipes: [RecipeDef] {
@@ -544,7 +892,7 @@ public struct CombatSystem: SimulationSystem {
 
             state.combat.lastFireTickByTurret[turret.id] = state.tick
 
-            if state.economy.consume(itemID: ammoItemID, quantity: 1) {
+            if consumeAmmo(for: turret.id, itemID: ammoItemID, state: &state) {
                 let distance = turret.position.manhattanDistance(to: target.position)
                 let travelTicks = UInt64(max(1, distance / 2 + 1))
                 let damage = overrideDamage ?? turretDef.damage
@@ -576,6 +924,22 @@ public struct CombatSystem: SimulationSystem {
             guard dryFires > 0 else { continue }
             context.emit(SimEvent(tick: state.tick, kind: .notEnoughAmmo, value: dryFires, itemID: itemID))
         }
+    }
+
+    private func consumeAmmo(for turretID: EntityID, itemID: ItemID, state: inout WorldState) -> Bool {
+        if var localBuffer = state.economy.structureInputBuffers[turretID],
+           let localAmmo = localBuffer[itemID],
+           localAmmo > 0 {
+            if localAmmo == 1 {
+                localBuffer.removeValue(forKey: itemID)
+            } else {
+                localBuffer[itemID] = localAmmo - 1
+            }
+            state.economy.structureInputBuffers[turretID] = localBuffer
+            return true
+        }
+
+        return state.economy.consume(itemID: itemID, quantity: 1)
     }
 
     private func resolveTurretDef(for turret: Entity) -> TurretDef? {

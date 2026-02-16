@@ -369,11 +369,24 @@ public struct EconomyTelemetry: Codable, Hashable, Sendable {
     }
 }
 
+public struct ConveyorPayload: Codable, Hashable, Sendable {
+    public var itemID: ItemID
+    public var progressTicks: Int
+
+    public init(itemID: ItemID, progressTicks: Int = 0) {
+        self.itemID = itemID
+        self.progressTicks = max(0, progressTicks)
+    }
+}
+
 public struct EconomyState: Codable, Hashable, Sendable {
     public var inventories: [ItemID: Int]
     public var activeRecipeByStructure: [EntityID: String]
     public var productionProgressByStructure: [EntityID: Double]
     public var fractionalProductionRemainders: [ItemID: Double]
+    public var structureInputBuffers: [EntityID: [ItemID: Int]]
+    public var structureOutputBuffers: [EntityID: [ItemID: Int]]
+    public var conveyorPayloadByEntity: [EntityID: ConveyorPayload]
     public var powerAvailable: Int
     public var powerDemand: Int
     public var currency: Int
@@ -384,6 +397,9 @@ public struct EconomyState: Codable, Hashable, Sendable {
         activeRecipeByStructure: [EntityID: String] = [:],
         productionProgressByStructure: [EntityID: Double] = [:],
         fractionalProductionRemainders: [ItemID: Double] = [:],
+        structureInputBuffers: [EntityID: [ItemID: Int]] = [:],
+        structureOutputBuffers: [EntityID: [ItemID: Int]] = [:],
+        conveyorPayloadByEntity: [EntityID: ConveyorPayload] = [:],
         powerAvailable: Int = 0,
         powerDemand: Int = 0,
         currency: Int = 0,
@@ -393,6 +409,9 @@ public struct EconomyState: Codable, Hashable, Sendable {
         self.activeRecipeByStructure = activeRecipeByStructure
         self.productionProgressByStructure = productionProgressByStructure
         self.fractionalProductionRemainders = fractionalProductionRemainders
+        self.structureInputBuffers = structureInputBuffers
+        self.structureOutputBuffers = structureOutputBuffers
+        self.conveyorPayloadByEntity = conveyorPayloadByEntity
         self.powerAvailable = powerAvailable
         self.powerDemand = powerDemand
         self.currency = currency
