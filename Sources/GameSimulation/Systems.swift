@@ -1918,8 +1918,9 @@ public struct EnemyMovementSystem: SimulationSystem {
 
         let pathfinder = Pathfinder()
         let map = buildNavigationMap(state: state)
+        let flowField = buildFlowField(on: map, goal: state.combat.basePosition)
         let sortedEnemyIDs = state.combat.enemies.keys.sorted()
-        let occupiedStructures = structureOccupancy(state: state)
+        let occupiedBlockingStructures = blockingStructureOccupancy(state: state)
 
         for enemyID in sortedEnemyIDs {
             guard let runtime = state.combat.enemies[enemyID] else { continue }
@@ -1962,9 +1963,7 @@ public struct EnemyMovementSystem: SimulationSystem {
                 }
             }
 
-            if let path = pathfinder.findPath(on: map, from: enemy.position, to: state.combat.basePosition),
-               path.count > 1 {
-                let next = path[1]
+            if let next = nextFlowStep(from: enemy.position, map: map, flowField: flowField) {
                 state.entities.updatePosition(enemyID, to: next)
                 context.emit(SimEvent(tick: state.tick, kind: .enemyMoved, entity: enemyID))
 
@@ -1979,7 +1978,7 @@ public struct EnemyMovementSystem: SimulationSystem {
                 continue
             }
 
-            if let adjacentTarget = preferredAdjacentTarget(enemy: enemy, runtime: runtime, occupancy: occupiedStructures, state: state) {
+            if let adjacentTarget = preferredAdjacentTarget(enemy: enemy, runtime: runtime, occupancy: occupiedBlockingStructures, state: state) {
                 attackStructure(targetID: adjacentTarget.id, runtime: runtime, auraBuffed: auraBuffed, state: &state, context: context)
             }
         }
@@ -1989,24 +1988,80 @@ public struct EnemyMovementSystem: SimulationSystem {
         PlacementValidator().navigationMap(for: state)
     }
 
-    private func structureOccupancy(state: WorldState) -> [GridPosition: EntityID] {
+    private func blockingStructureOccupancy(state: WorldState) -> [GridPosition: EntityID] {
         var occupancy: [GridPosition: EntityID] = [:]
         let structures = state.entities.all.filter { $0.category == .structure }.sorted { $0.id < $1.id }
         for structure in structures {
             guard let structureType = structure.structureType else { continue }
+            guard structureType.blocksMovement else { continue }
             for cell in structureType.coveredCells(anchor: structure.position) {
                 let key = GridPosition(x: cell.x, y: cell.y, z: 0)
-                if let existingID = occupancy[key],
-                   let existing = state.entities.entity(id: existingID),
-                   existing.structureType == .wall {
-                    continue
-                }
-                if structureType == .wall || occupancy[key] == nil {
+                if occupancy[key] == nil {
                     occupancy[key] = structure.id
                 }
             }
         }
         return occupancy
+    }
+
+    private func buildFlowField(on map: GridMap, goal: GridPosition) -> [GridPosition: Int] {
+        guard let goalTile = map.tile(at: goal), goalTile.walkable else { return [:] }
+
+        var distances: [GridPosition: Int] = [goal: 0]
+        var queue: [GridPosition] = [goal]
+        var index = 0
+
+        while index < queue.count {
+            let current = queue[index]
+            index += 1
+            let nextDistance = distances[current, default: 0] + 1
+
+            let neighbors = [
+                current.translated(byX: 1),
+                current.translated(byX: -1),
+                current.translated(byY: 1),
+                current.translated(byY: -1)
+            ]
+
+            for neighbor in neighbors {
+                guard distances[neighbor] == nil else { continue }
+                guard let tile = map.tile(at: neighbor), tile.walkable else { continue }
+                distances[neighbor] = nextDistance
+                queue.append(neighbor)
+            }
+        }
+
+        return distances
+    }
+
+    private func nextFlowStep(from position: GridPosition, map: GridMap, flowField: [GridPosition: Int]) -> GridPosition? {
+        let current = GridPosition(x: position.x, y: position.y, z: 0)
+        let currentDistance = flowField[current]
+        var candidates: [(position: GridPosition, distance: Int)] = []
+
+        let neighbors = [
+            current.translated(byX: 1),
+            current.translated(byX: -1),
+            current.translated(byY: 1),
+            current.translated(byY: -1)
+        ]
+
+        for neighbor in neighbors {
+            guard let tile = map.tile(at: neighbor), tile.walkable else { continue }
+            guard let neighborDistance = flowField[neighbor] else { continue }
+            if let currentDistance {
+                guard neighborDistance < currentDistance else { continue }
+            }
+            candidates.append((neighbor, neighborDistance))
+        }
+
+        guard !candidates.isEmpty else { return nil }
+        let best = candidates.min { lhs, rhs in
+            if lhs.distance != rhs.distance { return lhs.distance < rhs.distance }
+            if lhs.position.y != rhs.position.y { return lhs.position.y < rhs.position.y }
+            return lhs.position.x < rhs.position.x
+        }
+        return best?.position
     }
 
     private func nearestReachableRaiderTarget(

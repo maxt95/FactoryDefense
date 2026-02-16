@@ -248,3 +248,4 @@ All individual PRDs have been updated to align with the locked decisions above (
 - 2026-02-16: Removed manual `Wave` trigger buttons from gameplay overlays across macOS/iOS/iPadOS/CLI so threat cadence remains simulation-timed (grace → trickle → surge) in normal player flow.
 - 2026-02-16: Realigned building data/UI to building-spec parity: `assembler` and `ammoModule` now expose dual west+north input ports in `buildings.json`, and build menus now include `splitter` and `merger` entries.
 - 2026-02-16: Expanded HUD warning/timing surfacing: resources panel now shows explicit grace/surge timers, power headroom, and lightweight research progress plus additional warnings for power shortage and patch exhaustion.
+- 2026-02-16: Updated enemy movement to use a shared BFS flow field toward HQ (per tick) and tightened default attack targeting to blocking structures, reducing per-enemy path solve churn and preventing non-blocking structure focus in default behavior.
