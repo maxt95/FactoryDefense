@@ -155,6 +155,6 @@ When updating this file:
 
 ## Changelog
 - 2026-02-15: Added Factory & Economy PRD link.
+- 2026-02-15: Added Tech Tree Runtime PRD link.
 - 2026-02-16: Initialized living PRD from approved high-level product direction and implemented architecture baseline.
 - 2026-02-16: Aligned high-level living PRD with economy/building/whitebox PRDs; set conveyor + per-building buffer model as canonical v1 logistics direction.
-- 2026-02-15: Added Tech Tree Runtime PRD link.

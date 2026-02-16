@@ -3,7 +3,7 @@
 **Version:** 1.0-draft
 **Parent:** `docs/GAME_PRD_LIVING.md`
 **Status:** Forward-looking v1 design
-**Last updated:** 2026-02-15
+**Last updated:** 2026-02-16
 
 > **Core truth:** If any link in the production chain breaks, ammo starves, turrets go silent, and the base takes damage. The factory IS the weapon.
 
@@ -104,8 +104,8 @@ Build menu organized by category: Defense, Production, Logistics, Utility.
 | Phase timing via ThreatState | Exists |
 | Economy and Combat in same tick loop | Exists |
 | Ammo truth (turrets check inventory) | Exists |
+| Build cost enforcement | Exists — simulation-enforced (Milestone 0) |
 | Build/wave phase UI distinction | Gap — no visual mode switch |
-| Build cost enforcement | Gap — structures placed for free |
 | Warning banner system | Partial — `HUDViewModel.build()` generates `baseCritical`, `lowAmmo`, `raidImminent` warnings from `WorldState`; gap: warnings not rendered in gameplay view, `powerShortage` warning type missing |
 
 ### 1.6 Open Questions
@@ -192,13 +192,13 @@ At these values, a single ore patch lasts through roughly waves 1-5 before the p
 | Aspect | Status |
 |--------|--------|
 | 15 items in `items.json` | Exists |
-| 12 recipes in `recipes.json` | Exists (but unused by simulation) |
+| 12 recipes in `recipes.json` | Exists — now consumed by simulation (Milestone 0) |
+| `gear` production | Exists (Milestone 0) |
+| `ammo_plasma` production | Exists (Milestone 0) |
+| `wall_kit`, `turret_core`, `repair_kit` production | Exists (Milestone 0) |
 | Miners produce from ore patches | Gap — miners produce from nothing |
 | ResourceNode entity type | Gap — no concept of ore patches |
 | Ore depletion tracking | Gap |
-| `gear` production | Gap — recipe exists in JSON, missing from EconomySystem |
-| `ammo_plasma` production | Gap — recipe exists in JSON, missing from EconomySystem |
-| `wall_kit`, `turret_core`, `repair_kit` production | Gap — recipes exist in JSON, missing from EconomySystem |
 
 ---
 
@@ -295,14 +295,11 @@ Players can override auto-selection by pinning a recipe to a structure (tap stru
 
 | Aspect | Status |
 |--------|--------|
-| Recipe definitions in `recipes.json` | Exists (correct inputs/outputs/times) |
-| EconomySystem production chains | Exists — but hardcoded, ignores JSON |
-| Recipe timing | Gap — all production is instantaneous per tick |
-| Crafting progress per structure | Gap — no per-entity progress tracking |
-| `gear` production in EconomySystem | Gap — skipped entirely |
-| `wall_kit`, `turret_core`, `repair_kit` production | Gap — missing |
-| `ammo_plasma` production | Gap — missing |
-| Structure-recipe binding | Gap — smelters run all smelt recipes simultaneously each tick |
+| Recipe definitions in `recipes.json` | Exists (authoritative source for simulation) |
+| Recipe-driven EconomySystem | Exists — consumes JSON definitions (Milestone 0) |
+| All production chains (gear, wall_kit, turret_core, ammo_plasma, repair_kit) | Exists (Milestone 0) |
+| Per-structure recipe timing/progress | Partial — implemented for smelter/assembler/ammo module; miner extraction timing remains |
+| Structure-recipe binding with priority | Partial — auto-selection exists; recipe pinning not yet implemented |
 | Recipe pinning UI | Gap |
 
 ### 3.6 Open Questions
@@ -330,7 +327,7 @@ Power is the universal constraint. A power shortage does not affect one chain �
 | Assembler | +3 (consumes) | Medium draw, precision crafting |
 | Ammo Module | +4 (consumes) | Highest draw, ammunition fabrication |
 | Conveyor | +1 (consumes) | Minimal, motors only |
-| Storage | +1 (consumes) | Low draw, inventory management |
+| Storage | 0 | Passive logistics hub (aligned with building_specifications.md) |
 | Wall | 0 | Passive defense |
 | Turret Mount | 0 | Mechanical, fires with ammo only |
 
@@ -385,77 +382,23 @@ This is simple, already works in the current implementation, and creates a clear
 
 ## 5. Logistics & Transport
 
-### 5.1 Design Intent
+> **Superseded.** This section's zone-based proximity model has been replaced by the conveyor-routed, per-building-buffer model defined in [`building_specifications.md`](building_specifications.md). That document is the canonical logistics reference for v1.
 
-Logistics creates a secondary optimization layer. Raw throughput from structures is gated not just by power and recipe timing, but by how efficiently materials move through the system. Conveyors and storage should feel like meaningful placement decisions, not "build N somewhere and forget."
+**Key changes from the original zone-based design:**
+- Items physically move on directed conveyor tiles instead of using proximity-radius throughput boosts.
+- Each building has local input/output buffers with finite capacity instead of drawing from a global inventory.
+- Backpressure propagates naturally through the conveyor network when downstream buffers fill.
+- Splitters and mergers provide explicit routing control.
+- Storage acts as a shared-pool logistics hub with 4 ports (2 in, 2 out) rather than a radius-based capacity booster.
+- The "global inventory" becomes a computed aggregate for HUD display and turret ammo pool fallback.
+- Storage power draw is 0 (not +1 as previously specified in this section).
 
-### 5.2 Zone-Based Logistics Model
+**What remains valid from this section's design intent:**
+- Logistics should create meaningful placement decisions.
+- Bottleneck feedback (running, input starved, output blocked, underpowered, no ore patch) is carried forward into the building specifications.
+- Storage capacity limits still apply — but per-building (48 internal capacity) rather than global.
 
-Each conveyor and storage structure has a radius of effect. Only production structures within range receive the throughput boost.
-
-**Conveyor:**
-- Effect radius: 3 cells (Manhattan distance)
-- Boost per conveyor in range: +3% throughput to the receiving structure
-- A production structure with 2 conveyors within range gets +6%
-
-**Storage:**
-- Effect radius: 4 cells (Manhattan distance)
-- Boost per storage in range: +4% throughput to the receiving structure
-
-**Combined logistics boost per structure:**
-```
-structureLogisticsBoost = 1.0 + min(0.9, nearbyConveyors x 0.03 + nearbyStorages x 0.04)
-```
-
-Maximum boost remains +90% (1.9x multiplier), consistent with the current global cap. The difference is that this boost is now per-structure based on proximity, not global.
-
-**Full throughput multiplier per structure:**
-```
-structureThroughput = powerEfficiency x structureLogisticsBoost
-```
-
-### 5.3 Storage Capacity
-
-Global inventory has a finite capacity:
-- **Base capacity:** 100 total item units
-- **Per storage structure:** +50 capacity
-- Total capacity: `100 + (storageCount x 50)`
-
-When inventory is full:
-- Production structures that would produce output halt (inputs are NOT consumed, progress is paused)
-- An "output blocked" indicator appears on halted structures
-- HUD shows inventory fill percentage
-
-This creates a natural incentive to build storage structures and consume resources rather than letting them pile up.
-
-### 5.4 Bottleneck Feedback
-
-Per-structure status indicators (small icons above the structure):
-- **Running** (green): producing normally
-- **Input starved** (orange): recipe requires inputs not in inventory
-- **Output blocked** (red): inventory full, cannot deposit output
-- **Underpowered** (yellow): power efficiency < 1.0
-- **No ore patch** (red, miners only): not adjacent to any ore patch
-
-The existing `EconomyTelemetry` struct tracks `produced` and `consumed` per item and can drive bottleneck detection: if `consumed == 0` for a required input across multiple ticks, that input is the bottleneck.
-
-### 5.5 Implementation Status
-
-| Aspect | Status |
-|--------|--------|
-| Conveyors and storages as structure types | Exists |
-| Logistics boost formula | Exists — but global, not zone-based |
-| Zone-based proximity calculation | Gap |
-| Storage capacity limits | Gap — inventory is infinite |
-| Bottleneck detection and per-structure feedback | Gap |
-| Inventory fill HUD | Gap |
-
-### 5.6 Open Questions
-
-- Should conveyors have directionality (even in the abstract model)?
-  - Recommendation: no for v1. Zone-based proximity is sufficient.
-- Should different item types have different storage weights?
-  - Recommendation: no for v1. 1 item = 1 unit of capacity regardless of type.
+See `building_specifications.md` sections 1-6 for the complete replacement design.
 
 ---
 
@@ -521,10 +464,10 @@ Upgrades are in-place — no demolish-rebuild cycle needed. The upgrade command 
 
 | Aspect | Status |
 |--------|--------|
-| `CommandSystem.placeStructure` | Exists — but no cost check (places for free) |
-| Build costs in `BuildMenuViewModel` | Exists (UI-only, not simulation-enforced) |
+| `CommandSystem.placeStructure` | Exists — simulation-enforced cost check (Milestone 0) |
+| Build costs in `BuildMenuViewModel` | Exists (UI displays costs; simulation enforces them) |
 | Placement validation (bounds, occupancy, path) | Exists — `PlacementValidator` checks bounds, restricted zones, occupancy, and critical path blocking |
-| Cost deduction on placement | Gap — `CommandSystem` calls `spawnStructure` without consuming inventory |
+| Cost deduction on placement | Exists — `CommandSystem` consumes inventory on placement (Milestone 0) |
 | Ore patch adjacency check for miners | Gap — miners can be placed anywhere |
 | Assembler in build menu | Gap — no `BuildMenuEntry` for assembler in `productionPreset` |
 | `removeStructure` command | Gap — does not exist in `CommandPayload` |
@@ -664,12 +607,12 @@ When a structure is destroyed:
 | Ammo truth enforcement | Exists |
 | `notEnoughAmmo` event | Exists |
 | Currency reward on enemy kill | Exists |
-| Per-turret type combat | Gap — all turrets use ammo_light, range 8, damage 12 |
-| Fire rate tracking per turret | Gap — all turrets fire once per tick |
-| `ammo_heavy` / `ammo_plasma` consumption | Gap — only ammo_light consumed |
+| Per-turret type combat (ammo type, range, fire rate, damage) | Exists (Milestone 0) |
+| Fire rate tracking per turret | Exists (Milestone 0) |
+| `ammo_heavy` / `ammo_plasma` consumption | Exists (Milestone 0) |
+| Turret type per entity (`turretDefID`) | Exists (Milestone 0) |
 | Structure targeting by enemies | Gap — enemies only path to base |
 | Structure health differentiation | Gap — all structures have health=100 but enemies never attack them |
-| Turret type per entity | Gap — no `turretDefID` field on turret entities |
 
 ---
 
@@ -851,23 +794,23 @@ spawnBudget = 30 + (waveIndex x 8) + (waveIndex / 5) x 15  (milestone spike)
 
 ## Appendix B: Implementation Priority Matrix
 
-| Feature | Impact | Effort | Priority |
-|---------|--------|--------|----------|
-| Build cost enforcement in simulation | Critical | Low | **P0** |
-| Wire turret type system (per-turret ammo/range/fire rate) | Critical | Medium | **P0** |
-| Replace hardcoded EconomySystem with recipe-driven production | Critical | High | **P0** |
-| Add missing production (gear, wall_kit, turret_core, plasma) | Medium | Low | **P0** |
-| Ore patch / resource node entities | High | Medium | **P1** |
-| Structure targeting by enemies (raider, breacher, artillery) | High | Medium | **P1** |
-| Recipe timing (accumulated progress per structure) | High | High | **P1** |
-| Storage capacity limits | Medium | Low | **P1** |
-| Structure removal / refund command | Medium | Low | **P1** |
-| Wave spawning from `waves.json` (replace formula) | High | Medium | **P1** |
-| Procedural wave generation (wave 9+) | Medium | Medium | **P1** |
-| Zone-based logistics (conveyor/storage radius) | Medium | Medium | **P2** |
-| Power priority system | Low | Medium | **P2** |
-| Structure upgrade system | Low | Medium | **P2** |
-| Balance telemetry automation | Medium | High | **P2** |
+| Feature | Impact | Effort | Priority | Status |
+|---------|--------|--------|----------|--------|
+| Build cost enforcement in simulation | Critical | Low | **P0** | **Done** (M0) |
+| Wire turret type system (per-turret ammo/range/fire rate) | Critical | Medium | **P0** | **Done** (M0) |
+| Replace hardcoded EconomySystem with recipe-driven production | Critical | High | **P0** | **Done** (M0) |
+| Add missing production (gear, wall_kit, turret_core, plasma) | Medium | Low | **P0** | **Done** (M0) |
+| Recipe timing (accumulated progress per structure) | High | High | **P1** | **Partial** — smelter/assembler/ammo module done |
+| Ore patch / resource node entities | High | Medium | **P1** | Not started |
+| Structure targeting by enemies (raider, breacher, artillery) | High | Medium | **P1** | Not started |
+| Storage capacity limits | Medium | Low | **P1** | Not started |
+| Structure removal / refund command | Medium | Low | **P1** | Not started |
+| Wave spawning from `waves.json` (replace formula) | High | Medium | **P1** | Not started |
+| Procedural wave generation (wave 9+) | Medium | Medium | **P1** | Not started |
+| Conveyor-routed logistics (per-building buffers, backpressure) | Medium | High | **P2** | Not started (see `building_specifications.md`) |
+| Power priority system | Low | Medium | **P2** | Not started |
+| Structure upgrade system | Low | Medium | **P2** | Not started |
+| Balance telemetry automation | Medium | High | **P2** | Not started |
 
 ---
 
@@ -890,4 +833,5 @@ spawnBudget = 30 + (waveIndex x 8) + (waveIndex / 5) x 15  (milestone spike)
 ## Changelog
 
 - 2026-02-15: Initial draft — forward-looking v1 design for factory and economy systems.
-- 2026-02-15: Accuracy pass — fixed recipe times (craft_wall_kit 1.2s, craft_turret_core 2.5s, craft_repair_kit 2.0s), corrected bootstrap state (2 turrets, 80 starting ammo), fixed placement validation status (PlacementValidator exists), clarified current vs proposed production rates in balance framework, fixed storage power consumption (1, not 0), corrected balance ratio table turret counts.
+- 2026-02-15: Accuracy pass — fixed recipe times (craft_wall_kit 1.2s, craft_turret_core 2.5s, craft_repair_kit 2.0s), corrected bootstrap state (2 turrets, 80 starting ammo), fixed placement validation status (PlacementValidator exists), clarified current vs proposed production rates in balance framework, corrected balance ratio table turret counts.
+- 2026-02-16: Post-Milestone-0 status update — marked completed P0 items (build cost enforcement, per-turret combat, recipe-driven production, all production chains). Replaced superseded section 5 (zone-based logistics) with pointer to `building_specifications.md`. Fixed storage power draw from +1 to 0 per building specs. Added status column to Appendix B priority matrix.

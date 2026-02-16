@@ -51,7 +51,7 @@ Goal: complete the first fully legible factory-defense vertical slice.
 
 - [ ] Add ore patch/resource node entities and miner adjacency requirements.
 - [ ] Add ore depletion tracking and related simulation events/telemetry.
-- [ ] Implement per-structure recipe timing/progress (remove instant conversions).
+- [~] Implement per-structure recipe timing/progress (smelter/assembler/ammo module done; miner extraction timing remains).
 - [ ] Implement wave composition from `waves.json` for authored waves.
 - [ ] Add procedural wave generation policy for post-authored endless waves.
 - [ ] Add enemy structure-targeting behaviors (raider/breacher/artillery priorities).
