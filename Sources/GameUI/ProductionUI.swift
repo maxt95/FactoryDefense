@@ -583,4 +583,106 @@ public struct ResourceHUDPanel: View {
         .clipShape(RoundedRectangle(cornerRadius: 7))
     }
 }
+
+public struct BuildingReferencePanel: View {
+    public var world: WorldState
+
+    public init(world: WorldState) {
+        self.world = world
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Building Reference")
+                .font(.headline)
+
+            ForEach(referenceRows) { row in
+                HStack(alignment: .top, spacing: 8) {
+                    Circle()
+                        .fill(row.color)
+                        .frame(width: 12, height: 12)
+                        .padding(.top, 3)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.label)
+                            .font(.subheadline.weight(.semibold))
+                        Text(row.info)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    Text("x\(row.count)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                .padding(6)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+            }
+        }
+        .padding(10)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var referenceRows: [ReferenceRow] {
+        StructureType.allCases.map { structure in
+            let count = world.entities.structures(of: structure).count
+            return ReferenceRow(
+                id: structure,
+                label: structureLabel(structure),
+                info: "\(structure.blocksMovement ? "Blocks path" : "No block") • \(structure.footprint.width)x\(structure.footprint.height)",
+                count: count,
+                color: structureColor(structure)
+            )
+        }
+    }
+
+    private func structureLabel(_ structure: StructureType) -> String {
+        switch structure {
+        case .wall: return "Wall"
+        case .turretMount: return "Turret Mount"
+        case .miner: return "Miner"
+        case .smelter: return "Smelter"
+        case .assembler: return "Assembler"
+        case .ammoModule: return "Ammo Module"
+        case .powerPlant: return "Power Plant"
+        case .conveyor: return "Conveyor"
+        case .storage: return "Storage"
+        }
+    }
+
+    private func structureColor(_ structure: StructureType) -> Color {
+        switch structure {
+        case .wall:
+            return Color(red: 0.60, green: 0.60, blue: 0.60)
+        case .turretMount:
+            return Color(red: 0.20, green: 0.50, blue: 0.80)
+        case .miner:
+            return Color(red: 0.80, green: 0.60, blue: 0.20)
+        case .smelter:
+            return Color(red: 0.90, green: 0.30, blue: 0.10)
+        case .assembler:
+            return Color(red: 0.30, green: 0.70, blue: 0.30)
+        case .ammoModule:
+            return Color(red: 0.80, green: 0.20, blue: 0.20)
+        case .powerPlant:
+            return Color(red: 0.90, green: 0.90, blue: 0.20)
+        case .conveyor:
+            return Color(red: 0.50, green: 0.50, blue: 0.70)
+        case .storage:
+            return Color(red: 0.60, green: 0.40, blue: 0.20)
+        }
+    }
+
+    private struct ReferenceRow: Identifiable {
+        let id: StructureType
+        let label: String
+        let info: String
+        let count: Int
+        let color: Color
+    }
+}
 #endif

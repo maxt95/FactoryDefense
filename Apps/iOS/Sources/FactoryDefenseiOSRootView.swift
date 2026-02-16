@@ -144,15 +144,18 @@ private struct FactoryDefenseiOSGameplayView: View {
                     ResourceHUDPanel(world: runtime.world)
 
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: 10) {
-                            BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in
-                                buildMenu.select(entryID: entry.id)
-                            }
+                    HStack(alignment: .top, spacing: 10) {
+                        BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in
+                            buildMenu.select(entryID: entry.id)
+                        }
+                        .frame(width: 290)
+
+                        BuildingReferencePanel(world: runtime.world)
                             .frame(width: 290)
 
-                            TechTreePanel(nodes: techTree.nodes(inventory: inventory))
-                                .frame(width: 340)
-                        }
+                        TechTreePanel(nodes: techTree.nodes(inventory: inventory))
+                            .frame(width: 340)
+                    }
                     }
 
                     HStack(alignment: .top, spacing: 10) {

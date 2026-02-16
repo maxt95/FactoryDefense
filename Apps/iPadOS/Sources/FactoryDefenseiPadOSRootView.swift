@@ -149,6 +149,9 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                         }
                         .frame(width: 320)
 
+                        BuildingReferencePanel(world: runtime.world)
+                            .frame(width: 300)
+
                         VStack(spacing: 10) {
                             TechTreePanel(nodes: techTree.nodes(inventory: inventory))
                             OnboardingPanel(steps: onboarding.steps)
