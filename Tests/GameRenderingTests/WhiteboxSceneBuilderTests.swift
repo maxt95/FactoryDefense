@@ -34,4 +34,72 @@ final class WhiteboxSceneBuilderTests: XCTestCase {
         XCTAssertEqual(hq.footprintWidth, 2)
         XCTAssertEqual(hq.footprintHeight, 2)
     }
+
+    func testEntityMarkersIncludeSubtypeForEnemyAndProjectile() {
+        var world = WorldState.bootstrap()
+
+        let scoutID = world.entities.spawnEnemy(at: GridPosition(x: 10, y: 10), health: 20)
+        world.combat.enemies[scoutID] = EnemyRuntime(
+            id: scoutID,
+            archetype: .scout,
+            moveEveryTicks: 8,
+            baseDamage: 8,
+            rewardCurrency: 1
+        )
+
+        let raiderID = world.entities.spawnEnemy(at: GridPosition(x: 11, y: 10), health: 45)
+        world.combat.enemies[raiderID] = EnemyRuntime(
+            id: raiderID,
+            archetype: .raider,
+            moveEveryTicks: 6,
+            baseDamage: 12,
+            rewardCurrency: 3
+        )
+
+        let heavyTurretID = world.entities.spawnStructure(
+            .turretMount,
+            at: GridPosition(x: 20, y: 20),
+            turretDefID: "turret_mk2"
+        )
+        let heavyProjectileID = world.entities.spawnProjectile(at: GridPosition(x: 20, y: 20))
+        world.combat.projectiles[heavyProjectileID] = ProjectileRuntime(
+            id: heavyProjectileID,
+            sourceTurretID: heavyTurretID,
+            targetEnemyID: scoutID,
+            damage: 25,
+            impactTick: world.tick + 2
+        )
+
+        let plasmaTurretID = world.entities.spawnStructure(
+            .turretMount,
+            at: GridPosition(x: 21, y: 20),
+            turretDefID: "plasma_sentinel"
+        )
+        let plasmaProjectileID = world.entities.spawnProjectile(at: GridPosition(x: 21, y: 20))
+        world.combat.projectiles[plasmaProjectileID] = ProjectileRuntime(
+            id: plasmaProjectileID,
+            sourceTurretID: plasmaTurretID,
+            targetEnemyID: raiderID,
+            damage: 45,
+            impactTick: world.tick + 2
+        )
+
+        let scene = WhiteboxSceneBuilder().build(from: world)
+
+        let scoutMarker = scene.entities.first { $0.id == Int64(scoutID) }
+        XCTAssertEqual(scoutMarker?.category, WhiteboxEntityCategory.enemy.rawValue)
+        XCTAssertEqual(scoutMarker?.subtypeRaw, WhiteboxEnemyTypeID.droneScout.rawValue)
+
+        let raiderMarker = scene.entities.first { $0.id == Int64(raiderID) }
+        XCTAssertEqual(raiderMarker?.category, WhiteboxEntityCategory.enemy.rawValue)
+        XCTAssertEqual(raiderMarker?.subtypeRaw, WhiteboxEnemyTypeID.raider.rawValue)
+
+        let heavyProjectileMarker = scene.entities.first { $0.id == Int64(heavyProjectileID) }
+        XCTAssertEqual(heavyProjectileMarker?.category, WhiteboxEntityCategory.projectile.rawValue)
+        XCTAssertEqual(heavyProjectileMarker?.subtypeRaw, WhiteboxProjectileTypeID.heavyBallistic.rawValue)
+
+        let plasmaProjectileMarker = scene.entities.first { $0.id == Int64(plasmaProjectileID) }
+        XCTAssertEqual(plasmaProjectileMarker?.category, WhiteboxEntityCategory.projectile.rawValue)
+        XCTAssertEqual(plasmaProjectileMarker?.subtypeRaw, WhiteboxProjectileTypeID.plasma.rawValue)
+    }
 }

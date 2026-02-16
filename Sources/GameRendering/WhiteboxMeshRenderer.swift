@@ -15,6 +15,11 @@ private struct PipelineKey: Equatable {
     var depthPixelFormat: MTLPixelFormat
 }
 
+private struct MeshInstanceBatch {
+    var meshID: MeshID
+    var instanceRange: Range<Int>
+}
+
 public final class WhiteboxMeshRenderer {
     private let sceneBuilder = WhiteboxSceneBuilder()
     private var pipelineState: MTLRenderPipelineState?
@@ -24,7 +29,16 @@ public final class WhiteboxMeshRenderer {
     private var pipelineKey: PipelineKey?
     private var hasLoggedResourceIssue = false
 
-    public init() {}
+    // Triple-buffer instance uploads to avoid CPU/GPU contention.
+    private let inFlightInstanceBufferCount = 3
+    private var frameIndex = 0
+    private var instanceBuffers: [MTLBuffer?]
+    private var instanceBufferCapacities: [Int]
+
+    public init() {
+        self.instanceBuffers = Array(repeating: nil, count: inFlightInstanceBufferCount)
+        self.instanceBufferCapacities = Array(repeating: 0, count: inFlightInstanceBufferCount)
+    }
 
     public func encode(context: RenderContext, encoder: MTLRenderCommandEncoder) {
         let colorPixelFormat = context.currentDrawable?.texture.pixelFormat ?? .bgra8Unorm_srgb
@@ -44,8 +58,28 @@ public final class WhiteboxMeshRenderer {
 
         let viewProjection = makeViewProjectionMatrix(context: context)
         let scene = sceneBuilder.build(from: context.worldState)
-        let batches = makeInstanceBatches(scene: scene, context: context, viewProjection: viewProjection)
-        guard !batches.isEmpty else { return }
+        let (batches, instancePayload) = makeInstanceBatches(scene: scene, context: context, viewProjection: viewProjection)
+        guard !instancePayload.isEmpty else { return }
+
+        let slot = frameIndex
+        frameIndex = (frameIndex + 1) % inFlightInstanceBufferCount
+        guard let instanceBuffer = ensureInstanceBuffer(
+            device: context.device,
+            slot: slot,
+            minimumInstanceCount: instancePayload.count
+        ) else {
+            logResourceIssue("Failed to allocate triple-buffered whitebox instance data.")
+            return
+        }
+
+        let instancePointer = instanceBuffer.contents().bindMemory(
+            to: InstanceUniforms.self,
+            capacity: instancePayload.count
+        )
+        instancePayload.withUnsafeBufferPointer { source in
+            guard let sourceAddress = source.baseAddress else { return }
+            instancePointer.update(from: sourceAddress, count: source.count)
+        }
 
         encoder.setRenderPipelineState(pipelineState)
         encoder.setDepthStencilState(depthState)
@@ -53,27 +87,52 @@ public final class WhiteboxMeshRenderer {
         encoder.setFrontFacing(.counterClockwise)
 
         for batch in batches {
-            guard let mesh = meshLibrary.mesh(for: batch.meshID), !batch.instances.isEmpty else { continue }
-            var instances = batch.instances
-            guard let instanceBuffer = context.device.makeBuffer(
-                bytes: &instances,
-                length: MemoryLayout<InstanceUniforms>.stride * instances.count
-            ) else {
-                logResourceIssue("Failed to allocate whitebox instance buffer.")
-                return
-            }
+            guard let mesh = meshLibrary.mesh(for: batch.meshID) else { continue }
+            let instanceCount = batch.instanceRange.count
+            guard instanceCount > 0 else { continue }
 
+            let instanceOffset = MemoryLayout<InstanceUniforms>.stride * batch.instanceRange.lowerBound
             encoder.setVertexBuffer(mesh.vertexBuffer, offset: 0, index: 0)
-            encoder.setVertexBuffer(instanceBuffer, offset: 0, index: 1)
+            encoder.setVertexBuffer(instanceBuffer, offset: instanceOffset, index: 1)
             encoder.drawIndexedPrimitives(
                 type: .triangle,
                 indexCount: mesh.indexCount,
                 indexType: .uint16,
                 indexBuffer: mesh.indexBuffer,
                 indexBufferOffset: 0,
-                instanceCount: instances.count
+                instanceCount: instanceCount
             )
         }
+    }
+
+    private func ensureInstanceBuffer(
+        device: MTLDevice,
+        slot: Int,
+        minimumInstanceCount: Int
+    ) -> MTLBuffer? {
+        guard minimumInstanceCount > 0 else { return nil }
+        let clampedSlot = max(0, min(slot, inFlightInstanceBufferCount - 1))
+        if let existing = instanceBuffers[clampedSlot], instanceBufferCapacities[clampedSlot] >= minimumInstanceCount {
+            return existing
+        }
+
+        let capacity = max(256, nextPowerOfTwo(minimumInstanceCount))
+        let length = MemoryLayout<InstanceUniforms>.stride * capacity
+        guard let buffer = device.makeBuffer(length: length, options: [.storageModeShared]) else {
+            return nil
+        }
+
+        instanceBuffers[clampedSlot] = buffer
+        instanceBufferCapacities[clampedSlot] = capacity
+        return buffer
+    }
+
+    private func nextPowerOfTwo(_ value: Int) -> Int {
+        var result = 1
+        while result < value {
+            result <<= 1
+        }
+        return result
     }
 
     private func prepareResources(
@@ -169,7 +228,7 @@ public final class WhiteboxMeshRenderer {
         scene: WhiteboxSceneData,
         context: RenderContext,
         viewProjection: simd_float4x4
-    ) -> [MeshInstanceBatch] {
+    ) -> ([MeshInstanceBatch], [InstanceUniforms]) {
         var grouped: [MeshID: [InstanceUniforms]] = [:]
 
         for structure in scene.structures {
@@ -209,23 +268,11 @@ public final class WhiteboxMeshRenderer {
                 )
             )
 
-            let meshID: MeshID
-            let instanceScale: SIMD3<Float>
-            let verticalOffset: Float
-
-            if marker.category == WhiteboxEntityCategory.enemy.rawValue {
-                meshID = .swarmling
-                instanceScale = SIMD3<Float>(1.0, 1.0, 1.0)
-                verticalOffset = 0.0
-            } else {
-                meshID = .lightBallisticProjectile
-                instanceScale = SIMD3<Float>(1.0, 1.0, 1.0)
-                verticalOffset = 0.16
-            }
-
+            let meshID = meshID(for: marker)
+            let verticalOffset: Float = marker.category == WhiteboxEntityCategory.projectile.rawValue ? 0.16 : 0
             let model = simd_float4x4.translation(
                 SIMD3<Float>(centerX, baseElevation + verticalOffset, centerZ)
-            ) * simd_float4x4.scale(instanceScale)
+            )
 
             grouped[meshID, default: []].append(
                 InstanceUniforms(
@@ -236,10 +283,50 @@ public final class WhiteboxMeshRenderer {
             )
         }
 
-        return MeshID.renderOrder.compactMap { meshID in
-            guard let instances = grouped[meshID], !instances.isEmpty else { return nil }
-            return MeshInstanceBatch(meshID: meshID, instances: instances)
+        var batches: [MeshInstanceBatch] = []
+        var flattenedInstances: [InstanceUniforms] = []
+        for meshID in MeshID.renderOrder {
+            guard let instances = grouped[meshID], !instances.isEmpty else { continue }
+            let start = flattenedInstances.count
+            flattenedInstances.append(contentsOf: instances)
+            batches.append(MeshInstanceBatch(meshID: meshID, instanceRange: start..<flattenedInstances.count))
         }
+
+        return (batches, flattenedInstances)
+    }
+
+    private func meshID(for marker: WhiteboxEntityMarker) -> MeshID {
+        if marker.category == WhiteboxEntityCategory.enemy.rawValue {
+            switch marker.subtypeRaw {
+            case WhiteboxEnemyTypeID.swarmling.rawValue:
+                return .swarmling
+            case WhiteboxEnemyTypeID.droneScout.rawValue:
+                return .droneScout
+            case WhiteboxEnemyTypeID.raider.rawValue:
+                return .raider
+            case WhiteboxEnemyTypeID.breacher.rawValue:
+                return .breacher
+            case WhiteboxEnemyTypeID.artilleryBug.rawValue:
+                return .artilleryBug
+            case WhiteboxEnemyTypeID.overseer.rawValue:
+                return .overseer
+            default:
+                return .swarmling
+            }
+        }
+
+        if marker.category == WhiteboxEntityCategory.projectile.rawValue {
+            switch marker.subtypeRaw {
+            case WhiteboxProjectileTypeID.heavyBallistic.rawValue:
+                return .heavyBallisticProjectile
+            case WhiteboxProjectileTypeID.plasma.rawValue:
+                return .plasmaProjectile
+            default:
+                return .lightBallisticProjectile
+            }
+        }
+
+        return .gridTile
     }
 
     private func makeWhiteboxVertexDescriptor() -> MTLVertexDescriptor {
@@ -262,11 +349,6 @@ public final class WhiteboxMeshRenderer {
         fputs("FactoryDefense WhiteboxMeshRenderer: \(message)\n", stderr)
         RenderDiagnostics.post("Whitebox mesh renderer issue: \(message)")
     }
-}
-
-private struct MeshInstanceBatch {
-    var meshID: MeshID
-    var instances: [InstanceUniforms]
 }
 
 private extension MeshID {
