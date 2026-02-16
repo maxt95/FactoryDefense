@@ -13,6 +13,7 @@ It is intentionally high level; linked PRDs provide detailed design and implemen
 - This file is the high-level source of truth.
 - `docs/prd/factory_economy.md` defines economy/combat balance and priorities.
 - `docs/prd/building_specifications.md` defines the conveyor-routed building/port/buffer model and supersedes older abstract logistics assumptions.
+- `docs/prd/combat_rendering_vfx.md` defines projectile physics, enemy pathfinding, instanced GPU rendering, and VFX particle system architecture.
 - `docs/WHITEBOX_ASSET_STRATEGY.md` defines the whitebox rendering path for early playable visuals.
 
 ## Product Pillars
@@ -135,6 +136,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Systems implementation plan: `docs/GAME_SYSTEMS_PLAN.md`
 - Factory & Economy PRD: `docs/prd/factory_economy.md`
 - Building Specifications PRD: `docs/prd/building_specifications.md`
+- Combat, Rendering & VFX PRD: `docs/prd/combat_rendering_vfx.md`
 - Whitebox Asset Strategy: `docs/WHITEBOX_ASSET_STRATEGY.md`
 
 ## Change Control
