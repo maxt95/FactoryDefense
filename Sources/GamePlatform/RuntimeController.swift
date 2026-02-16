@@ -130,7 +130,12 @@ public final class GameRuntimeController: ObservableObject {
         placementPreviewCache = nil
     }
 
-    public func placeStructure(_ structure: StructureType, at position: GridPosition) {
+    public func placeStructure(
+        _ structure: StructureType,
+        at position: GridPosition,
+        rotation: Rotation = .north,
+        targetPatchID: Int? = nil
+    ) {
         let anchorPosition = placementAnchor(for: structure, requestedPosition: position)
         previewPlacement(structure: structure, at: position)
         guard placementResult == .ok else { return }
@@ -139,22 +144,46 @@ public final class GameRuntimeController: ObservableObject {
             payload: .placeStructure(
                 BuildRequest(
                     structure: structure,
-                    position: anchorPosition
+                    position: anchorPosition,
+                    rotation: rotation,
+                    targetPatchID: targetPatchID
                 )
             )
         )
     }
 
-    public func placePreviewedStructure(_ structure: StructureType) {
+    public func placePreviewedStructure(
+        _ structure: StructureType,
+        rotation: Rotation = .north,
+        targetPatchID: Int? = nil
+    ) {
         guard placementResult == .ok, let anchorPosition = highlightedCell else { return }
         enqueue(
             payload: .placeStructure(
                 BuildRequest(
                     structure: structure,
-                    position: anchorPosition
+                    position: anchorPosition,
+                    rotation: rotation,
+                    targetPatchID: targetPatchID
                 )
             )
         )
+    }
+
+    public func placeConveyor(at position: GridPosition, direction: CardinalDirection) {
+        enqueue(payload: .placeConveyor(position: position, direction: direction))
+    }
+
+    public func removeStructure(entityID: EntityID) {
+        enqueue(payload: .removeStructure(entityID: entityID))
+    }
+
+    public func rotateBuilding(entityID: EntityID) {
+        enqueue(payload: .rotateBuilding(entityID: entityID))
+    }
+
+    public func pinRecipe(entityID: EntityID, recipeID: String) {
+        enqueue(payload: .pinRecipe(entityID: entityID, recipeID: recipeID))
     }
 
     public func triggerWave() {

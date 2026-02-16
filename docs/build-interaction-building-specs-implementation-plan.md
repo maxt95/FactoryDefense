@@ -20,6 +20,7 @@
   - Storage shared-pool runtime (`storageSharedPoolByEntity`) using content-defined bidirectional ports.
   - Content-driven port transfer validation from `buildings.json` (input/output side resolution by rotation + per-port item filters).
   - Removed logistics transport fallback to global inventory; produced items remain in routed buffers/pools until physically consumed.
+  - `GameRuntimeController` command helper expansion (`placeConveyor`, `rotateBuilding`, `pinRecipe`, `removeStructure`) and rotation-aware place APIs for shared platform wiring.
   - Golden replay fingerprint regeneration and new command/snapshot/removal tests.
 - Still in progress / remaining for parity:
   - Shared cross-platform gameplay interaction module + drag-draw parity + canonical rejection UX timing.

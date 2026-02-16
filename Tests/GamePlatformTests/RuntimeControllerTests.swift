@@ -85,6 +85,40 @@ final class RuntimeControllerTests: XCTestCase {
         XCTAssertEqual(summary.ammoSpent, 0)
     }
 
+    func testPlaceConveyorCommandUsesDirection() {
+        let world = makeCommandHelperWorld()
+        let runtime = GameRuntimeController(initialWorld: world)
+        let target = GridPosition(x: 5, y: 5)
+
+        runtime.placeConveyor(at: target, direction: .south)
+        _ = runtime.advanceTick()
+
+        let placedID = runtime.latestEvents.first(where: { $0.kind == .structurePlaced })?.entity
+        let placed = placedID.flatMap { runtime.world.entities.entity(id: $0) }
+        XCTAssertEqual(placed?.structureType, .conveyor)
+        XCTAssertEqual(placed?.rotation, .south)
+    }
+
+    func testRotatePinAndRemoveCommandHelpers() {
+        let world = makeCommandHelperWorld()
+        let runtime = GameRuntimeController(initialWorld: world)
+
+        let assemblerID = 2
+        let wallID = 3
+
+        runtime.rotateBuilding(entityID: assemblerID)
+        _ = runtime.advanceTick()
+        XCTAssertEqual(runtime.world.entities.entity(id: assemblerID)?.rotation, .east)
+
+        runtime.pinRecipe(entityID: assemblerID, recipeID: "forge_gear")
+        _ = runtime.advanceTick()
+        XCTAssertEqual(runtime.world.economy.pinnedRecipeByStructure[assemblerID], "forge_gear")
+
+        runtime.removeStructure(entityID: wallID)
+        _ = runtime.advanceTick()
+        XCTAssertNil(runtime.world.entities.entity(id: wallID))
+    }
+
     private func makeImmediateGameOverWorld() -> WorldState {
         let board = BoardState(
             width: 8,
@@ -138,6 +172,40 @@ final class RuntimeControllerTests: XCTestCase {
                         rewardCurrency: 1
                     )
                 ],
+                basePosition: GridPosition(x: 0, y: 0),
+                spawnEdgeX: 7,
+                spawnYMin: 0,
+                spawnYMax: 2
+            )
+        )
+    }
+
+    private func makeCommandHelperWorld() -> WorldState {
+        let board = BoardState(
+            width: 8,
+            height: 8,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 7,
+            spawnYMin: 0,
+            spawnYMax: 2,
+            blockedCells: [],
+            restrictedCells: [],
+            ramps: []
+        )
+
+        var entities = EntityStore()
+        _ = entities.spawnStructure(.hq, at: GridPosition(x: 0, y: 0))
+        _ = entities.spawnStructure(.assembler, at: GridPosition(x: 2, y: 2))
+        _ = entities.spawnStructure(.wall, at: GridPosition(x: 4, y: 4))
+
+        return WorldState(
+            tick: 0,
+            board: board,
+            entities: entities,
+            economy: EconomyState(inventories: ["plate_iron": 20]),
+            threat: ThreatState(),
+            run: RunState(phase: .playing, hqEntityID: 1),
+            combat: CombatState(
                 basePosition: GridPosition(x: 0, y: 0),
                 spawnEdgeX: 7,
                 spawnYMin: 0,
