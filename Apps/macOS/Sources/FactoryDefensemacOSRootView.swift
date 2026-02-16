@@ -63,6 +63,9 @@ private struct FactoryDefensemacOSGameplayView: View {
     @State private var buildMenu = BuildMenuViewModel.productionPreset
     @State private var techTree = TechTreeViewModel.productionPreset
     @State private var onboarding = OnboardingGuideViewModel.starter
+    @State private var overlayLayout = GameplayOverlayLayoutState.defaultLayout(
+        viewportSize: CGSize(width: 1280, height: 720)
+    )
     @State private var cameraState = WhiteboxCameraState()
     @State private var dragTranslation: CGSize = .zero
     @State private var zoomGestureScale: CGFloat = 1
@@ -142,55 +145,14 @@ private struct FactoryDefensemacOSGameplayView: View {
                     .position(inspectorPosition)
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Factory Defense macOS")
-                            .font(.headline)
-                            .padding(8)
-                            .background(.ultraThinMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                        Text("Placement: \(placementLabel(runtime.placementResult))")
-                            .font(.caption)
-                            .padding(8)
-                            .background(.ultraThinMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                        Spacer()
-
-                        Button("Wave") {
-                            runtime.triggerWave()
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        Button("Extract") {
-                            runtime.extract()
-                        }
-                        .buttonStyle(.bordered)
-                    }
-
-                    ResourceHUDPanel(world: runtime.world)
-
-                    HStack(alignment: .top, spacing: 10) {
-                        BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in
-                            buildMenu.select(entryID: entry.id)
-                        }
-                        .frame(width: 320)
-
-                        BuildingReferencePanel(world: runtime.world)
-                            .frame(width: 300)
-
-                        VStack(spacing: 10) {
-                            TechTreePanel(nodes: techTree.nodes(inventory: inventory))
-                            OnboardingPanel(steps: onboarding.steps)
-                            TuningDashboardPanel(snapshot: .from(world: runtime.world))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-
-                    Spacer()
+                GameplayOverlayHost(
+                    layoutState: $overlayLayout,
+                    viewportSize: proxy.size,
+                    safeAreaInsets: safeAreaInsets(from: proxy),
+                    windows: overlayWindowDefinitions
+                ) { windowID in
+                    overlayContent(for: windowID)
                 }
-                .padding(16)
 
                 if let renderDiagnostic {
                     VStack {
@@ -215,6 +177,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                 }
                 onboarding.update(from: runtime.world)
                 enforceCameraConstraints(viewport: proxy.size)
+                syncOverlayLayout(viewport: proxy.size, safeAreaInsets: safeAreaInsets(from: proxy))
             }
             .onDisappear {
                 runtime.stop()
@@ -235,10 +198,119 @@ private struct FactoryDefensemacOSGameplayView: View {
             }
             .onChange(of: proxy.size) { _, _ in
                 enforceCameraConstraints(viewport: proxy.size)
+                syncOverlayLayout(viewport: proxy.size, safeAreaInsets: safeAreaInsets(from: proxy))
             }
             .onReceive(NotificationCenter.default.publisher(for: RenderDiagnostics.notificationName)) { note in
                 renderDiagnostic = note.userInfo?[RenderDiagnostics.messageKey] as? String
             }
+        }
+    }
+
+    private var overlayWindowDefinitions: [GameplayOverlayWindowDefinition] {
+        [
+            GameplayOverlayWindowDefinition(id: .topControls, title: "Controls", preferredWidth: 560, preferredHeight: 120),
+            GameplayOverlayWindowDefinition(id: .resources, title: "Resources", preferredWidth: 860, preferredHeight: 260),
+            GameplayOverlayWindowDefinition(id: .buildMenu, title: "Build", preferredWidth: 320, preferredHeight: 520),
+            GameplayOverlayWindowDefinition(id: .buildingReference, title: "Buildings", preferredWidth: 300, preferredHeight: 520),
+            GameplayOverlayWindowDefinition(id: .techTree, title: "Tech Tree", preferredWidth: 360, preferredHeight: 320),
+            GameplayOverlayWindowDefinition(id: .onboarding, title: "Objectives", preferredWidth: 360, preferredHeight: 340),
+            GameplayOverlayWindowDefinition(id: .tuningDashboard, title: "Telemetry", preferredWidth: 240, preferredHeight: 260)
+        ]
+    }
+
+    @ViewBuilder
+    private func overlayContent(for windowID: GameplayOverlayWindowID) -> some View {
+        switch windowID {
+        case .topControls:
+            HStack {
+                Text("Factory Defense macOS")
+                    .font(.headline)
+                    .padding(8)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                Text("Placement: \(placementLabel(runtime.placementResult))")
+                    .font(.caption)
+                    .padding(8)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                Spacer(minLength: 8)
+
+                Button("Wave") {
+                    runtime.triggerWave()
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("Extract") {
+                    runtime.extract()
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(10)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+
+        case .resources:
+            ResourceHUDPanel(world: runtime.world)
+
+        case .buildMenu:
+            BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in
+                buildMenu.select(entryID: entry.id)
+            }
+
+        case .buildingReference:
+            BuildingReferencePanel(world: runtime.world)
+
+        case .techTree:
+            TechTreePanel(nodes: techTree.nodes(inventory: inventory))
+
+        case .onboarding:
+            OnboardingPanel(steps: onboarding.steps)
+
+        case .tuningDashboard:
+            TuningDashboardPanel(snapshot: .from(world: runtime.world))
+        }
+    }
+
+    private func safeAreaInsets(from proxy: GeometryProxy) -> SafeAreaInsets {
+        SafeAreaInsets(
+            top: proxy.safeAreaInsets.top,
+            leading: proxy.safeAreaInsets.leading,
+            bottom: proxy.safeAreaInsets.bottom,
+            trailing: proxy.safeAreaInsets.trailing
+        )
+    }
+
+    private func syncOverlayLayout(viewport: CGSize, safeAreaInsets: SafeAreaInsets) {
+        for definition in overlayWindowDefinitions {
+            overlayLayout.ensureWindow(
+                id: definition.id,
+                defaultOrigin: defaultOrigin(for: definition.id),
+                defaultSize: CGSize(width: definition.preferredWidth, height: definition.preferredHeight),
+                viewportSize: viewport,
+                safeAreaInsets: safeAreaInsets
+            )
+        }
+        overlayLayout.clampToViewport(viewport, safeAreaInsets: safeAreaInsets)
+    }
+
+    private func defaultOrigin(for windowID: GameplayOverlayWindowID) -> CGPoint {
+        switch windowID {
+        case .topControls:
+            return CGPoint(x: 16, y: 16)
+        case .resources:
+            return CGPoint(x: 16, y: 124)
+        case .buildMenu:
+            return CGPoint(x: 16, y: 356)
+        case .buildingReference:
+            return CGPoint(x: 348, y: 356)
+        case .techTree:
+            return CGPoint(x: 660, y: 356)
+        case .onboarding:
+            return CGPoint(x: 660, y: 668)
+        case .tuningDashboard:
+            return CGPoint(x: 660, y: 980)
         }
     }
 
