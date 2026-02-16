@@ -299,6 +299,9 @@ private struct FactoryDefensemacOSGameplayView: View {
                     onTap: { location, viewport in
                         handleTap(at: location, viewport: viewport)
                     },
+                    onPointerMove: { location, viewport in
+                        previewPlacement(at: location, viewport: viewport)
+                    },
                     onScrollZoom: { delta, location, viewport in
                         let scale: Float = delta < 0 ? 0.92 : 1.08
                         zoomCamera(scale: scale, around: location, viewport: viewport)
@@ -400,19 +403,13 @@ private struct FactoryDefensemacOSGameplayView: View {
                 reconcileCameraForBoardChange(from: oldBoard, to: newBoard, viewport: proxy.size)
             }
             .onChange(of: buildMenu.selectedEntryID) { _, _ in
-                if interactionMode == .build, let highlighted = runtime.highlightedCell {
-                    runtime.previewPlacement(structure: selectedStructure, at: highlighted)
-                } else {
-                    runtime.clearPlacementPreview()
-                }
+                refreshPlacementPreview(viewport: proxy.size)
             }
             .onChange(of: interactionMode) { _, mode in
                 switch mode {
                 case .build:
                     selectedEntityID = nil
-                    if let highlighted = runtime.highlightedCell {
-                        runtime.previewPlacement(structure: selectedStructure, at: highlighted)
-                    }
+                    refreshPlacementPreview(viewport: proxy.size)
                 case .interact:
                     runtime.clearPlacementPreview()
                 }
@@ -603,6 +600,25 @@ private struct FactoryDefensemacOSGameplayView: View {
         runtime.previewPlacement(structure: selectedStructure, at: position)
     }
 
+    private func refreshPlacementPreview(viewport: CGSize) {
+        guard interactionMode == .build else {
+            runtime.clearPlacementPreview()
+            return
+        }
+        if let highlighted = runtime.highlightedCell {
+            runtime.previewPlacement(structure: selectedStructure, at: highlighted)
+            return
+        }
+        guard let centerCell = pickGrid(
+            at: CGPoint(x: viewport.width * 0.5, y: viewport.height * 0.5),
+            viewport: viewport
+        ) else {
+            runtime.clearPlacementPreview()
+            return
+        }
+        runtime.previewPlacement(structure: selectedStructure, at: centerCell)
+    }
+
     private func handleKeyboardPan(deltaX: Float, deltaY: Float, viewport: CGSize) {
         cameraState.panBy(
             deltaX: -deltaX * Self.keyboardPanStep,
@@ -677,12 +693,14 @@ private struct MetalSurfaceView: NSViewRepresentable {
     var highlightedStructure: StructureType?
     var placementResult: PlacementResult
     var onTap: (CGPoint, CGSize) -> Void
+    var onPointerMove: (CGPoint, CGSize) -> Void
     var onScrollZoom: (CGFloat, CGPoint, CGSize) -> Void
     var onKeyboardPan: (Float, Float, CGSize) -> Void
 
     func makeNSView(context: Context) -> MTKView {
         let view = ScrollableMTKView(frame: .zero)
         view.onTap = onTap
+        view.onPointerMove = onPointerMove
         view.onScrollZoom = onScrollZoom
         view.onKeyboardPan = onKeyboardPan
         if let renderer = context.coordinator.renderer {
@@ -697,6 +715,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
         guard let renderer = context.coordinator.renderer else { return }
         if let interactiveView = nsView as? ScrollableMTKView {
             interactiveView.onTap = onTap
+            interactiveView.onPointerMove = onPointerMove
             interactiveView.onScrollZoom = onScrollZoom
             interactiveView.onKeyboardPan = onKeyboardPan
             interactiveView.window?.makeFirstResponder(interactiveView)
@@ -719,8 +738,10 @@ private struct MetalSurfaceView: NSViewRepresentable {
 
 private final class ScrollableMTKView: MTKView {
     var onTap: ((CGPoint, CGSize) -> Void)?
+    var onPointerMove: ((CGPoint, CGSize) -> Void)?
     var onScrollZoom: ((CGFloat, CGPoint, CGSize) -> Void)?
     var onKeyboardPan: ((Float, Float, CGSize) -> Void)?
+    private var trackingArea: NSTrackingArea?
 
     override var acceptsFirstResponder: Bool {
         true
@@ -729,10 +750,17 @@ private final class ScrollableMTKView: MTKView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         window?.makeFirstResponder(self)
+        window?.acceptsMouseMovedEvents = true
+        refreshTrackingArea()
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        refreshTrackingArea()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -741,6 +769,13 @@ private final class ScrollableMTKView: MTKView {
         let y = isFlipped ? local.y : (bounds.height - local.y)
         onTap?(CGPoint(x: local.x, y: y), bounds.size)
         super.mouseDown(with: event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let local = convert(event.locationInWindow, from: nil)
+        let y = isFlipped ? local.y : (bounds.height - local.y)
+        onPointerMove?(CGPoint(x: local.x, y: y), bounds.size)
+        super.mouseMoved(with: event)
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -763,5 +798,19 @@ private final class ScrollableMTKView: MTKView {
         default:
             super.keyDown(with: event)
         }
+    }
+
+    private func refreshTrackingArea() {
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        self.trackingArea = trackingArea
     }
 }

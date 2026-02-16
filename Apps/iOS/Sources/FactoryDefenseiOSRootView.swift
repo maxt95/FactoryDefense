@@ -173,19 +173,13 @@ private struct FactoryDefenseiOSGameplayView: View {
                 reconcileCameraForBoardChange(from: oldBoard, to: newBoard, viewport: proxy.size)
             }
             .onChange(of: buildMenu.selectedEntryID) { _, _ in
-                if interactionMode == .build, let highlighted = runtime.highlightedCell {
-                    runtime.previewPlacement(structure: selectedStructure, at: highlighted)
-                } else {
-                    runtime.clearPlacementPreview()
-                }
+                refreshPlacementPreview(viewport: proxy.size)
             }
             .onChange(of: interactionMode) { _, mode in
                 switch mode {
                 case .build:
                     selectedEntityID = nil
-                    if let highlighted = runtime.highlightedCell {
-                        runtime.previewPlacement(structure: selectedStructure, at: highlighted)
-                    }
+                    refreshPlacementPreview(viewport: proxy.size)
                 case .interact:
                     runtime.clearPlacementPreview()
                 }
@@ -369,6 +363,25 @@ private struct FactoryDefenseiOSGameplayView: View {
             return
         }
         runtime.previewPlacement(structure: selectedStructure, at: position)
+    }
+
+    private func refreshPlacementPreview(viewport: CGSize) {
+        guard interactionMode == .build else {
+            runtime.clearPlacementPreview()
+            return
+        }
+        if let highlighted = runtime.highlightedCell {
+            runtime.previewPlacement(structure: selectedStructure, at: highlighted)
+            return
+        }
+        guard let centerCell = pickGrid(
+            at: CGPoint(x: viewport.width * 0.5, y: viewport.height * 0.5),
+            viewport: viewport
+        ) else {
+            runtime.clearPlacementPreview()
+            return
+        }
+        runtime.previewPlacement(structure: selectedStructure, at: centerCell)
     }
 
     private func handleKeyboardPan(deltaX: Float, deltaY: Float, viewport: CGSize) {

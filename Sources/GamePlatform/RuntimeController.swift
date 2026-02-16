@@ -16,6 +16,7 @@ public final class GameRuntimeController: ObservableObject {
     private let engine: SimulationEngine
     private var tickTask: Task<Void, Never>?
     private let placementValidator = PlacementValidator()
+    private var placementPreviewCache: PlacementPreviewCache?
     private var summaryCounters = SummaryCounters()
 
     public init(
@@ -76,11 +77,27 @@ public final class GameRuntimeController: ObservableObject {
     }
 
     public func previewPlacement(structure: StructureType, at position: GridPosition) {
+        let cacheKey = PlacementPreviewCache.Key(
+            structure: structure,
+            requestedPosition: position,
+            tick: world.tick
+        )
+        if let cached = placementPreviewCache, cached.key == cacheKey {
+            highlightedCell = cached.highlightedCell
+            placementResult = cached.result
+            return
+        }
+
         let anchorPosition = placementAnchor(for: structure, requestedPosition: position)
         highlightedCell = anchorPosition
         let coveredCells = structure.coveredCells(anchor: anchorPosition)
         guard let expansionInsets = world.board.plannedExpansion(for: coveredCells) else {
             placementResult = .outOfBounds
+            placementPreviewCache = PlacementPreviewCache(
+                key: cacheKey,
+                highlightedCell: anchorPosition,
+                result: .outOfBounds
+            )
             return
         }
 
@@ -90,15 +107,27 @@ public final class GameRuntimeController: ObservableObject {
         let result = placementValidator.canPlace(structure, at: adjustedPosition, in: previewWorld)
         guard result == .ok else {
             placementResult = result
+            placementPreviewCache = PlacementPreviewCache(
+                key: cacheKey,
+                highlightedCell: anchorPosition,
+                result: result
+            )
             return
         }
 
-        placementResult = world.economy.canAfford(structure.buildCosts) ? .ok : .insufficientResources
+        let affordabilityResult: PlacementResult = world.economy.canAfford(structure.buildCosts) ? .ok : .insufficientResources
+        placementResult = affordabilityResult
+        placementPreviewCache = PlacementPreviewCache(
+            key: cacheKey,
+            highlightedCell: anchorPosition,
+            result: affordabilityResult
+        )
     }
 
     public func clearPlacementPreview() {
         highlightedCell = nil
         placementResult = .ok
+        placementPreviewCache = nil
     }
 
     public func placeStructure(_ structure: StructureType, at position: GridPosition) {
@@ -200,4 +229,16 @@ private struct SummaryCounters {
     var enemiesDestroyed: Int = 0
     var structuresBuilt: Int = 0
     var ammoSpent: Int = 0
+}
+
+private struct PlacementPreviewCache {
+    struct Key: Hashable {
+        var structure: StructureType
+        var requestedPosition: GridPosition
+        var tick: UInt64
+    }
+
+    var key: Key
+    var highlightedCell: GridPosition
+    var result: PlacementResult
 }
