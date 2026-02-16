@@ -107,7 +107,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                         }
                 )
                 .simultaneousGesture(
-                    DragGesture(minimumDistance: 1)
+                    DragGesture(minimumDistance: 0)
                         .onChanged { value in
                             handleDragChanged(value, viewport: proxy.size)
                         }
@@ -392,6 +392,10 @@ private struct FactoryDefenseiPadOSGameplayView: View {
             }
         case .build:
             selectedTarget = nil
+            if dragDrawPlanner.supportsDragDraw(for: selectedStructure) {
+                runtime.previewPlacement(structure: selectedStructure, at: position)
+                return
+            }
             runtime.placeStructure(selectedStructure, at: position)
             if interaction.completePlacementIfSuccessful(runtime.placementResult) {
                 runtime.clearPlacementPreview()
@@ -446,7 +450,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
             interaction.updateDragDraw(at: current)
         }
         let path = interaction.finishDragDraw(using: dragDrawPlanner)
-        guard path.count > 1 else { return }
+        guard !path.isEmpty else { return }
 
         selectedTarget = nil
         runtime.placeStructurePath(selectedStructure, along: path)
