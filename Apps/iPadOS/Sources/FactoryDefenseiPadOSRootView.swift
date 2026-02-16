@@ -198,6 +198,30 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                 enforceCameraConstraints(viewport: proxy.size)
                 syncOverlayLayout(viewport: proxy.size, safeAreaInsets: safeAreaInsets(from: proxy))
             }
+            .alert(
+                "Remove structure?",
+                isPresented: Binding(
+                    get: { interaction.pendingDemolishEntityID != nil },
+                    set: { presented in
+                        if !presented {
+                            interaction.cancelDemolish()
+                        }
+                    }
+                )
+            ) {
+                Button("Cancel", role: .cancel) {
+                    interaction.cancelDemolish()
+                }
+                Button("Remove", role: .destructive) {
+                    guard let entityID = interaction.confirmDemolish() else { return }
+                    runtime.removeStructure(entityID: entityID)
+                    if selectedDemolishableEntityID == entityID {
+                        selectedTarget = nil
+                    }
+                }
+            } message: {
+                Text("This removes the selected structure and refunds 50% of its build cost.")
+            }
         }
     }
 
@@ -238,6 +262,12 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 220)
+
+                Button("Demolish") {
+                    requestDemolishSelected()
+                }
+                .buttonStyle(.bordered)
+                .disabled(selectedDemolishableEntityID == nil)
 
                 Spacer(minLength: 8)
 
@@ -334,6 +364,8 @@ private struct FactoryDefenseiPadOSGameplayView: View {
             return "Needs ore patch"
         case .invalidTurretMountPlacement:
             return "Needs wall"
+        case .invalidRemoval:
+            return "Cannot remove"
         }
     }
 
@@ -454,6 +486,21 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     private func selectedOrePatchInspectorModel() -> OrePatchInspectorViewModel? {
         guard case .orePatch(let patchID)? = selectedTarget else { return nil }
         return orePatchInspectorBuilder.build(patchID: patchID, in: runtime.world)
+    }
+
+    private var selectedDemolishableEntityID: EntityID? {
+        guard case .entity(let entityID)? = selectedTarget,
+              let entity = runtime.world.entities.entity(id: entityID),
+              entity.category == .structure,
+              entity.structureType != .hq else {
+            return nil
+        }
+        return entityID
+    }
+
+    private func requestDemolishSelected() {
+        guard let entityID = selectedDemolishableEntityID else { return }
+        interaction.requestDemolish(entityID: entityID)
     }
 
     private func orePatch(at position: GridPosition) -> OrePatch? {

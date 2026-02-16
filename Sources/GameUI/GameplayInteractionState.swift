@@ -9,9 +9,11 @@ public enum GameplayInteractionMode: String, CaseIterable, Identifiable, Sendabl
 
 public struct GameplayInteractionState: Sendable, Hashable {
     public var mode: GameplayInteractionMode
+    public var pendingDemolishEntityID: EntityID?
 
-    public init(mode: GameplayInteractionMode = .interact) {
+    public init(mode: GameplayInteractionMode = .interact, pendingDemolishEntityID: EntityID? = nil) {
         self.mode = mode
+        self.pendingDemolishEntityID = pendingDemolishEntityID
     }
 
     public var isBuildMode: Bool {
@@ -44,5 +46,19 @@ public struct GameplayInteractionState: Sendable, Hashable {
 
     public mutating func exitBuildMode() {
         mode = .interact
+    }
+
+    public mutating func requestDemolish(entityID: EntityID) {
+        pendingDemolishEntityID = entityID
+    }
+
+    public mutating func cancelDemolish() {
+        pendingDemolishEntityID = nil
+    }
+
+    public mutating func confirmDemolish() -> EntityID? {
+        let entityID = pendingDemolishEntityID
+        pendingDemolishEntityID = nil
+        return entityID
     }
 }

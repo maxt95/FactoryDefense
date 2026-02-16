@@ -35,4 +35,18 @@ final class GameplayInteractionStateTests: XCTestCase {
         XCTAssertTrue(succeeded)
         XCTAssertEqual(interaction.mode, .interact)
     }
+
+    func testDemolishConfirmationFlow() {
+        var interaction = GameplayInteractionState()
+
+        interaction.requestDemolish(entityID: 42)
+        XCTAssertEqual(interaction.pendingDemolishEntityID, 42)
+
+        XCTAssertEqual(interaction.confirmDemolish(), 42)
+        XCTAssertNil(interaction.pendingDemolishEntityID)
+
+        interaction.requestDemolish(entityID: 7)
+        interaction.cancelDemolish()
+        XCTAssertNil(interaction.pendingDemolishEntityID)
+    }
 }

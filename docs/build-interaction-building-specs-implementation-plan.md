@@ -23,9 +23,10 @@
   - `GameRuntimeController` command helper expansion (`placeConveyor`, `rotateBuilding`, `pinRecipe`, `removeStructure`) and rotation-aware place APIs for shared platform wiring.
   - Introduced shared `GameplayInteractionState` in `GameUI` and adopted it across macOS/iOS/iPadOS/CLI gameplay roots for unified build/interact mode and build-menu selection transitions.
   - Added shared timed rejection-feedback controller (`PlacementFeedbackController`) with 1.5s placement-rejection label persistence wired across macOS/iOS/iPadOS/CLI gameplay roots.
+  - Added shared demolish-confirmation interaction state (`pendingDemolishEntityID`) and wired confirmation alerts + Demolish actions across macOS/iOS/iPadOS gameplay roots.
   - Golden replay fingerprint regeneration and new command/snapshot/removal tests.
 - Still in progress / remaining for parity:
-  - Shared interaction module follow-through: drag-draw parity and demolish confirmation flow.
+  - Shared interaction module follow-through: drag-draw parity.
 
 ## Locked Decisions
 1. Scope: full PRD parity for both target PRDs.
