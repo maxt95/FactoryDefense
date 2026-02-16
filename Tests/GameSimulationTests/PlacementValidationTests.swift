@@ -37,6 +37,16 @@ final class PlacementValidationTests: XCTestCase {
         )
     }
 
+    func testTwoByTwoPlacementOutOfBoundsIsRejected() {
+        let validator = PlacementValidator()
+        let world = WorldState.bootstrap()
+
+        XCTAssertEqual(
+            validator.canPlace(.turretMount, at: GridPosition(x: 0, y: 0), in: world),
+            .outOfBounds
+        )
+    }
+
     func testRestrictedPlacementIsRejected() {
         let validator = PlacementValidator()
         let world = WorldState.bootstrap()
@@ -44,6 +54,76 @@ final class PlacementValidationTests: XCTestCase {
         XCTAssertEqual(
             validator.canPlace(.wall, at: world.board.basePosition, in: world),
             .restrictedZone
+        )
+    }
+
+    func testTwoByTwoPlacementTouchingRestrictedCellIsRejected() {
+        let board = BoardState(
+            width: 6,
+            height: 6,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 5,
+            spawnYMin: 0,
+            spawnYMax: 0,
+            blockedCells: [],
+            restrictedCells: [GridPosition(x: 1, y: 1)],
+            ramps: []
+        )
+        let world = WorldState(
+            tick: 0,
+            board: board,
+            entities: EntityStore(),
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState(),
+            combat: CombatState(
+                basePosition: GridPosition(x: 0, y: 0),
+                spawnEdgeX: 5,
+                spawnYMin: 0,
+                spawnYMax: 0
+            )
+        )
+        let validator = PlacementValidator()
+
+        XCTAssertEqual(
+            validator.canPlace(.powerPlant, at: GridPosition(x: 2, y: 2), in: world),
+            .restrictedZone
+        )
+    }
+
+    func testTwoByTwoPlacementTouchingOccupiedCellIsRejected() {
+        let board = BoardState(
+            width: 6,
+            height: 6,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 5,
+            spawnYMin: 0,
+            spawnYMax: 0,
+            blockedCells: [],
+            restrictedCells: [],
+            ramps: []
+        )
+        var entities = EntityStore()
+        _ = entities.spawnStructure(.wall, at: GridPosition(x: 1, y: 1))
+        let world = WorldState(
+            tick: 0,
+            board: board,
+            entities: entities,
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState(),
+            combat: CombatState(
+                basePosition: GridPosition(x: 0, y: 0),
+                spawnEdgeX: 5,
+                spawnYMin: 0,
+                spawnYMax: 0
+            )
+        )
+        let validator = PlacementValidator()
+
+        XCTAssertEqual(
+            validator.canPlace(.storage, at: GridPosition(x: 2, y: 2), in: world),
+            .occupied
         )
     }
 
@@ -85,6 +165,48 @@ final class PlacementValidationTests: XCTestCase {
         let validator = PlacementValidator()
         XCTAssertEqual(
             validator.canPlace(.wall, at: GridPosition(x: 2, y: 2), in: world),
+            .blocksCriticalPath
+        )
+    }
+
+    func testTwoByTwoPlacementBlocksPathWhenOnlyCoveredCellSealsCorridor() {
+        let blocked = (0..<5).flatMap { x in
+            (0..<5).compactMap { y -> GridPosition? in
+                if y == 2 { return nil }
+                return GridPosition(x: x, y: y)
+            }
+        }
+
+        let board = BoardState(
+            width: 5,
+            height: 5,
+            basePosition: GridPosition(x: 0, y: 2),
+            spawnEdgeX: 4,
+            spawnYMin: 2,
+            spawnYMax: 2,
+            blockedCells: blocked,
+            restrictedCells: [GridPosition(x: 0, y: 2)],
+            ramps: []
+        )
+
+        let world = WorldState(
+            tick: 0,
+            board: board,
+            entities: EntityStore(),
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState(),
+            combat: CombatState(
+                basePosition: GridPosition(x: 0, y: 2),
+                spawnEdgeX: 4,
+                spawnYMin: 2,
+                spawnYMax: 2
+            )
+        )
+
+        let validator = PlacementValidator()
+        XCTAssertEqual(
+            validator.canPlace(.turretMount, at: GridPosition(x: 2, y: 3), in: world),
             .blocksCriticalPath
         )
     }

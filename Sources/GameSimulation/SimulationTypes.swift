@@ -45,6 +45,47 @@ public enum StructureType: String, Codable, CaseIterable, Sendable {
     case storage
 }
 
+public struct StructureFootprint: Codable, Hashable, Sendable {
+    public var width: Int
+    public var height: Int
+
+    public init(width: Int, height: Int) {
+        self.width = max(1, width)
+        self.height = max(1, height)
+    }
+
+    public func coveredCells(anchor: GridPosition) -> [GridPosition] {
+        let minX = anchor.x - (width - 1)
+        let maxX = anchor.x
+        let minY = anchor.y - (height - 1)
+        let maxY = anchor.y
+
+        var cells: [GridPosition] = []
+        cells.reserveCapacity(width * height)
+        for y in minY...maxY {
+            for x in minX...maxX {
+                cells.append(GridPosition(x: x, y: y, z: anchor.z))
+            }
+        }
+        return cells
+    }
+}
+
+public extension StructureType {
+    var footprint: StructureFootprint {
+        switch self {
+        case .turretMount, .powerPlant, .storage:
+            return StructureFootprint(width: 2, height: 2)
+        case .wall, .miner, .smelter, .assembler, .ammoModule, .conveyor:
+            return StructureFootprint(width: 1, height: 1)
+        }
+    }
+
+    func coveredCells(anchor: GridPosition) -> [GridPosition] {
+        footprint.coveredCells(anchor: anchor)
+    }
+}
+
 public struct BuildRequest: Codable, Hashable, Sendable {
     public var structure: StructureType
     public var position: GridPosition

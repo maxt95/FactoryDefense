@@ -57,6 +57,41 @@ public enum WhiteboxEntityCategory: UInt32, Sendable {
     case projectile = 3
 }
 
+public enum WhiteboxStructureTypeID: UInt32, Sendable {
+    case wall = 1
+    case turretMount = 2
+    case miner = 3
+    case smelter = 4
+    case assembler = 5
+    case ammoModule = 6
+    case powerPlant = 7
+    case conveyor = 8
+    case storage = 9
+
+    public init(structureType: StructureType) {
+        switch structureType {
+        case .wall:
+            self = .wall
+        case .turretMount:
+            self = .turretMount
+        case .miner:
+            self = .miner
+        case .smelter:
+            self = .smelter
+        case .assembler:
+            self = .assembler
+        case .ammoModule:
+            self = .ammoModule
+        case .powerPlant:
+            self = .powerPlant
+        case .conveyor:
+            self = .conveyor
+        case .storage:
+            self = .storage
+        }
+    }
+}
+
 public struct WhiteboxPoint: Hashable, Sendable {
     public var x: Int32
     public var y: Int32
@@ -91,11 +126,28 @@ public struct WhiteboxEntityMarker: Hashable, Sendable {
     }
 }
 
+public struct WhiteboxStructureMarker: Hashable, Sendable {
+    public var anchorX: Int32
+    public var anchorY: Int32
+    public var typeRaw: UInt32
+    public var footprintWidth: Int32
+    public var footprintHeight: Int32
+
+    public init(anchorX: Int32, anchorY: Int32, typeRaw: UInt32, footprintWidth: Int32, footprintHeight: Int32) {
+        self.anchorX = anchorX
+        self.anchorY = anchorY
+        self.typeRaw = typeRaw
+        self.footprintWidth = footprintWidth
+        self.footprintHeight = footprintHeight
+    }
+}
+
 public struct WhiteboxSceneData: Sendable {
     public var summary: WhiteboxSceneSummary
     public var blockedCells: [WhiteboxPoint]
     public var restrictedCells: [WhiteboxPoint]
     public var ramps: [WhiteboxRampPoint]
+    public var structures: [WhiteboxStructureMarker]
     public var entities: [WhiteboxEntityMarker]
 
     public init(
@@ -103,12 +155,14 @@ public struct WhiteboxSceneData: Sendable {
         blockedCells: [WhiteboxPoint],
         restrictedCells: [WhiteboxPoint],
         ramps: [WhiteboxRampPoint],
+        structures: [WhiteboxStructureMarker],
         entities: [WhiteboxEntityMarker]
     ) {
         self.summary = summary
         self.blockedCells = blockedCells
         self.restrictedCells = restrictedCells
         self.ramps = ramps
+        self.structures = structures
         self.entities = entities
     }
 }
@@ -127,21 +181,43 @@ public struct WhiteboxSceneBuilder {
             .map { WhiteboxRampPoint(x: Int32($0.position.x), y: Int32($0.position.y), elevation: Int32($0.elevation)) }
             .sorted { ($0.x, $0.y, $0.elevation) < ($1.x, $1.y, $1.elevation) }
 
-        let entities = world.entities.all.compactMap { entity -> WhiteboxEntityMarker? in
-            let category: WhiteboxEntityCategory
+        var structures: [WhiteboxStructureMarker] = []
+        var entities: [WhiteboxEntityMarker] = []
+        structures.reserveCapacity(world.entities.all.count)
+        entities.reserveCapacity(world.entities.all.count)
+
+        for entity in world.entities.all {
             switch entity.category {
             case .structure:
-                category = .structure
+                guard let structureType = entity.structureType else { continue }
+                let structureID = WhiteboxStructureTypeID(structureType: structureType)
+                let footprint = structureType.footprint
+                structures.append(
+                    WhiteboxStructureMarker(
+                        anchorX: Int32(entity.position.x),
+                        anchorY: Int32(entity.position.y),
+                        typeRaw: structureID.rawValue,
+                        footprintWidth: Int32(footprint.width),
+                        footprintHeight: Int32(footprint.height)
+                    )
+                )
             case .enemy:
-                category = .enemy
+                entities.append(
+                    WhiteboxEntityMarker(
+                        x: Int32(entity.position.x),
+                        y: Int32(entity.position.y),
+                        category: WhiteboxEntityCategory.enemy.rawValue
+                    )
+                )
             case .projectile:
-                category = .projectile
+                entities.append(
+                    WhiteboxEntityMarker(
+                        x: Int32(entity.position.x),
+                        y: Int32(entity.position.y),
+                        category: WhiteboxEntityCategory.projectile.rawValue
+                    )
+                )
             }
-            return WhiteboxEntityMarker(
-                x: Int32(entity.position.x),
-                y: Int32(entity.position.y),
-                category: category.rawValue
-            )
         }
 
         let summary = WhiteboxSceneSummary(
@@ -149,7 +225,7 @@ public struct WhiteboxSceneBuilder {
             blockedCellCount: blockedCells.count,
             restrictedCellCount: restrictedCells.count,
             rampCount: ramps.count,
-            structureCount: entities.filter { $0.category == WhiteboxEntityCategory.structure.rawValue }.count,
+            structureCount: structures.count,
             enemyCount: entities.filter { $0.category == WhiteboxEntityCategory.enemy.rawValue }.count,
             projectileCount: entities.filter { $0.category == WhiteboxEntityCategory.projectile.rawValue }.count
         )
@@ -159,6 +235,7 @@ public struct WhiteboxSceneBuilder {
             blockedCells: blockedCells,
             restrictedCells: restrictedCells,
             ramps: ramps,
+            structures: structures,
             entities: entities
         )
     }

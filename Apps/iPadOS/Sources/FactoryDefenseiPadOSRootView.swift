@@ -74,6 +74,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                     world: runtime.world,
                     cameraState: cameraState,
                     highlightedCell: runtime.highlightedCell,
+                    highlightedStructure: runtime.highlightedCell == nil ? nil : selectedStructure,
                     placementResult: runtime.placementResult
                 )
                 .ignoresSafeArea()
@@ -213,6 +214,7 @@ private struct MetalSurfaceView: UIViewRepresentable {
     var world: WorldState
     var cameraState: WhiteboxCameraState
     var highlightedCell: GridPosition?
+    var highlightedStructure: StructureType?
     var placementResult: PlacementResult
 
     func makeUIView(context: Context) -> MTKView {
@@ -227,7 +229,7 @@ private struct MetalSurfaceView: UIViewRepresentable {
         guard let renderer = context.coordinator.renderer else { return }
         renderer.worldState = world
         renderer.cameraState = cameraState
-        renderer.setPlacementHighlight(cell: highlightedCell, result: placementResult)
+        renderer.setPlacementHighlight(cell: highlightedCell, structure: highlightedStructure, result: placementResult)
     }
 
     func makeCoordinator() -> Coordinator {

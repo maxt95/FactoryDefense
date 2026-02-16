@@ -1,5 +1,6 @@
 import Foundation
 import Metal
+import GameSimulation
 
 private struct WhiteboxUniforms {
     var viewportPixelWidth: UInt32
@@ -18,9 +19,11 @@ private struct WhiteboxUniforms {
     var blockedCount: UInt32
     var restrictedCount: UInt32
     var rampCount: UInt32
+    var structureCount: UInt32
     var entityCount: UInt32
     var highlightedX: Int32
     var highlightedY: Int32
+    var highlightedStructureTypeRaw: UInt32
     var placementResultRaw: Int32
     var cameraPanX: Float
     var cameraPanY: Float
@@ -40,6 +43,17 @@ private struct WhiteboxRampShader {
     var y: Int32
     var elevation: Int32
     var _pad0: Int32 = 0
+}
+
+private struct WhiteboxStructureShader {
+    var anchorX: Int32
+    var anchorY: Int32
+    var typeRaw: UInt32
+    var _pad0: UInt32 = 0
+    var footprintWidth: Int32
+    var footprintHeight: Int32
+    var _pad1: Int32 = 0
+    var _pad2: Int32 = 0
 }
 
 private struct WhiteboxEntityShader {
@@ -80,9 +94,11 @@ public final class WhiteboxRenderer {
             blockedCount: UInt32(scene.blockedCells.count),
             restrictedCount: UInt32(scene.restrictedCells.count),
             rampCount: UInt32(scene.ramps.count),
+            structureCount: UInt32(scene.structures.count),
             entityCount: UInt32(scene.entities.count),
             highlightedX: Int32(context.highlightedCell?.x ?? -1),
             highlightedY: Int32(context.highlightedCell?.y ?? -1),
+            highlightedStructureTypeRaw: highlightedStructureTypeRaw(context.highlightedStructure),
             placementResultRaw: Int32(context.placementResult.rawValue),
             cameraPanX: context.cameraState.pan.x,
             cameraPanY: context.cameraState.pan.y,
@@ -93,6 +109,7 @@ public final class WhiteboxRenderer {
         let blockedBuffer = makePointBuffer(context.device, points: scene.blockedCells)
         let restrictedBuffer = makePointBuffer(context.device, points: scene.restrictedCells)
         let rampBuffer = makeRampBuffer(context.device, ramps: scene.ramps)
+        let structureBuffer = makeStructureBuffer(context.device, structures: scene.structures)
         let entityBuffer = makeEntityBuffer(context.device, entities: scene.entities)
 
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
@@ -103,7 +120,8 @@ public final class WhiteboxRenderer {
         encoder.setBuffer(blockedBuffer, offset: 0, index: 1)
         encoder.setBuffer(restrictedBuffer, offset: 0, index: 2)
         encoder.setBuffer(rampBuffer, offset: 0, index: 3)
-        encoder.setBuffer(entityBuffer, offset: 0, index: 4)
+        encoder.setBuffer(structureBuffer, offset: 0, index: 4)
+        encoder.setBuffer(entityBuffer, offset: 0, index: 5)
 
         let threadsPerThreadgroup = MTLSize(width: 8, height: 8, depth: 1)
         let threadgroups = MTLSize(
@@ -163,6 +181,23 @@ public final class WhiteboxRenderer {
         )
     }
 
+    private func makeStructureBuffer(_ device: MTLDevice, structures: [WhiteboxStructureMarker]) -> MTLBuffer? {
+        guard !structures.isEmpty else { return nil }
+        var payload = structures.map {
+            WhiteboxStructureShader(
+                anchorX: $0.anchorX,
+                anchorY: $0.anchorY,
+                typeRaw: $0.typeRaw,
+                footprintWidth: $0.footprintWidth,
+                footprintHeight: $0.footprintHeight
+            )
+        }
+        return device.makeBuffer(
+            bytes: &payload,
+            length: MemoryLayout<WhiteboxStructureShader>.stride * payload.count
+        )
+    }
+
     private func makeEntityBuffer(_ device: MTLDevice, entities: [WhiteboxEntityMarker]) -> MTLBuffer? {
         guard !entities.isEmpty else { return nil }
         var payload = entities.map { WhiteboxEntityShader(x: $0.x, y: $0.y, category: $0.category) }
@@ -170,5 +205,10 @@ public final class WhiteboxRenderer {
             bytes: &payload,
             length: MemoryLayout<WhiteboxEntityShader>.stride * payload.count
         )
+    }
+
+    private func highlightedStructureTypeRaw(_ structure: StructureType?) -> UInt32 {
+        guard let structure else { return 0 }
+        return WhiteboxStructureTypeID(structureType: structure).rawValue
     }
 }

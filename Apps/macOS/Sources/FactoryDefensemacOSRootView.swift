@@ -83,6 +83,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                     world: runtime.world,
                     cameraState: cameraState,
                     highlightedCell: runtime.highlightedCell,
+                    highlightedStructure: runtime.highlightedCell == nil ? nil : selectedStructure,
                     placementResult: runtime.placementResult,
                     onTap: { location, viewport in
                         handleTap(at: location, viewport: viewport)
@@ -249,6 +250,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
     var world: WorldState
     var cameraState: WhiteboxCameraState
     var highlightedCell: GridPosition?
+    var highlightedStructure: StructureType?
     var placementResult: PlacementResult
     var onTap: (CGPoint, CGSize) -> Void
     var onScrollZoom: (CGFloat) -> Void
@@ -271,7 +273,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
         }
         renderer.worldState = world
         renderer.cameraState = cameraState
-        renderer.setPlacementHighlight(cell: highlightedCell, result: placementResult)
+        renderer.setPlacementHighlight(cell: highlightedCell, structure: highlightedStructure, result: placementResult)
     }
 
     func makeCoordinator() -> Coordinator {

@@ -30,6 +30,7 @@ public struct RenderContext {
     public var debugMode: DebugVisualizationMode
     public var cameraState: WhiteboxCameraState
     public var highlightedCell: GridPosition?
+    public var highlightedStructure: StructureType?
     public var placementResult: PlacementResult
 
     public var currentDrawable: CAMetalDrawable?
@@ -49,6 +50,7 @@ public struct RenderContext {
         debugMode: DebugVisualizationMode,
         cameraState: WhiteboxCameraState = WhiteboxCameraState(),
         highlightedCell: GridPosition? = nil,
+        highlightedStructure: StructureType? = nil,
         placementResult: PlacementResult = .ok,
         currentDrawable: CAMetalDrawable?,
         renderResources: RenderResources,
@@ -66,6 +68,7 @@ public struct RenderContext {
         self.debugMode = debugMode
         self.cameraState = cameraState
         self.highlightedCell = highlightedCell
+        self.highlightedStructure = highlightedStructure
         self.placementResult = placementResult
         self.currentDrawable = currentDrawable
         self.renderResources = renderResources

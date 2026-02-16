@@ -12,10 +12,11 @@ public struct PlacementValidator {
     public init() {}
 
     public func canPlace(_ structure: StructureType, at position: GridPosition, in world: WorldState) -> PlacementResult {
-        guard world.board.contains(position) else { return .outOfBounds }
-        guard !world.board.isRestricted(position) else { return .restrictedZone }
+        let coveredCells = structure.coveredCells(anchor: position)
+        guard coveredCells.allSatisfy(world.board.contains(_:)) else { return .outOfBounds }
+        guard !coveredCells.contains(where: world.board.isRestricted(_:)) else { return .restrictedZone }
 
-        if isOccupied(position, entities: world.entities) {
+        if hasOccupiedCell(in: coveredCells, entities: world.entities) {
             return .occupied
         }
 
@@ -23,17 +24,28 @@ public struct PlacementValidator {
             return .ok
         }
 
-        return blocksPath(position: position, in: world) ? .blocksCriticalPath : .ok
+        return blocksPath(coveredCells: coveredCells, atElevation: position.z, in: world) ? .blocksCriticalPath : .ok
     }
 
-    private func isOccupied(_ position: GridPosition, entities: EntityStore) -> Bool {
-        entities.all.contains(where: { entity in
-            entity.position.x == position.x && entity.position.y == position.y && entity.category != .projectile
+    private func hasOccupiedCell(in coveredCells: [GridPosition], entities: EntityStore) -> Bool {
+        guard !coveredCells.isEmpty else { return false }
+        let covered = Set(coveredCells.map { GridPosition(x: $0.x, y: $0.y, z: 0) })
+        return entities.all.contains(where: { entity in
+            guard entity.category != .projectile else { return false }
+            if entity.category == .structure, let structureType = entity.structureType {
+                return structureType.coveredCells(anchor: entity.position).contains(where: { occupiedCell in
+                    covered.contains(GridPosition(x: occupiedCell.x, y: occupiedCell.y, z: 0))
+                })
+            }
+            let position = GridPosition(x: entity.position.x, y: entity.position.y, z: 0)
+            guard covered.contains(position) else { return false }
+            return true
         })
     }
 
-    private func blocksPath(position: GridPosition, in world: WorldState) -> Bool {
-        let map = navigationMap(for: world, pendingBlockingPosition: position)
+    private func blocksPath(coveredCells: [GridPosition], atElevation elevation: Int, in world: WorldState) -> Bool {
+        let pendingBlockingCells = coveredCells.map { GridPosition(x: $0.x, y: $0.y, z: elevation) }
+        let map = navigationMap(for: world, pendingBlockingCells: pendingBlockingCells)
         let pathfinder = Pathfinder()
 
         let base = GridPosition(x: world.board.basePosition.x, y: world.board.basePosition.y)
@@ -56,7 +68,7 @@ public struct PlacementValidator {
         return true
     }
 
-    func navigationMap(for world: WorldState, pendingBlockingPosition: GridPosition? = nil) -> GridMap {
+    func navigationMap(for world: WorldState, pendingBlockingCells: [GridPosition] = []) -> GridMap {
         var map = GridMap(width: world.board.width, height: world.board.height)
 
         for y in 0..<world.board.height {
@@ -71,12 +83,14 @@ public struct PlacementValidator {
         }
 
         for entity in world.entities.all where entity.category == .structure {
-            guard entity.structureType?.blocksMovement == true else { continue }
-            map.setTile(GridTile(walkable: false, elevation: entity.position.z), at: entity.position)
+            guard let structureType = entity.structureType, structureType.blocksMovement else { continue }
+            for blockedCell in structureType.coveredCells(anchor: entity.position) {
+                map.setTile(GridTile(walkable: false, elevation: entity.position.z), at: blockedCell)
+            }
         }
 
-        if let pendingBlockingPosition {
-            map.setTile(GridTile(walkable: false, elevation: pendingBlockingPosition.z), at: pendingBlockingPosition)
+        for pendingBlockingCell in pendingBlockingCells {
+            map.setTile(GridTile(walkable: false, elevation: pendingBlockingCell.z), at: pendingBlockingCell)
         }
 
         let base = world.board.basePosition
