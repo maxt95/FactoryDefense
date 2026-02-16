@@ -2,6 +2,10 @@
 
 Native Apple game scaffold for a factory + tower defense hybrid.
 
+## Product Docs
+- Living PRD: `/Users/maxconrad/Workspace/factory-defense/docs/GAME_PRD_LIVING.md`
+- Systems Build Plan: `/Users/maxconrad/Workspace/factory-defense/docs/GAME_SYSTEMS_PLAN.md`
+
 ## Tech
 - Swift 6.2
 - Metal / MetalKit renderer scaffolding
