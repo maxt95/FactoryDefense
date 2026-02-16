@@ -450,9 +450,6 @@ private struct FactoryDefenseGameplayView: View {
                 .frame(maxWidth: 210)
 
                 Spacer(minLength: 8)
-
-                Button("Wave") { runtime.triggerWave() }
-                    .buttonStyle(.borderedProminent)
             }
             .padding(10)
             .background(.ultraThinMaterial)

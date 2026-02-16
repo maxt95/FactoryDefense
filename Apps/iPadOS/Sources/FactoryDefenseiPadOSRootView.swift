@@ -285,9 +285,6 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                 .disabled(selectedDemolishableEntityID == nil)
 
                 Spacer(minLength: 8)
-
-                Button("Wave") { runtime.triggerWave() }
-                    .buttonStyle(.borderedProminent)
             }
             .padding(10)
             .background(.regularMaterial)
