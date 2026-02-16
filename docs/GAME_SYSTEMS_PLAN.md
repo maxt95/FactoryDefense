@@ -1,83 +1,166 @@
 # Factory Defense - Systems Build Plan
 
+Last updated: 2026-02-16
+Owner: Product + Engineering
+Status: Active execution plan (aligned to living PRD + economy/building PRDs)
+
 ## Summary
-Build a native Apple factory-defense game with:
-- Simulation-first deterministic core
-- Metal-first renderer with scalability + debug tools
-- Shared modules that allow parallel development
-- Single-player shipping scope with co-op-ready boundaries
+This plan tracks implementation status against the canonical v1 product direction:
+- Deterministic simulation-first architecture at 20 Hz.
+- Factory/combat coupling where production truth drives survival.
+- Conveyor-routed logistics with per-building buffers and backpressure.
+- Isometric Apple-native presentation with whitebox-first rendering path.
 
-## Repository Workstreams
+## Status Legend
+- `[x]` complete and aligned with current PRD direction
+- `[~]` partially complete / scaffold exists but not PRD-complete
+- `[ ]` not started or materially incomplete
 
-## Workstream A - Project Foundation
-- [x] Initialize modular Swift package layout (`GameSimulation`, `GameRendering`, `GameContent`, `GameUI`, `GamePlatform`).
-- [x] Add deterministic prototype executable target.
-- [x] Add baseline unit tests and CI-ready command set (`swift test`).
-- [x] Add generated Xcode app targets (`FactoryDefense_iOS`, `FactoryDefense_iPadOS`, `FactoryDefense_macOS`).
+## Current Alignment Snapshot
+### Foundation and architecture
+- `[x]` Modular package layout and app targets exist.
+- `[x]` Deterministic command loop, world state, events, snapshots, and replay scaffolding exist.
+- `[x]` Content JSON schemas and validation pipeline exist for core data packs.
 
-## Workstream B - Simulation Core
-- [x] Define `WorldState`, `PlayerCommand`, `SimEvent`, system protocol, and deterministic command ordering.
-- [x] Implement fixed-step simulation engine (`20 Hz`).
-- [x] Add snapshot/replay serialization shape.
-- [x] Add interpolation bridge for render thread and frame timing capture.
+### Gameplay truth
+- `[~]` Ammo truth exists (`no ammo -> no shot`) but turret type differentiation is incomplete.
+- `[~]` Economy loop exists but remains partly hardcoded and not fully recipe/buffer driven.
+- `[ ]` Build cost enforcement is not fully simulation-authoritative.
+- `[ ]` Ore patch adjacency/depletion, full conveyor buffer model, and structure-targeting threat pressure are not complete.
 
-## Workstream C - Factory Economy
-- [x] Implement starter production loop: miners -> smelters -> ammo modules.
-- [x] Implement power supply/demand efficiency scaling.
-- [x] Couple ammo inventory to combat consumption.
-- [x] Expand recipes, logistics networks, and machine throughput modifiers.
+### Rendering truth
+- `[~]` Render graph scaffolding exists, but whitebox geometry draw path is still incomplete.
 
-## Workstream D - Combat, Waves, AI
-- [x] Implement timed wave cadence and bounded deterministic raid checks.
-- [x] Implement milestone rewards and extraction command flow.
-- [x] Add grid pathfinding scaffold with ramp/elevation support.
-- [x] Add enemy behaviors, target selection layers, and baseline breach pressure tactics.
+## Milestone Plan
+### Milestone 0 - P0 Gameplay Truth (Current Top Priority)
+Goal: make the simulation obey core v1 rules from `docs/GAME_PRD_LIVING.md` and `docs/prd/factory_economy.md`.
 
-## Workstream E - Metal Renderer
-- [x] Define render graph interfaces and pass nodes.
-- [x] Add quality presets and debug visualization modes.
-- [x] Add isometric camera math and renderer delegate shell.
-- [x] Implement full pass execution (depth/shadows/opaque/transparent/post/UI).
-- [x] Integrate GPU profiling checkpoints and runtime shader variants.
+- [ ] Enforce build costs in simulation command handling (not UI-only).
+- [ ] Wire per-turret definitions into combat (`ammo type`, `range`, `fire rate`, `damage`).
+- [ ] Move production execution to recipe-driven behavior from content data.
+- [ ] Implement missing production chains (`gear`, `wall_kit`, `turret_core`, `ammo_plasma`).
+- [ ] Add acceptance tests for cost enforcement + turret ammo truth across turret variants.
 
-## Workstream F - UX and Input
-- [x] Add unified input abstraction with command mapping hooks.
-- [x] Add HUD view model for resources, waves, raids, and milestones.
-- [x] Add responsive layout profile model for aspect/safe-area adaptation.
-- [x] Implement production UI screens for build menu + tech tree interactions.
+Exit criteria:
+- Placing non-bootstrap structures consumes required resources.
+- Distinct turret types consume the correct ammo and respect stat differences.
+- Production output matches recipe expectations (including missing chains now active).
 
-## Workstream G - Content, Balance, Feel
-- [x] Add canonical content type definitions (recipes/turrets/waves/tech nodes/items/enemies).
-- [x] Add validation checks: missing refs, recipe cycles, wave composition, unreachable tech nodes.
-- [x] Author starter data pack and progression curves.
-- [x] Add onboarding guidance and tuning dashboards.
+### Milestone 1 - P1 Factory and Threat Reality
+Goal: complete the first fully legible factory-defense vertical slice.
 
-## Workstream H - Quality and Tooling
-- [x] Add determinism and economy coupling tests.
-- [x] Add snapshot save/load test.
-- [x] Add golden replay regression suite.
-- [x] Add performance test scenes and telemetry pipeline.
+- [ ] Add ore patch/resource node entities and miner adjacency requirements.
+- [ ] Add ore depletion tracking and related simulation events/telemetry.
+- [ ] Implement per-structure recipe timing/progress (remove instant conversions).
+- [ ] Implement wave composition from `waves.json` for authored waves.
+- [ ] Add procedural wave generation policy for post-authored endless waves.
+- [ ] Add enemy structure-targeting behaviors (raider/breacher/artillery priorities).
+- [ ] Add storage capacity limits and output-blocked behavior.
+- [ ] Add remove/refund command flow.
 
-## Dependency Rules
-- Workstream A starts first.
-- Workstream B foundations precede final C and D balancing.
-- Workstream E can proceed in parallel with B after A exists.
-- Workstream F depends on B/D interfaces.
-- Workstream G content authoring starts when B/C/D schemas stabilize.
-- Workstream H runs continuously.
+Exit criteria:
+- Early waves are data-authored and reproducible from content.
+- Factory bottlenecks (ore, timing, storage, power) materially change combat outcomes.
+- Enemies can break production lines, causing recoverable or fatal cascades.
 
-## Acceptance Criteria (Current)
+### Milestone 2 - P1/P2 Logistics Model Completion
+Goal: align runtime logistics with `docs/prd/building_specifications.md`.
+
+- [ ] Add building port definitions and runtime input/output buffers.
+- [ ] Add directed conveyor runtime with progress, transfer, and backpressure.
+- [ ] Add splitter and merger runtime behavior.
+- [ ] Add storage as shared-pool logistics hub with multi-port behavior.
+- [ ] Add recipe pinning and building rotation command support.
+- [ ] Update combat ammo draw order (local turret buffer first, logical pool fallback).
+
+Exit criteria:
+- Item movement is visible and physically constrained by conveyor network design.
+- Backpressure/starvation/output-blocked states are reproducible and surfaced.
+- Turret sustainability can be improved by direct-feed logistics topology.
+
+### Milestone 3 - Whitebox Visual Readability
+Goal: render simulation state clearly in-game before production art.
+
+- [ ] Complete render infrastructure for real draw calls (pipeline state, descriptors, instance buffers).
+- [ ] Implement procedural whitebox mesh primitives and asset catalog.
+- [ ] Add instanced rendering by mesh groups with stable performance characteristics.
+- [ ] Apply color coding for structures/enemies/projectiles and core debug overlays.
+
+Exit criteria:
+- Live simulation entities are visible as color-coded whitebox geometry.
+- Readability supports tuning of factory and combat behavior.
+
+### Milestone 4 - UX, Telemetry, and Balance Closure
+Goal: ship-ready UX and balancing workflow for v1 scope.
+
+- [ ] Surface build/wave mode distinctions and non-occluding critical warnings.
+- [ ] Surface power headroom, inventory pressure, and ammo depletion trends in HUD.
+- [ ] Add bottleneck detection signals (starved/blocked/underpowered/no-ore states).
+- [ ] Add CI checks for `swift test` + unsigned iOS/iPadOS/macOS builds.
+- [ ] Extend tuning dashboards and automated balance telemetry runs.
+
+Exit criteria:
+- UX communicates actionable bottlenecks during pressure windows.
+- Balance iteration is measurable via repeatable telemetry scenarios.
+
+## Workstream View (Updated)
+### Workstream A - Project Foundation
+- [x] Module layout and executable/app target setup.
+- [x] Baseline test harness and local build commands.
+- [~] CI automation for full platform build/test matrix.
+
+### Workstream B - Simulation Core
+- [x] Deterministic tick engine, command ordering, events, snapshots.
+- [~] Snapshot schema extensions required for buffer/conveyor runtime model.
+
+### Workstream C - Factory Economy and Logistics
+- [~] Starter production loop and power scaling exist.
+- [ ] Recipe-timed, per-structure, buffer-based production model.
+- [ ] Conveyor-routed runtime with splitter/merger/storage hub behavior.
+
+### Workstream D - Combat, Waves, AI
+- [~] Base wave cadence exists.
+- [ ] Per-turret stat and ammo differentiation.
+- [ ] Authored-wave consumption from `waves.json` + endless procedural continuation.
+- [ ] Structure-targeting enemy behaviors and cascade pressure.
+
+### Workstream E - Metal Renderer
+- [~] Render graph/debug scaffolding exists.
+- [ ] Whitebox geometry draw path and instanced entity rendering.
+
+### Workstream F - UX and Input
+- [~] Input abstraction and baseline HUD models exist.
+- [ ] Build/remove/rotate/pin interactions fully aligned with simulation rules.
+- [ ] Runtime warning and bottleneck surfaces fully integrated into play view.
+
+### Workstream G - Content, Balance, Feel
+- [x] Core content files and validators exist.
+- [~] Runtime systems need to consume JSON as authoritative behavior source.
+- [ ] Balance automation and ammo headroom analytics.
+
+### Workstream H - Quality and Tooling
+- [x] Determinism/golden replay/perf scaffolding exists.
+- [ ] Add milestone acceptance tests for P0/P1 gameplay-truth criteria.
+
+## Dependency Rules (Current)
+- Milestone 0 must complete before deep balancing claims are considered valid.
+- Milestone 1 depends on Milestone 0 simulation truth.
+- Milestone 2 can run partly in parallel with Milestone 1 but must converge before final tuning.
+- Milestone 3 can progress in parallel once renderer integration interfaces are stable.
+- Milestone 4 runs continuously, but final closure depends on 0-3.
+
+## Acceptance Criteria (Current Plan)
 - `swift test` passes locally.
-- Deterministic command streams produce matching world snapshots.
-- Turret ammo consumption fails correctly when inventory is empty.
-- Wave/raid cadence stays within bounded rules.
-- Content validation catches broken references and graph issues.
+- Deterministic replay remains stable after gameplay-truth refactors.
+- Build costs, ammo truth, and recipe-driven production are simulation-enforced.
+- Author-time data (`recipes.json`, `turrets.json`, `waves.json`) drives runtime behavior for core loops.
+- Whitebox rendering displays active simulation entities and supports tuning readability.
 - App targets compile via `xcodebuild -project FactoryDefense.xcodeproj` for:
-  - `FactoryDefense_macOS` (standard local build)
-  - `FactoryDefense_iOS` (`CODE_SIGNING_ALLOWED=NO` for teamless local/CI build)
-  - `FactoryDefense_iPadOS` (`CODE_SIGNING_ALLOWED=NO` for teamless local/CI build)
+  - `FactoryDefense_macOS`
+  - `FactoryDefense_iOS` (`CODE_SIGNING_ALLOWED=NO`)
+  - `FactoryDefense_iPadOS` (`CODE_SIGNING_ALLOWED=NO`)
 
-## Remaining Optional Follow-Ups
-- [ ] Configure Apple Developer Team signing for iOS/iPadOS local device deployment.
-- [ ] Add CI workflow that runs `swift test` and unsigned iOS/iPadOS + macOS `xcodebuild` checks.
-- [ ] Expand content balancing passes against telemetry outputs from `GamePlatform` performance scenarios.
+## Immediate Next Actions
+- [ ] Break Milestone 0 into file-level implementation tickets in simulation/content/UI modules.
+- [ ] Add automated tests for build-cost deduction and per-turret ammo consumption.
+- [ ] Update this plan at each milestone boundary with measured outcomes.
