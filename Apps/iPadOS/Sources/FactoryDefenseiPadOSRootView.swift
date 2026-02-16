@@ -59,6 +59,11 @@ private struct FactoryDefenseiPadOSGameplayView: View {
         var id: Self { self }
     }
 
+    private enum SelectionTarget: Equatable {
+        case entity(EntityID)
+        case orePatch(Int)
+    }
+
     @StateObject private var runtime = GameRuntimeController()
     @State private var buildMenu = BuildMenuViewModel.productionPreset
     @State private var techTree = TechTreeViewModel.productionPreset
@@ -70,11 +75,12 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     @State private var cameraState = WhiteboxCameraState()
     @State private var dragTranslation: CGSize = .zero
     @State private var zoomGestureScale: CGFloat = 1
-    @State private var selectedEntityID: EntityID?
+    @State private var selectedTarget: SelectionTarget?
 
     private static let keyboardPanStep: Float = 56
     private let picker = WhiteboxPicker()
     private let objectInspectorBuilder = ObjectInspectorBuilder()
+    private let orePatchInspectorBuilder = OrePatchInspectorBuilder()
 
     private var selectedStructure: StructureType {
         buildMenu.selectedEntry()?.structure ?? .wall
@@ -133,13 +139,22 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                         }
                 )
 
-                if interactionMode == .interact, let inspector = selectedInspectorModel() {
-                    ObjectInspectorPopup(
-                        model: inspector,
-                        onClose: { selectedEntityID = nil }
-                    )
-                    .frame(width: 320)
-                    .position(inspectorPosition(for: inspector, viewport: proxy.size))
+                if interactionMode == .interact {
+                    if let inspector = selectedEntityInspectorModel() {
+                        ObjectInspectorPopup(
+                            model: inspector,
+                            onClose: { selectedTarget = nil }
+                        )
+                        .frame(width: 320)
+                        .position(inspectorPosition(for: inspector, viewport: proxy.size))
+                    } else if let inspector = selectedOrePatchInspectorModel() {
+                        OrePatchInspectorPopup(
+                            model: inspector,
+                            onClose: { selectedTarget = nil }
+                        )
+                        .frame(width: 320)
+                        .position(inspectorPosition(for: inspector, viewport: proxy.size))
+                    }
                 }
 
                 GameplayOverlayHost(
@@ -165,9 +180,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
             }
             .onChange(of: runtime.world.tick) { _, _ in
                 onboarding.update(from: runtime.world)
-                if let selectedEntityID, runtime.world.entities.entity(id: selectedEntityID) == nil {
-                    self.selectedEntityID = nil
-                }
+                validateSelection()
             }
             .onChange(of: runtime.world.board) { oldBoard, newBoard in
                 reconcileCameraForBoardChange(from: oldBoard, to: newBoard, viewport: proxy.size)
@@ -182,7 +195,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
             .onChange(of: interactionMode) { _, mode in
                 switch mode {
                 case .build:
-                    selectedEntityID = nil
+                    selectedTarget = nil
                     if let highlighted = runtime.highlightedCell {
                         runtime.previewPlacement(structure: selectedStructure, at: highlighted)
                     }
@@ -337,7 +350,7 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     private func handleTap(at location: CGPoint, viewport: CGSize) {
         guard let position = pickGrid(at: location, viewport: viewport) else {
             runtime.clearPlacementPreview()
-            selectedEntityID = nil
+            selectedTarget = nil
             return
         }
 
@@ -345,12 +358,22 @@ private struct FactoryDefenseiPadOSGameplayView: View {
         case .interact:
             runtime.clearPlacementPreview()
             if let tappedEntity = runtime.world.entities.selectableEntity(at: position) {
-                selectedEntityID = selectedEntityID == tappedEntity.id ? nil : tappedEntity.id
+                if selectedTarget == .entity(tappedEntity.id) {
+                    selectedTarget = nil
+                } else {
+                    selectedTarget = .entity(tappedEntity.id)
+                }
+            } else if let patch = orePatch(at: position) {
+                if selectedTarget == .orePatch(patch.id) {
+                    selectedTarget = nil
+                } else {
+                    selectedTarget = .orePatch(patch.id)
+                }
             } else {
-                selectedEntityID = nil
+                selectedTarget = nil
             }
         case .build:
-            selectedEntityID = nil
+            selectedTarget = nil
             runtime.placeStructure(selectedStructure, at: position)
             if runtime.placementResult == .ok {
                 interactionMode = .interact
@@ -415,12 +438,51 @@ private struct FactoryDefenseiPadOSGameplayView: View {
         )
     }
 
-    private func selectedInspectorModel() -> ObjectInspectorViewModel? {
-        guard let selectedEntityID else { return nil }
+    private func selectedEntityInspectorModel() -> ObjectInspectorViewModel? {
+        guard case .entity(let selectedEntityID)? = selectedTarget else { return nil }
         return objectInspectorBuilder.build(entityID: selectedEntityID, in: runtime.world)
     }
 
+    private func selectedOrePatchInspectorModel() -> OrePatchInspectorViewModel? {
+        guard case .orePatch(let patchID)? = selectedTarget else { return nil }
+        return orePatchInspectorBuilder.build(patchID: patchID, in: runtime.world)
+    }
+
+    private func orePatch(at position: GridPosition) -> OrePatch? {
+        runtime.world.orePatches.first(where: { $0.position.x == position.x && $0.position.y == position.y })
+    }
+
+    private func validateSelection() {
+        guard let selectedTarget else { return }
+        switch selectedTarget {
+        case .entity(let entityID):
+            if runtime.world.entities.entity(id: entityID) == nil {
+                self.selectedTarget = nil
+            }
+        case .orePatch(let patchID):
+            if !runtime.world.orePatches.contains(where: { $0.id == patchID }) {
+                self.selectedTarget = nil
+            }
+        }
+    }
+
     private func inspectorPosition(for model: ObjectInspectorViewModel, viewport: CGSize) -> CGPoint {
+        let anchor = picker.screenPosition(
+            for: model.anchorPosition,
+            viewport: viewport,
+            camera: cameraState,
+            board: runtime.world.board
+        )
+        let tileHeight = CGFloat(max(0.001, cameraState.zoom)) * 22
+        let lift = tileHeight * (CGFloat(model.anchorHeightTiles) + 1.4)
+        let halfWidth: CGFloat = 160
+        let xPadding: CGFloat = 12
+        let x = min(max(halfWidth + xPadding, anchor.x), viewport.width - (halfWidth + xPadding))
+        let y = max(72, anchor.y - lift)
+        return CGPoint(x: x, y: y)
+    }
+
+    private func inspectorPosition(for model: OrePatchInspectorViewModel, viewport: CGSize) -> CGPoint {
         let anchor = picker.screenPosition(
             for: model.anchorPosition,
             viewport: viewport,

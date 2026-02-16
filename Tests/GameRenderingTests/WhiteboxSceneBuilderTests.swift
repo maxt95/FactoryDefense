@@ -15,7 +15,7 @@ final class WhiteboxSceneBuilderTests: XCTestCase {
         XCTAssertEqual(scene.summary.enemyCount, 0)
         XCTAssertEqual(scene.summary.projectileCount, 0)
         XCTAssertEqual(scene.structures.count, 1)
-        XCTAssertEqual(scene.entities.count, 0)
+        XCTAssertEqual(scene.entities.count, world.orePatches.count)
     }
 
     func testStructureMarkersIncludeTypeAndFootprint() {
@@ -101,5 +101,31 @@ final class WhiteboxSceneBuilderTests: XCTestCase {
         let plasmaProjectileMarker = scene.entities.first { $0.id == Int64(plasmaProjectileID) }
         XCTAssertEqual(plasmaProjectileMarker?.category, WhiteboxEntityCategory.projectile.rawValue)
         XCTAssertEqual(plasmaProjectileMarker?.subtypeRaw, WhiteboxProjectileTypeID.plasma.rawValue)
+    }
+
+    func testOrePatchesBecomeDeterministicResourceMarkers() {
+        let world = WorldState.bootstrap(seed: 42)
+        let scene = WhiteboxSceneBuilder().build(from: world)
+
+        let resourceMarkers = scene.entities.filter {
+            $0.category == WhiteboxEntityCategory.resourceNode.rawValue
+        }
+        XCTAssertEqual(resourceMarkers.count, world.orePatches.count)
+
+        let expectedPatches = world.orePatches.sorted { lhs, rhs in
+            if lhs.position.x != rhs.position.x {
+                return lhs.position.x < rhs.position.x
+            }
+            if lhs.position.y != rhs.position.y {
+                return lhs.position.y < rhs.position.y
+            }
+            return lhs.id < rhs.id
+        }
+
+        for (marker, patch) in zip(resourceMarkers, expectedPatches) {
+            XCTAssertEqual(marker.x, Int32(patch.position.x))
+            XCTAssertEqual(marker.y, Int32(patch.position.y))
+            XCTAssertEqual(marker.subtypeRaw, WhiteboxResourceTypeID(oreType: patch.oreType).rawValue)
+        }
     }
 }
