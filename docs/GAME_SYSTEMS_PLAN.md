@@ -2,7 +2,7 @@
 
 Last updated: 2026-02-16
 Owner: Product + Engineering
-Status: Active execution plan (wave/threat v1 landed; logistics/rendering closure in progress)
+Status: Active execution plan (wave/threat + logistics + interaction parity landed; rendering/ux telemetry closure in progress)
 
 ## Summary
 This plan tracks implementation status against the canonical v1 product direction:
@@ -24,7 +24,7 @@ This plan tracks implementation status against the canonical v1 product directio
 
 ### Gameplay truth
 - `[x]` Ammo truth exists (`no ammo -> no shot`) with per-turret ammo/range/fire-rate/damage differentiation.
-- `[~]` Economy loop is recipe-driven with per-structure timing/progress for smelter/assembler/ammo-module/miner, plus first-pass structure buffers/conveyor backpressure and miner->ore-patch extraction/depletion; full ore lifecycle (reveal/renewal) and full port/filter model remain follow-up.
+- `[~]` Economy loop is recipe-driven with per-structure timing/progress for smelter/assembler/ammo-module/miner, plus full port/filter-aware directional logistics runtime and miner->ore-patch extraction/depletion; ore reveal/renewal lifecycle remains follow-up.
 - `[x]` Build cost enforcement is simulation-authoritative.
 - `[~]` Run bootstrap/session init is partially aligned: HQ-only bootstrap, difficulty+seed params, phase lifecycle events, extraction UI removal, deterministic Ring 0 patch generation, miner adjacency/binding + patch depletion events, and end-of-run summary flow are in; reveal/renewal rings remain follow-up.
 - `[x]` Wave/threat runtime is now PRD-aligned for v1-first scope: authored 1–8 + procedural 9+, deterministic full-perimeter clustered spawns, structure-targeting enemy modifiers, wall-network ammo pools, and host-wall turret mounts.
@@ -59,7 +59,7 @@ Goal: complete the first fully legible factory-defense vertical slice.
 - [x] Implement full-perimeter spawn clusters with deterministic separation/stagger and outside-border entry marching.
 - [x] Implement wall-network shared ammo pools + split/rebuild handling and host-wall turret mounting constraints.
 - [~] Add storage capacity limits and output-blocked behavior.
-- [ ] Add remove/refund command flow.
+- [x] Add remove/refund command flow.
 
 Exit criteria:
 - Early waves are data-authored and reproducible from content.
@@ -69,12 +69,12 @@ Exit criteria:
 ### Milestone 2 - P1/P2 Logistics Model Completion
 Goal: align runtime logistics with `docs/prd/building_specifications.md`.
 
-- [~] Add building port definitions and runtime input/output buffers.
-- [~] Add directed conveyor runtime with progress, transfer, and backpressure.
-- [~] Add splitter and merger runtime behavior.
-- [~] Add storage as shared-pool logistics hub with multi-port behavior.
-- [~] Add recipe pinning and building rotation command support.
-- [~] Update combat ammo draw order (local turret buffer first, logical pool fallback).
+- [x] Add building port definitions and runtime input/output buffers.
+- [x] Add directed conveyor runtime with progress, transfer, and backpressure.
+- [x] Add splitter and merger runtime behavior.
+- [x] Add storage as shared-pool logistics hub with multi-port behavior.
+- [x] Add recipe pinning and building rotation command support.
+- [x] Update combat ammo draw order (local turret buffer first, logical pool fallback).
 
 Exit criteria:
 - Item movement is visible and physically constrained by conveyor network design.
@@ -119,7 +119,7 @@ Exit criteria:
 ### Workstream C - Factory Economy and Logistics
 - [~] Starter production loop and power scaling exist.
 - [~] Recipe-timed, per-structure production model exists; output buffering/local-input consumption are wired, and miner extraction now binds to adjacent ore patches with finite depletion.
-- [~] Conveyor-routed runtime exists for directed transfer + backpressure on standard conveyors; splitter/merger/storage hub behavior remains.
+- [x] Conveyor-routed runtime is PRD-aligned for directed transfer, backpressure, splitter/merger behavior, storage shared pools, and port/filter validation.
 
 ### Workstream D - Combat, Waves, AI
 - [x] Grace period + trickle + compressed wave cadence with deterministic queue draining and wave lifecycle events.
@@ -133,7 +133,7 @@ Exit criteria:
 
 ### Workstream F - UX and Input
 - [~] Input abstraction and baseline HUD models exist.
-- [ ] Build/remove/rotate/pin interactions fully aligned with simulation rules.
+- [x] Build/remove/rotate/pin interactions are aligned with shared cross-platform interaction rules.
 - [ ] Runtime warning and bottleneck surfaces fully integrated into play view.
 
 ### Workstream G - Content, Balance, Feel
@@ -164,8 +164,6 @@ Exit criteria:
   - `FactoryDefense_iPadOS` (`CODE_SIGNING_ALLOWED=NO`)
 
 ## Immediate Next Actions
-- [ ] Expand logistics from first-pass eastward lanes to full port model (filters, orientation/rotation, storage hub semantics).
-- [ ] Finish logistics runtime gaps: splitter/merger behaviors and shared-pool storage hub semantics.
 - [ ] Add UI/HUD surfacing for threat telemetry (`spawnedEnemiesByWave`, queued backlog, structure damage count, dry-fire rate).
 - [ ] Implement ore reveal/renewal lifecycle (geology survey unlocks, ring reveal state, renewal spawn policy) on top of current Ring 0 depletion runtime.
-- [ ] Finish shared gameplay interaction module wiring for rotate/pin/remove across macOS/iOS/iPadOS/CLI.
+- [ ] Add build-preview affordance telemetry (ghost validity reason + drag affordability overflow stats) for UX tuning.

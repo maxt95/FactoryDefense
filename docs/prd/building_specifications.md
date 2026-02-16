@@ -2,8 +2,8 @@
 
 **Version:** 1.0-draft
 **Parent:** `docs/prd/factory_economy.md`
-**Status:** Forward-looking v1 design
-**Last updated:** 2026-02-15
+**Status:** Implemented in v1 runtime
+**Last updated:** 2026-02-16
 
 > **Design model:** Conveyor-routed connections with per-building buffers. Items physically move between buildings via directed conveyor tiles. Each building has local input/output buffers with limited capacity. Backpressure propagates naturally through the system.
 
@@ -881,3 +881,4 @@ The key change: items no longer live in a global `EconomyState.inventories` dict
 
 - 2026-02-15: Initial draft — conveyor-routed connection model with per-building buffers.
 - 2026-02-16: Cross-PRD alignment: Rewrote Turret Mount section (§4.11) from standalone building with ammo input port to wall-mounted model with wall network shared ammo pools per wave_threat_system.md and living PRD. Updated terminology, quick reference table, ammo pool references in Ammo Module and Storage sections, and worked example §6.3.
+- 2026-02-16: Implementation status updated to reflect shipped v1 runtime parity for directional conveyors, splitter/merger behavior, storage shared pools, rotation-aware ports, and recipe pinning integration.

@@ -28,7 +28,19 @@
   - Added runtime path-placement batching (`placeStructurePath`) with deterministic per-cell command enqueue, invalid-cell skip behavior, and chain stop on resource exhaustion.
   - Golden replay fingerprint regeneration and new command/snapshot/removal tests.
 - Still in progress / remaining for parity:
-  - None in the shared interaction follow-through slice.
+  - None. All planned phases are complete for this scope.
+
+## Phase 7 Closeout (2026-02-16)
+### Validation Gates
+- `swift test` -> passed (`Executed 105 tests, with 0 failures`).
+- `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_macOS -configuration Debug -sdk macosx build` -> passed.
+- `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_iOS -configuration Debug -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build` -> passed.
+- `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_iPadOS -configuration Debug -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build` -> passed.
+
+### Final PRD Parity Checklist
+- `docs/prd/build_interaction_flow.md`: complete for v1 scope (inspect/build mode transitions, placement semantics, rotate flow, confirmation-based demolish, drag-draw parity, shared cross-platform interaction state).
+- `docs/prd/building_specifications.md`: complete for v1 scope (rotation-aware ports, directional conveyors, splitter/merger semantics, storage shared pools, pin recipe command/runtime flow, no global-inventory transport fallback).
+- Deferred items in this slice: none.
 
 ## Locked Decisions
 1. Scope: full PRD parity for both target PRDs.

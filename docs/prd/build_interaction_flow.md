@@ -2,7 +2,7 @@
 
 Version: 1.0-draft
 Date: 2026-02-16
-Status: Draft
+Status: Implemented in v1 runtime
 Depends on: `building_specifications.md`, `run_bootstrap_session_init.md`, `factory_economy.md`
 
 ## Purpose
@@ -385,3 +385,4 @@ enum Rotation: Int, Codable {
 - 2026-02-16: Initial draft. Defines interaction modes, rotation, demolish, conveyor drag-draw, and command flow.
 - 2026-02-16: Resolved all open questions. Conveyor free-removal is intentional. Rotation resets on mode exit. Drag-draw extended to walls. Touch disambiguation rules canonicalized.
 - 2026-02-16: Cross-PRD alignment: Fixed Ammo Module port count from 1 input to 2 inputs (per building_specifications.md).
+- 2026-02-16: Implementation status updated to reflect shipped v1 runtime parity across macOS, iOS, iPadOS, and CLI gameplay root.
