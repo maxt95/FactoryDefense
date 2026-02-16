@@ -306,13 +306,14 @@ private struct FactoryDefenseiPadOSGameplayView: View {
             selectedEntityID = nil
             return
         }
+        runtime.previewPlacement(structure: selectedStructure, at: position)
         if let tappedEntity = runtime.world.entities.selectableEntity(at: position) {
             runtime.clearPlacementPreview()
             selectedEntityID = selectedEntityID == tappedEntity.id ? nil : tappedEntity.id
             return
         }
         selectedEntityID = nil
-        runtime.placeStructure(selectedStructure, at: position)
+        runtime.placePreviewedStructure(selectedStructure)
     }
 
     private func previewPlacement(at location: CGPoint, viewport: CGSize) {

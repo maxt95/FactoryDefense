@@ -308,7 +308,8 @@ private struct FactoryDefenseGameplayView: View {
             runtime.clearPlacementPreview()
             return
         }
-        runtime.placeStructure(selectedStructure, at: position)
+        runtime.previewPlacement(structure: selectedStructure, at: position)
+        runtime.placePreviewedStructure(selectedStructure)
     }
 
     private func previewPlacement(at location: CGPoint, viewport: CGSize) {

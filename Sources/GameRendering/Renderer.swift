@@ -28,6 +28,7 @@ public final class FactoryRenderer: NSObject {
     public let timingCapture: FrameTimingCapture
     public let shaderVariants: ShaderVariantLibrary
     public let whiteboxRenderer: WhiteboxRenderer
+    public let whiteboxMeshRenderer: WhiteboxMeshRenderer
     private let picker: WhiteboxPicker
     private var hasLoggedCommandBufferError = false
 
@@ -56,6 +57,7 @@ public final class FactoryRenderer: NSObject {
         self.timingCapture = FrameTimingCapture()
         self.shaderVariants = ShaderVariantLibrary()
         self.whiteboxRenderer = WhiteboxRenderer()
+        self.whiteboxMeshRenderer = WhiteboxMeshRenderer()
         self.picker = WhiteboxPicker()
 
         super.init()
@@ -160,7 +162,8 @@ extension FactoryRenderer: MTKViewDelegate {
             renderResources: renderResources,
             timingCapture: timingCapture,
             shaderVariants: shaderVariants,
-            whiteboxRenderer: whiteboxRenderer
+            whiteboxRenderer: whiteboxRenderer,
+            whiteboxMeshRenderer: whiteboxMeshRenderer
         )
 
         renderGraph.execute(context: context, commandBuffer: commandBuffer)

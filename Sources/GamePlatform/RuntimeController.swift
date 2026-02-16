@@ -72,8 +72,9 @@ public final class GameRuntimeController: ObservableObject {
     }
 
     public func previewPlacement(structure: StructureType, at position: GridPosition) {
-        highlightedCell = position
-        let coveredCells = structure.coveredCells(anchor: position)
+        let anchorPosition = placementAnchor(for: structure, requestedPosition: position)
+        highlightedCell = anchorPosition
+        let coveredCells = structure.coveredCells(anchor: anchorPosition)
         guard let expansionInsets = world.board.plannedExpansion(for: coveredCells) else {
             placementResult = .outOfBounds
             return
@@ -81,7 +82,7 @@ public final class GameRuntimeController: ObservableObject {
 
         var previewWorld = world
         previewWorld.applyBoardExpansion(expansionInsets)
-        let adjustedPosition = position.translated(byX: expansionInsets.left, byY: expansionInsets.top)
+        let adjustedPosition = anchorPosition.translated(byX: expansionInsets.left, byY: expansionInsets.top)
         let result = placementValidator.canPlace(structure, at: adjustedPosition, in: previewWorld)
         guard result == .ok else {
             placementResult = result
@@ -97,6 +98,7 @@ public final class GameRuntimeController: ObservableObject {
     }
 
     public func placeStructure(_ structure: StructureType, at position: GridPosition) {
+        let anchorPosition = placementAnchor(for: structure, requestedPosition: position)
         previewPlacement(structure: structure, at: position)
         guard placementResult == .ok else { return }
 
@@ -104,7 +106,19 @@ public final class GameRuntimeController: ObservableObject {
             payload: .placeStructure(
                 BuildRequest(
                     structure: structure,
-                    position: position
+                    position: anchorPosition
+                )
+            )
+        )
+    }
+
+    public func placePreviewedStructure(_ structure: StructureType) {
+        guard placementResult == .ok, let anchorPosition = highlightedCell else { return }
+        enqueue(
+            payload: .placeStructure(
+                BuildRequest(
+                    structure: structure,
+                    position: anchorPosition
                 )
             )
         )
@@ -131,6 +145,14 @@ public final class GameRuntimeController: ObservableObject {
             return
         }
         engine.enqueue(command)
+    }
+
+    private func placementAnchor(for structure: StructureType, requestedPosition: GridPosition) -> GridPosition {
+        let footprint = structure.footprint
+        return requestedPosition.translated(
+            byX: footprint.width - 1,
+            byY: footprint.height - 1
+        )
     }
 
     public func snapshot() -> WorldSnapshot {

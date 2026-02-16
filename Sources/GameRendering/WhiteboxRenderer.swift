@@ -94,8 +94,8 @@ public final class WhiteboxRenderer {
             blockedCount: UInt32(scene.blockedCells.count),
             restrictedCount: UInt32(scene.restrictedCells.count),
             rampCount: UInt32(scene.ramps.count),
-            structureCount: UInt32(scene.structures.count),
-            entityCount: UInt32(scene.entities.count),
+            structureCount: 0,
+            entityCount: 0,
             highlightedX: Int32(context.highlightedCell?.x ?? -1),
             highlightedY: Int32(context.highlightedCell?.y ?? -1),
             highlightedStructureTypeRaw: highlightedStructureTypeRaw(context.highlightedStructure),
@@ -109,8 +109,8 @@ public final class WhiteboxRenderer {
         let blockedBuffer = makePointBuffer(context.device, points: scene.blockedCells)
         let restrictedBuffer = makePointBuffer(context.device, points: scene.restrictedCells)
         let rampBuffer = makeRampBuffer(context.device, ramps: scene.ramps)
-        let structureBuffer = makeStructureBuffer(context.device, structures: scene.structures)
-        let entityBuffer = makeEntityBuffer(context.device, entities: scene.entities)
+        let structureBuffer: MTLBuffer? = nil
+        let entityBuffer: MTLBuffer? = nil
 
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
         encoder.label = "WhiteboxBoardCompute"

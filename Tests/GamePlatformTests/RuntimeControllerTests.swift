@@ -64,4 +64,19 @@ final class RuntimeControllerTests: XCTestCase {
         XCTAssertEqual(request.structure, .wall)
         XCTAssertEqual(request.position, GridPosition(x: 5, y: 5))
     }
+
+    func testTwoByTwoPlacementStoresBottomRightAnchorForTopLeftRequest() {
+        let controller = GameRuntimeController(initialWorld: .bootstrap())
+        let requestedTopLeft = GridPosition(x: 20, y: 20)
+
+        controller.previewPlacement(structure: .powerPlant, at: requestedTopLeft)
+        let previewAnchor = controller.highlightedCell
+        controller.placeStructure(.powerPlant, at: requestedTopLeft)
+        _ = controller.advanceTick()
+
+        let plants = controller.world.entities.structures(of: .powerPlant)
+        XCTAssertEqual(plants.count, 1)
+        XCTAssertEqual(plants.first?.position, previewAnchor)
+        XCTAssertEqual(plants.first?.position, GridPosition(x: 21, y: 21, z: 0))
+    }
 }

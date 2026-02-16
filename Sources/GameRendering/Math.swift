@@ -49,6 +49,24 @@ public struct IsometricCamera: Sendable {
 }
 
 public extension simd_float4x4 {
+    static func translation(_ translation: SIMD3<Float>) -> simd_float4x4 {
+        simd_float4x4(columns: (
+            SIMD4<Float>(1, 0, 0, 0),
+            SIMD4<Float>(0, 1, 0, 0),
+            SIMD4<Float>(0, 0, 1, 0),
+            SIMD4<Float>(translation.x, translation.y, translation.z, 1)
+        ))
+    }
+
+    static func scale(_ scale: SIMD3<Float>) -> simd_float4x4 {
+        simd_float4x4(columns: (
+            SIMD4<Float>(scale.x, 0, 0, 0),
+            SIMD4<Float>(0, scale.y, 0, 0),
+            SIMD4<Float>(0, 0, scale.z, 0),
+            SIMD4<Float>(0, 0, 0, 1)
+        ))
+    }
+
     static func perspective(fovY: Float, aspect: Float, near: Float, far: Float) -> simd_float4x4 {
         let yScale = 1.0 / tan(fovY * 0.5)
         let xScale = yScale / aspect

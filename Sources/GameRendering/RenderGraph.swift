@@ -26,11 +26,11 @@ public final class RenderGraph {
         RenderGraph(nodes: [
             DepthPrepassNode(),
             ShadowCascadeNode(),
+            WhiteboxBoardNode(),
             OpaquePBRNode(),
             TransparentVFXNode(),
             VolumetricFogNode(),
             PostProcessingNode(),
-            WhiteboxBoardNode(),
             UICompositeNode()
         ])
     }

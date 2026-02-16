@@ -38,6 +38,7 @@ public struct RenderContext {
     public var timingCapture: FrameTimingCapture
     public var shaderVariants: ShaderVariantLibrary
     public var whiteboxRenderer: WhiteboxRenderer
+    public var whiteboxMeshRenderer: WhiteboxMeshRenderer
 
     public init(
         device: MTLDevice,
@@ -56,7 +57,8 @@ public struct RenderContext {
         renderResources: RenderResources,
         timingCapture: FrameTimingCapture,
         shaderVariants: ShaderVariantLibrary,
-        whiteboxRenderer: WhiteboxRenderer
+        whiteboxRenderer: WhiteboxRenderer,
+        whiteboxMeshRenderer: WhiteboxMeshRenderer
     ) {
         self.device = device
         self.drawableSize = drawableSize
@@ -75,6 +77,7 @@ public struct RenderContext {
         self.timingCapture = timingCapture
         self.shaderVariants = shaderVariants
         self.whiteboxRenderer = whiteboxRenderer
+        self.whiteboxMeshRenderer = whiteboxMeshRenderer
     }
 }
 
@@ -138,9 +141,12 @@ public struct OpaquePBRNode: RenderPassNode {
 
         let encoder = beginRenderPass(
             commandBuffer: commandBuffer,
-            descriptor: context.renderResources.opaquePassDescriptor(),
+            descriptor: context.renderResources.drawableOpaqueDescriptor(drawableTexture: context.currentDrawable?.texture),
             label: "OpaquePBR(normal:\(variant.enableNormalMap), emission:\(variant.enableEmission), fog:\(variant.enableFog))"
         )
+        if let encoder {
+            context.whiteboxMeshRenderer.encode(context: context, encoder: encoder)
+        }
         encoder?.endEncoding()
         commandBuffer.popDebugGroup()
     }

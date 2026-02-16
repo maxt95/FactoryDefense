@@ -18,7 +18,12 @@ final class RenderResourcesTests: XCTestCase {
         )
 
         XCTAssertNotNil(resources.depthTexture)
+        XCTAssertNotNil(resources.drawableDepthTexture)
         XCTAssertNotNil(resources.opaqueTexture)
         XCTAssertNotNil(resources.postTexture)
+        XCTAssertEqual(resources.drawableDepthTexture?.width, 1024)
+        XCTAssertEqual(resources.drawableDepthTexture?.height, 768)
+        XCTAssertEqual(resources.drawablePixelSize.width, 1024)
+        XCTAssertEqual(resources.drawablePixelSize.height, 768)
     }
 }
