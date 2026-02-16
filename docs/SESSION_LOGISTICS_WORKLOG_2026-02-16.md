@@ -67,6 +67,21 @@ File: `Sources/GameSimulation/Systems.swift` (`EconomySystem`)
 Files: `Apps/macOS/Sources/FactoryDefensemacOSRootView.swift`, `Apps/iOS/Sources/FactoryDefenseiOSRootView.swift`, `Apps/iPadOS/Sources/FactoryDefenseiPadOSRootView.swift`, `Sources/FactoryDefense/main.swift`
 - Added placement-label handling for `.invalidMinerPlacement` across app targets to keep `switch` statements exhaustive and surface clear player feedback.
 
+### 8) Directional belt-node semantics + storage shared-pool runtime
+Files: `Sources/GameSimulation/SimulationTypes.swift`, `Sources/GameSimulation/Systems.swift`
+- Extended `EconomyState` with:
+  - `storageSharedPoolByEntity`
+  - splitter/merger alternation maps (`splitterOutputToggleByEntity`, `mergerInputToggleByEntity`) with runtime cleanup/pruning.
+- Updated transfer runtime to pass source positions through enqueue paths and enforce side-aware consumer acceptance:
+  - `smelter`: west input only
+  - `assembler` / `ammoModule`: west or north input
+  - `turretMount`: rejects direct structure input.
+- Added storage shared-pool transport behavior:
+  - west/north ingress into a common internal pool
+  - east/south egress drains from the same pool
+  - deterministic requeue when egress target is blocked.
+- Completed directional conveyor tests against belt-node targets and added strict invalid-port rejection coverage.
+
 ## Test coverage added
 File: `Tests/GameSimulationTests/LogisticsRuntimeTests.swift`
 - `testConveyorCarriesOutputToNeighborInputBuffer`
@@ -84,11 +99,18 @@ File: `Tests/GameSimulationTests/PlacementValidationTests.swift`
 Also updated deterministic golden hash:
 - `Tests/GameSimulationTests/GoldenReplayTests.swift`
 
+Additional logistics tests:
+- `testConveyorTransfersByRotationDirection`
+- `testSplitterAlternatesOutputs`
+- `testStorageSharedPoolAcceptsWestNorthAndDrainsEastSouth`
+- `testAssemblerRejectsInputFromInvalidPortSide`
+
 ## Validation executed
 - `swift test` -> pass (67/67)
 - `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_macOS -configuration Debug build` -> success
 - `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_iOS -configuration Debug CODE_SIGNING_ALLOWED=NO build` -> success
 - `xcodebuild -project FactoryDefense.xcodeproj -scheme FactoryDefense_iPadOS -configuration Debug CODE_SIGNING_ALLOWED=NO build` -> success
+- `swift test --filter LogisticsRuntimeTests` -> pass (11/11)
 
 ## PRD alignment notes
 Aligned with `docs/prd/building_specifications.md` in this session:
@@ -98,9 +120,7 @@ Aligned with `docs/prd/building_specifications.md` in this session:
 
 Not yet complete vs PRD:
 - Full multi-port model + directional rotation semantics.
-- Splitter/merger behaviors.
-- Storage hub semantics as shared logistics pool.
-- Strict item filter model per port type beyond initial turret ammo filtering.
+- Full strict item filter model per declared port schema (`buildings.json`) rather than current structure-level side checks.
 - Ore reveal rings + renewal spawning lifecycle.
 
 ## Key learnings

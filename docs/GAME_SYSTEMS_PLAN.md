@@ -71,9 +71,9 @@ Goal: align runtime logistics with `docs/prd/building_specifications.md`.
 
 - [~] Add building port definitions and runtime input/output buffers.
 - [~] Add directed conveyor runtime with progress, transfer, and backpressure.
-- [ ] Add splitter and merger runtime behavior.
-- [ ] Add storage as shared-pool logistics hub with multi-port behavior.
-- [ ] Add recipe pinning and building rotation command support.
+- [~] Add splitter and merger runtime behavior.
+- [~] Add storage as shared-pool logistics hub with multi-port behavior.
+- [~] Add recipe pinning and building rotation command support.
 - [~] Update combat ammo draw order (local turret buffer first, logical pool fallback).
 
 Exit criteria:
@@ -168,4 +168,5 @@ Exit criteria:
 - [ ] Finish logistics runtime gaps: splitter/merger behaviors and shared-pool storage hub semantics.
 - [ ] Add UI/HUD surfacing for threat telemetry (`spawnedEnemiesByWave`, queued backlog, structure damage count, dry-fire rate).
 - [ ] Implement ore reveal/renewal lifecycle (geology survey unlocks, ring reveal state, renewal spawn policy) on top of current Ring 0 depletion runtime.
-- [ ] Implement remove/refund command flow and associated UX command wiring.
+- [ ] Complete strict per-port item-filter enforcement from content schema and remaining splitter/merger edge-case parity.
+- [ ] Finish shared gameplay interaction module wiring for rotate/pin/remove across macOS/iOS/iPadOS/CLI.

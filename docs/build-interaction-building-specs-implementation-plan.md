@@ -15,11 +15,14 @@
   - Snapshot schema break (`schemaVersion = 2`) and explicit legacy snapshot rejection.
   - Content schema additions (`BuildingDef`, `PortDef`, `ItemFilter`) and authoritative `Content/bootstrap/buildings.json`.
   - Building validation for canonical constraints (including storage/power-plant 1x1 and storage power draw 0).
+  - Directional conveyor transfer across all four facings with belt-node-aware handoff.
+  - Splitter output alternation and merger alternating input pull runtime state.
+  - Storage shared-pool runtime (`storageSharedPoolByEntity`) with west/north ingress and east/south drain behavior.
+  - Port-side input gating for consumers (`smelter`, `assembler`, `ammoModule`) and hard rejection for direct `turretMount` input.
   - Golden replay fingerprint regeneration and new command/snapshot/removal tests.
 - Still in progress / remaining for parity:
-  - Full directional conveyor runtime (remove east-only movement assumptions).
-  - PRD-complete splitter/merger transfer semantics.
-  - Storage shared-pool logistics behavior.
+  - Full per-port item-filter parity driven directly from `buildings.json` (beyond current side-aware structure checks).
+  - Final PRD edge-case parity for splitter blocked-output retry and merger starvation fallback under mixed topologies.
   - Removal of transport fallback to global inventory (except HUD aggregation).
   - Shared cross-platform gameplay interaction module + drag-draw parity + canonical rejection UX timing.
 

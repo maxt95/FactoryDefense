@@ -294,7 +294,10 @@ public struct CommandSystem: SimulationSystem {
         state.economy.productionProgressByStructure.removeValue(forKey: structureID)
         state.economy.structureInputBuffers.removeValue(forKey: structureID)
         state.economy.structureOutputBuffers.removeValue(forKey: structureID)
+        state.economy.storageSharedPoolByEntity.removeValue(forKey: structureID)
         state.economy.conveyorPayloadByEntity.removeValue(forKey: structureID)
+        state.economy.splitterOutputToggleByEntity.removeValue(forKey: structureID)
+        state.economy.mergerInputToggleByEntity.removeValue(forKey: structureID)
         state.combat.lastFireTickByTurret.removeValue(forKey: structureID)
     }
 }
@@ -378,6 +381,7 @@ public struct EconomySystem: SimulationSystem {
         )
 
         drainStructureOutputBuffers(structures: structures, state: &state)
+        drainStorageSharedPools(structures: structures, state: &state)
         pruneRuntimeState(for: structures, state: &state)
 
         if state.threat.isWaveActive {
@@ -638,13 +642,19 @@ public struct EconomySystem: SimulationSystem {
         )
 
         for (structureID, structureType) in structureTypesByID {
-            if inputBufferCapacity(for: structureType) > 0 {
+            if structureType == .storage {
+                state.economy.structureInputBuffers.removeValue(forKey: structureID)
+                state.economy.structureOutputBuffers.removeValue(forKey: structureID)
+                _ = state.economy.storageSharedPoolByEntity[structureID, default: [:]]
+            } else if inputBufferCapacity(for: structureType) > 0 {
                 _ = state.economy.structureInputBuffers[structureID, default: [:]]
             } else {
                 state.economy.structureInputBuffers.removeValue(forKey: structureID)
             }
 
-            if outputBufferCapacity(for: structureType) > 0 {
+            if structureType == .storage {
+                // Storage uses a shared pool rather than split input/output buffers.
+            } else if outputBufferCapacity(for: structureType) > 0 {
                 _ = state.economy.structureOutputBuffers[structureID, default: [:]]
             } else {
                 state.economy.structureOutputBuffers.removeValue(forKey: structureID)
@@ -659,11 +669,15 @@ public struct EconomySystem: SimulationSystem {
             if structureType != .merger {
                 state.economy.mergerInputToggleByEntity.removeValue(forKey: structureID)
             }
+            if structureType != .storage {
+                state.economy.storageSharedPoolByEntity.removeValue(forKey: structureID)
+            }
         }
 
         let validStructureIDs = Set(structureTypesByID.keys)
         state.economy.structureInputBuffers = state.economy.structureInputBuffers.filter { validStructureIDs.contains($0.key) }
         state.economy.structureOutputBuffers = state.economy.structureOutputBuffers.filter { validStructureIDs.contains($0.key) }
+        state.economy.storageSharedPoolByEntity = state.economy.storageSharedPoolByEntity.filter { validStructureIDs.contains($0.key) }
         state.economy.conveyorPayloadByEntity = state.economy.conveyorPayloadByEntity.filter {
             guard let type = structureTypesByID[$0.key] else { return false }
             return isBeltNode(type)
@@ -799,7 +813,13 @@ public struct EconomySystem: SimulationSystem {
 
                 if let targetStructure = structuresByPosition[targetPosition],
                    let targetType = targetStructure.structureType,
-                   enqueueInputItem(itemID: payload.itemID, structureID: targetStructure.id, structureType: targetType, state: &state) {
+                   enqueueInputItem(
+                    itemID: payload.itemID,
+                    structureID: targetStructure.id,
+                    structureType: targetType,
+                    sourcePosition: node.position,
+                    state: &state
+                   ) {
                     if nodeType == .splitter {
                         state.economy.splitterOutputToggleByEntity[node.id, default: 0] += 1
                     }
@@ -869,14 +889,20 @@ public struct EconomySystem: SimulationSystem {
                 continue
             }
 
-            if let targetStructure = structuresByPosition[outputTarget],
-               let targetType = targetStructure.structureType,
-               let itemID = popFirstOutputItem(structureID: structure.id, state: &state) {
+                if let targetStructure = structuresByPosition[outputTarget],
+                   let targetType = targetStructure.structureType,
+                   let itemID = popFirstOutputItem(structureID: structure.id, state: &state) {
                 if let wallID = wallsByPosition[outputTarget],
                    injectWallNetwork(itemID: itemID, wallID: wallID, state: &state) {
                     continue
                 }
-                if enqueueInputItem(itemID: itemID, structureID: targetStructure.id, structureType: targetType, state: &state) {
+                if enqueueInputItem(
+                    itemID: itemID,
+                    structureID: targetStructure.id,
+                    structureType: targetType,
+                    sourcePosition: structure.position,
+                    state: &state
+                ) {
                     continue
                 }
 
@@ -887,6 +913,67 @@ public struct EconomySystem: SimulationSystem {
             }
 
             flushAllOutputToGlobalInventory(structureID: structure.id, state: &state)
+        }
+    }
+
+    private func drainStorageSharedPools(structures: [Entity], state: inout WorldState) {
+        let beltNodes = structures
+            .filter { structure in
+                guard let type = structure.structureType else { return false }
+                return isBeltNode(type)
+            }
+            .sorted(by: { $0.id < $1.id })
+        let beltNodesByPosition = Dictionary(uniqueKeysWithValues: beltNodes.map { ($0.position, $0.id) })
+        let beltNodesByID = Dictionary(uniqueKeysWithValues: beltNodes.map { ($0.id, $0) })
+        var structuresByPosition: [GridPosition: Entity] = [:]
+        var wallsByPosition: [GridPosition: EntityID] = [:]
+        for structure in structures.sorted(by: { $0.id < $1.id }) {
+            if structuresByPosition[structure.position] == nil {
+                structuresByPosition[structure.position] = structure
+            }
+            if structure.structureType == .wall {
+                wallsByPosition[structure.position] = structure.id
+            }
+        }
+
+        let storages = structures
+            .filter { $0.structureType == .storage }
+            .sorted(by: { $0.id < $1.id })
+        for storage in storages {
+            for outputDirection in [CardinalDirection.east, .south] {
+                let targetPosition = storage.position.translated(by: outputDirection)
+                guard let itemID = popFirstStoragePoolItem(storageID: storage.id, state: &state) else { break }
+
+                var delivered = false
+                if let beltNodeID = beltNodesByPosition[targetPosition],
+                   enqueueBeltPayload(
+                    itemID: itemID,
+                    targetStructureID: beltNodeID,
+                    sourcePosition: storage.position,
+                    readySourcePositions: [],
+                    nodesByID: beltNodesByID,
+                    state: &state
+                   ) {
+                    delivered = true
+                } else if let targetStructure = structuresByPosition[targetPosition],
+                          let targetType = targetStructure.structureType,
+                          enqueueInputItem(
+                            itemID: itemID,
+                            structureID: targetStructure.id,
+                            structureType: targetType,
+                            sourcePosition: storage.position,
+                            state: &state
+                          ) {
+                    delivered = true
+                } else if let wallID = wallsByPosition[targetPosition],
+                          injectWallNetwork(itemID: itemID, wallID: wallID, state: &state) {
+                    delivered = true
+                }
+
+                if !delivered {
+                    pushStoragePoolItem(itemID: itemID, storageID: storage.id, state: &state)
+                }
+            }
         }
     }
 
@@ -965,6 +1052,26 @@ public struct EconomySystem: SimulationSystem {
         }
         state.economy.structureOutputBuffers[structureID] = outputBuffer
         return itemID
+    }
+
+    private func popFirstStoragePoolItem(storageID: EntityID, state: inout WorldState) -> ItemID? {
+        var pool = state.economy.storageSharedPoolByEntity[storageID, default: [:]]
+        guard let itemID = pool.keys.sorted().first else { return nil }
+        let quantity = pool[itemID, default: 0]
+        guard quantity > 0 else { return nil }
+        if quantity == 1 {
+            pool.removeValue(forKey: itemID)
+        } else {
+            pool[itemID] = quantity - 1
+        }
+        state.economy.storageSharedPoolByEntity[storageID] = pool
+        return itemID
+    }
+
+    private func pushStoragePoolItem(itemID: ItemID, storageID: EntityID, state: inout WorldState) {
+        var pool = state.economy.storageSharedPoolByEntity[storageID, default: [:]]
+        pool[itemID, default: 0] += 1
+        state.economy.storageSharedPoolByEntity[storageID] = pool
     }
 
     private func injectWallNetwork(itemID: ItemID, wallID: EntityID, state: inout WorldState) -> Bool {
@@ -1122,11 +1229,26 @@ public struct EconomySystem: SimulationSystem {
         itemID: ItemID,
         structureID: EntityID,
         structureType: StructureType,
+        sourcePosition: GridPosition? = nil,
         state: inout WorldState
     ) -> Bool {
+        if structureType == .storage {
+            guard acceptsStorageInput(from: sourcePosition, storageID: structureID, state: state) else { return false }
+            var pool = state.economy.storageSharedPoolByEntity[structureID, default: [:]]
+            let capacity = storagePoolCapacity(for: structureType)
+            let current = pool.values.reduce(0, +)
+            guard current < capacity else { return false }
+            pool[itemID, default: 0] += 1
+            state.economy.storageSharedPoolByEntity[structureID] = pool
+            return true
+        }
+
         let capacity = inputBufferCapacity(for: structureType)
         guard capacity > 0 else { return false }
         guard acceptsInput(itemID: itemID, structureType: structureType) else { return false }
+        guard acceptsPortInput(itemID: itemID, structureType: structureType, structureID: structureID, sourcePosition: sourcePosition, state: state) else {
+            return false
+        }
 
         var inputBuffer = state.economy.structureInputBuffers[structureID, default: [:]]
         let current = inputBuffer.values.reduce(0, +)
@@ -1135,6 +1257,44 @@ public struct EconomySystem: SimulationSystem {
         inputBuffer[itemID, default: 0] += 1
         state.economy.structureInputBuffers[structureID] = inputBuffer
         return true
+    }
+
+    private func acceptsStorageInput(from sourcePosition: GridPosition?, storageID: EntityID, state: WorldState) -> Bool {
+        guard let sourcePosition else { return true }
+        guard let storage = state.entities.entity(id: storageID) else { return false }
+        let west = storage.position.translated(by: .west)
+        let north = storage.position.translated(by: .north)
+        return sourcePosition == west || sourcePosition == north
+    }
+
+    private func acceptsPortInput(
+        itemID: ItemID,
+        structureType: StructureType,
+        structureID: EntityID,
+        sourcePosition: GridPosition?,
+        state: WorldState
+    ) -> Bool {
+        guard let sourcePosition,
+              let structure = state.entities.entity(id: structureID) else {
+            return true
+        }
+
+        let west = structure.position.translated(by: .west)
+        let north = structure.position.translated(by: .north)
+        switch structureType {
+        case .smelter:
+            return sourcePosition == west
+        case .assembler, .ammoModule:
+            return sourcePosition == west || sourcePosition == north
+        case .turretMount:
+            return false
+        default:
+            return true
+        }
+    }
+
+    private func storagePoolCapacity(for structureType: StructureType) -> Int {
+        structureType == .storage ? 48 : 0
     }
 
     private func acceptsInput(itemID: ItemID, structureType: StructureType) -> Bool {
@@ -1203,6 +1363,7 @@ public struct EconomySystem: SimulationSystem {
         state.economy.productionProgressByStructure = state.economy.productionProgressByStructure.filter { validStructureIDs.contains($0.key) }
         state.economy.structureInputBuffers = state.economy.structureInputBuffers.filter { validStructureIDs.contains($0.key) }
         state.economy.structureOutputBuffers = state.economy.structureOutputBuffers.filter { validStructureIDs.contains($0.key) }
+        state.economy.storageSharedPoolByEntity = state.economy.storageSharedPoolByEntity.filter { validStructureIDs.contains($0.key) }
         state.economy.conveyorPayloadByEntity = state.economy.conveyorPayloadByEntity.filter { validStructureIDs.contains($0.key) }
         state.economy.splitterOutputToggleByEntity = state.economy.splitterOutputToggleByEntity.filter { validStructureIDs.contains($0.key) }
         state.economy.mergerInputToggleByEntity = state.economy.mergerInputToggleByEntity.filter { validStructureIDs.contains($0.key) }

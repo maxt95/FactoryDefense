@@ -677,6 +677,7 @@ public struct EconomyState: Codable, Hashable, Sendable {
     public var fractionalProductionRemainders: [ItemID: Double]
     public var structureInputBuffers: [EntityID: [ItemID: Int]]
     public var structureOutputBuffers: [EntityID: [ItemID: Int]]
+    public var storageSharedPoolByEntity: [EntityID: [ItemID: Int]]
     public var conveyorPayloadByEntity: [EntityID: ConveyorPayload]
     public var splitterOutputToggleByEntity: [EntityID: Int]
     public var mergerInputToggleByEntity: [EntityID: Int]
@@ -693,6 +694,7 @@ public struct EconomyState: Codable, Hashable, Sendable {
         fractionalProductionRemainders: [ItemID: Double] = [:],
         structureInputBuffers: [EntityID: [ItemID: Int]] = [:],
         structureOutputBuffers: [EntityID: [ItemID: Int]] = [:],
+        storageSharedPoolByEntity: [EntityID: [ItemID: Int]] = [:],
         conveyorPayloadByEntity: [EntityID: ConveyorPayload] = [:],
         splitterOutputToggleByEntity: [EntityID: Int] = [:],
         mergerInputToggleByEntity: [EntityID: Int] = [:],
@@ -708,6 +710,7 @@ public struct EconomyState: Codable, Hashable, Sendable {
         self.fractionalProductionRemainders = fractionalProductionRemainders
         self.structureInputBuffers = structureInputBuffers
         self.structureOutputBuffers = structureOutputBuffers
+        self.storageSharedPoolByEntity = storageSharedPoolByEntity
         self.conveyorPayloadByEntity = conveyorPayloadByEntity
         self.splitterOutputToggleByEntity = splitterOutputToggleByEntity
         self.mergerInputToggleByEntity = mergerInputToggleByEntity
@@ -739,6 +742,39 @@ public struct EconomyState: Codable, Hashable, Sendable {
             fractionalProductionRemainders: fractionalProductionRemainders,
             structureInputBuffers: structureInputBuffers,
             structureOutputBuffers: structureOutputBuffers,
+            storageSharedPoolByEntity: [:],
+            conveyorPayloadByEntity: conveyorPayloadByEntity,
+            powerAvailable: powerAvailable,
+            powerDemand: powerDemand,
+            currency: currency,
+            telemetry: telemetry
+        )
+    }
+
+    public init(
+        inventories: [ItemID: Int],
+        activeRecipeByStructure: [EntityID: String],
+        pinnedRecipeByStructure: [EntityID: String],
+        productionProgressByStructure: [EntityID: Double],
+        fractionalProductionRemainders: [ItemID: Double],
+        structureInputBuffers: [EntityID: [ItemID: Int]],
+        structureOutputBuffers: [EntityID: [ItemID: Int]],
+        storageSharedPoolByEntity: [EntityID: [ItemID: Int]],
+        conveyorPayloadByEntity: [EntityID: ConveyorPayload],
+        powerAvailable: Int,
+        powerDemand: Int,
+        currency: Int,
+        telemetry: EconomyTelemetry
+    ) {
+        self.init(
+            inventories: inventories,
+            activeRecipeByStructure: activeRecipeByStructure,
+            pinnedRecipeByStructure: pinnedRecipeByStructure,
+            productionProgressByStructure: productionProgressByStructure,
+            fractionalProductionRemainders: fractionalProductionRemainders,
+            structureInputBuffers: structureInputBuffers,
+            structureOutputBuffers: structureOutputBuffers,
+            storageSharedPoolByEntity: storageSharedPoolByEntity,
             conveyorPayloadByEntity: conveyorPayloadByEntity,
             splitterOutputToggleByEntity: [:],
             mergerInputToggleByEntity: [:],
@@ -772,6 +808,7 @@ public struct EconomyState: Codable, Hashable, Sendable {
             fractionalProductionRemainders: fractionalProductionRemainders,
             structureInputBuffers: structureInputBuffers,
             structureOutputBuffers: structureOutputBuffers,
+            storageSharedPoolByEntity: [:],
             conveyorPayloadByEntity: conveyorPayloadByEntity,
             splitterOutputToggleByEntity: splitterOutputToggleByEntity,
             mergerInputToggleByEntity: mergerInputToggleByEntity,

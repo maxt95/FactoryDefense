@@ -4,10 +4,10 @@ import XCTest
 final class LogisticsRuntimeTests: XCTestCase {
     func testConveyorTransfersByRotationDirection() {
         var entities = EntityStore()
-        let northTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 3, y: 2))
-        let eastTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 5, y: 4))
-        let southTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 3, y: 6))
-        let westTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 1, y: 4))
+        let northTarget = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 2), rotation: .north)
+        let eastTarget = entities.spawnStructure(.conveyor, at: GridPosition(x: 5, y: 4), rotation: .east)
+        let southTarget = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 6), rotation: .south)
+        let westTarget = entities.spawnStructure(.conveyor, at: GridPosition(x: 1, y: 4), rotation: .west)
 
         let northConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 3), rotation: .north)
         let eastConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 4, y: 4), rotation: .east)
@@ -35,17 +35,17 @@ final class LogisticsRuntimeTests: XCTestCase {
         )
         _ = engine.step()
 
-        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[northTarget]?["plate_iron", default: 0], 1)
-        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[eastTarget]?["plate_copper", default: 0], 1)
-        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[southTarget]?["plate_steel", default: 0], 1)
-        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[westTarget]?["gear", default: 0], 1)
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[northTarget]?.itemID, "plate_iron")
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[eastTarget]?.itemID, "plate_copper")
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[southTarget]?.itemID, "plate_steel")
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[westTarget]?.itemID, "gear")
     }
 
     func testSplitterAlternatesOutputs() {
         var entities = EntityStore()
         let splitterID = entities.spawnStructure(.splitter, at: GridPosition(x: 3, y: 3), rotation: .east)
-        let northTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 3, y: 2))
-        let southTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 3, y: 4))
+        let northTarget = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 2), rotation: .north)
+        let southTarget = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 4), rotation: .south)
 
         let world = WorldState(
             tick: 0,
@@ -62,13 +62,73 @@ final class LogisticsRuntimeTests: XCTestCase {
 
         engine.worldState.economy.conveyorPayloadByEntity[splitterID] = ConveyorPayload(itemID: "plate_iron", progressTicks: 5)
         _ = engine.step()
-        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[northTarget]?["plate_iron", default: 0], 1)
-        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[southTarget]?["plate_iron", default: 0] ?? 0, 0)
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[northTarget]?.itemID, "plate_iron")
+        XCTAssertNil(engine.worldState.economy.conveyorPayloadByEntity[southTarget])
 
         engine.worldState.economy.conveyorPayloadByEntity[splitterID] = ConveyorPayload(itemID: "plate_iron", progressTicks: 5)
         _ = engine.step()
-        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[northTarget]?["plate_iron", default: 0], 1)
-        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[southTarget]?["plate_iron", default: 0], 1)
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[southTarget]?.itemID, "plate_iron")
+    }
+
+    func testStorageSharedPoolAcceptsWestNorthAndDrainsEastSouth() {
+        var entities = EntityStore()
+        let storageID = entities.spawnStructure(.storage, at: GridPosition(x: 3, y: 3))
+        let westIn = entities.spawnStructure(.conveyor, at: GridPosition(x: 2, y: 3), rotation: .east)
+        let northIn = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 2), rotation: .south)
+        let eastOutTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 4, y: 3))
+        let southOutTarget = entities.spawnStructure(.assembler, at: GridPosition(x: 3, y: 4))
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(
+                conveyorPayloadByEntity: [
+                    westIn: ConveyorPayload(itemID: "plate_iron", progressTicks: 5),
+                    northIn: ConveyorPayload(itemID: "plate_copper", progressTicks: 5)
+                ]
+            ),
+            threat: ThreatState(),
+            run: RunState()
+        )
+
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+        _ = engine.step()
+
+        XCTAssertEqual(engine.worldState.economy.storageSharedPoolByEntity[storageID]?["plate_iron", default: 0] ?? 0, 0)
+        XCTAssertEqual(engine.worldState.economy.storageSharedPoolByEntity[storageID]?["plate_copper", default: 0] ?? 0, 0)
+        let eastTotal = engine.worldState.economy.structureInputBuffers[eastOutTarget, default: [:]].values.reduce(0, +)
+        let southTotal = engine.worldState.economy.structureInputBuffers[southOutTarget, default: [:]].values.reduce(0, +)
+        XCTAssertEqual(eastTotal + southTotal, 2)
+    }
+
+    func testAssemblerRejectsInputFromInvalidPortSide() {
+        var entities = EntityStore()
+        let assemblerID = entities.spawnStructure(.assembler, at: GridPosition(x: 4, y: 4))
+        let southConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 4, y: 5), rotation: .north)
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(
+                conveyorPayloadByEntity: [
+                    southConveyor: ConveyorPayload(itemID: "plate_iron", progressTicks: 5)
+                ]
+            ),
+            threat: ThreatState(),
+            run: RunState()
+        )
+
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+        _ = engine.step()
+
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[assemblerID]?["plate_iron", default: 0] ?? 0, 0)
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[southConveyor]?.itemID, "plate_iron")
     }
 
     func testConveyorCarriesOutputToNeighborInputBuffer() {
