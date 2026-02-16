@@ -35,6 +35,7 @@ public struct RenderContext {
     public var cameraState: WhiteboxCameraState
     public var highlightedCell: GridPosition?
     public var highlightedPath: [GridPosition]
+    public var highlightedAffordableCount: Int
     public var highlightedStructure: StructureType?
     public var placementResult: PlacementResult
 
@@ -57,6 +58,7 @@ public struct RenderContext {
         cameraState: WhiteboxCameraState = WhiteboxCameraState(),
         highlightedCell: GridPosition? = nil,
         highlightedPath: [GridPosition] = [],
+        highlightedAffordableCount: Int = 0,
         highlightedStructure: StructureType? = nil,
         placementResult: PlacementResult = .ok,
         currentDrawable: CAMetalDrawable?,
@@ -77,6 +79,7 @@ public struct RenderContext {
         self.cameraState = cameraState
         self.highlightedCell = highlightedCell
         self.highlightedPath = highlightedPath
+        self.highlightedAffordableCount = max(0, highlightedAffordableCount)
         self.highlightedStructure = highlightedStructure
         self.placementResult = placementResult
         self.currentDrawable = currentDrawable

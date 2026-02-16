@@ -109,4 +109,18 @@ public struct GameplayInteractionState: Sendable, Hashable {
         cancelDragDraw()
         return path
     }
+
+    public func previewAffordableCount(for structure: StructureType, inventory: [String: Int]) -> Int {
+        guard isDragDrawActive else { return 0 }
+
+        let costs = structure.buildCosts.filter { $0.quantity > 0 }
+        guard !costs.isEmpty else { return dragPreviewPath.count }
+
+        var affordable = Int.max
+        for cost in costs {
+            let available = inventory[cost.itemID, default: 0]
+            affordable = min(affordable, available / cost.quantity)
+        }
+        return max(0, affordable)
+    }
 }

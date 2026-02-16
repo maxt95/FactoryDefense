@@ -85,6 +85,15 @@ private struct FactoryDefenseiOSGameplayView: View {
         runtime.world.economy.inventories
     }
 
+    private var dragPreviewAffordableCount: Int {
+        guard interaction.isDragDrawActive else { return 0 }
+        let affordable = interaction.previewAffordableCount(
+            for: selectedStructure,
+            inventory: runtime.world.economy.inventories
+        )
+        return min(affordable, interaction.dragPreviewPath.count)
+    }
+
     var body: some View {
         GeometryReader { proxy in
             ZStack {
@@ -93,6 +102,7 @@ private struct FactoryDefenseiOSGameplayView: View {
                     cameraState: cameraState,
                     highlightedCell: runtime.highlightedCell,
                     highlightedPath: interaction.dragPreviewPath,
+                    highlightedAffordableCount: dragPreviewAffordableCount,
                     highlightedStructure: interaction.isBuildMode && runtime.highlightedCell != nil ? selectedStructure : nil,
                     placementResult: runtime.placementResult,
                     onKeyboardPan: { dx, dy, viewport in
@@ -610,6 +620,7 @@ private struct MetalSurfaceView: UIViewRepresentable {
     var cameraState: WhiteboxCameraState
     var highlightedCell: GridPosition?
     var highlightedPath: [GridPosition]
+    var highlightedAffordableCount: Int
     var highlightedStructure: StructureType?
     var placementResult: PlacementResult
     var onKeyboardPan: (Float, Float, CGSize) -> Void
@@ -637,6 +648,7 @@ private struct MetalSurfaceView: UIViewRepresentable {
         renderer.setPlacementHighlight(
             cell: highlightedCell,
             path: highlightedPath,
+            affordableCount: highlightedAffordableCount,
             structure: highlightedStructure,
             result: placementResult
         )

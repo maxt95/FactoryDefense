@@ -65,4 +65,16 @@ final class GameplayInteractionStateTests: XCTestCase {
         XCTAssertFalse(interaction.isDragDrawActive)
         XCTAssertTrue(interaction.dragPreviewPath.isEmpty)
     }
+
+    func testPreviewAffordableCountUsesBuildCosts() {
+        var interaction = GameplayInteractionState(mode: .build)
+        interaction.beginDragDraw(at: GridPosition(x: 1, y: 1))
+        interaction.updateDragDraw(at: GridPosition(x: 5, y: 1))
+
+        let affordable = interaction.previewAffordableCount(
+            for: .wall,
+            inventory: ["wall_kit": 3]
+        )
+        XCTAssertEqual(affordable, 3)
+    }
 }

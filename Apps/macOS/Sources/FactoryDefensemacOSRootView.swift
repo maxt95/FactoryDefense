@@ -287,6 +287,15 @@ private struct FactoryDefensemacOSGameplayView: View {
         runtime.world.economy.inventories
     }
 
+    private var dragPreviewAffordableCount: Int {
+        guard interaction.isDragDrawActive else { return 0 }
+        let affordable = interaction.previewAffordableCount(
+            for: selectedStructure,
+            inventory: runtime.world.economy.inventories
+        )
+        return min(affordable, interaction.dragPreviewPath.count)
+    }
+
     var body: some View {
         GeometryReader { proxy in
             ZStack {
@@ -296,6 +305,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                     debugMode: enableDebugViews ? .tactical : .none,
                     highlightedCell: runtime.highlightedCell,
                     highlightedPath: interaction.dragPreviewPath,
+                    highlightedAffordableCount: dragPreviewAffordableCount,
                     highlightedStructure: interaction.isBuildMode && runtime.highlightedCell != nil ? selectedStructure : nil,
                     placementResult: runtime.placementResult,
                     onTap: { location, viewport in
@@ -847,6 +857,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
     var debugMode: DebugVisualizationMode
     var highlightedCell: GridPosition?
     var highlightedPath: [GridPosition]
+    var highlightedAffordableCount: Int
     var highlightedStructure: StructureType?
     var placementResult: PlacementResult
     var onTap: (CGPoint, CGSize) -> Void
@@ -883,6 +894,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
         renderer.setPlacementHighlight(
             cell: highlightedCell,
             path: highlightedPath,
+            affordableCount: highlightedAffordableCount,
             structure: highlightedStructure,
             result: placementResult
         )

@@ -21,6 +21,7 @@ public final class FactoryRenderer: NSObject {
     public var cameraState: WhiteboxCameraState
     public var highlightedCell: GridPosition?
     public var highlightedPath: [GridPosition]
+    public var highlightedAffordableCount: Int
     public var highlightedStructure: StructureType?
     public var placementResult: PlacementResult
 
@@ -52,6 +53,7 @@ public final class FactoryRenderer: NSObject {
         self.cameraState = WhiteboxCameraState()
         self.highlightedCell = nil
         self.highlightedPath = []
+        self.highlightedAffordableCount = 0
         self.highlightedStructure = nil
         self.placementResult = .ok
         self.camera = IsometricCamera()
@@ -98,11 +100,13 @@ public final class FactoryRenderer: NSObject {
     public func setPlacementHighlight(
         cell: GridPosition?,
         path: [GridPosition] = [],
+        affordableCount: Int = 0,
         structure: StructureType?,
         result: PlacementResult
     ) {
         highlightedCell = cell
         highlightedPath = path
+        highlightedAffordableCount = max(0, affordableCount)
         highlightedStructure = structure
         placementResult = result
     }
@@ -173,6 +177,7 @@ extension FactoryRenderer: MTKViewDelegate {
             cameraState: cameraState,
             highlightedCell: highlightedCell,
             highlightedPath: highlightedPath,
+            highlightedAffordableCount: highlightedAffordableCount,
             highlightedStructure: highlightedStructure,
             placementResult: placementResult,
             currentDrawable: drawable,

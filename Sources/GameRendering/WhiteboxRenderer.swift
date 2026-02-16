@@ -27,6 +27,7 @@ private struct WhiteboxUniforms {
     var highlightedX: Int32
     var highlightedY: Int32
     var highlightedPathCount: UInt32
+    var highlightedAffordableCount: UInt32
     var highlightedStructureTypeRaw: UInt32
     var placementResultRaw: Int32
     var cameraPanX: Float
@@ -109,6 +110,7 @@ public final class WhiteboxRenderer {
             highlightedX: Int32(context.highlightedCell?.x ?? -1),
             highlightedY: Int32(context.highlightedCell?.y ?? -1),
             highlightedPathCount: UInt32(context.highlightedPath.count),
+            highlightedAffordableCount: UInt32(max(0, context.highlightedAffordableCount)),
             highlightedStructureTypeRaw: highlightedStructureTypeRaw(context.highlightedStructure),
             placementResultRaw: Int32(context.placementResult.rawValue),
             cameraPanX: context.cameraState.pan.x,

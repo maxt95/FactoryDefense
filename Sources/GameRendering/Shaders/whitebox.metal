@@ -26,6 +26,7 @@ struct WhiteboxUniforms {
     int highlightedX;
     int highlightedY;
     uint highlightedPathCount;
+    uint highlightedAffordableCount;
     uint highlightedStructureTypeRaw;
     int placementResultRaw;
     float cameraPanX;
@@ -98,6 +99,15 @@ inline bool contains_cell(const device WhiteboxPoint* points, uint count, int2 c
         }
     }
     return false;
+}
+
+inline int index_of_cell(const device WhiteboxPoint* points, uint count, int2 cell) {
+    for (uint i = 0; i < count; ++i) {
+        if (points[i].x == cell.x && points[i].y == cell.y) {
+            return int(i);
+        }
+    }
+    return -1;
 }
 
 inline int ramp_elevation(const device WhiteboxRamp* ramps, uint count, int2 cell) {
@@ -271,8 +281,13 @@ kernel void whitebox_board(
             color *= 0.68;
         }
 
-        if (contains_cell(highlightedPath, uniforms.highlightedPathCount, cell)) {
-            color = mix(color, float3(0.08, 0.46, 0.70), 0.62);
+        const int pathIndex = index_of_cell(highlightedPath, uniforms.highlightedPathCount, cell);
+        if (pathIndex >= 0) {
+            const bool affordable = uint(pathIndex) < uniforms.highlightedAffordableCount;
+            const float3 previewColor = affordable
+                ? float3(0.08, 0.46, 0.70)
+                : float3(0.66, 0.12, 0.12);
+            color = mix(color, previewColor, 0.62);
         }
 
         if (uniforms.highlightedX >= 0 && uniforms.highlightedY >= 0) {
