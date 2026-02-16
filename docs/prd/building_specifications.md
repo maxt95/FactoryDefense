@@ -231,10 +231,10 @@ W  | M |  E --> [OUTPUT: 8 raw ore]
 | Blocks movement | Yes |
 
 **Special rules:**
-- Must be placed adjacent to an ore patch (Manhattan distance <= 1)
+- Must be placed cardinally adjacent (N/S/E/W) to a revealed ore patch (not on the patch tile)
 - Ore type produced matches the patch type (iron, copper, or coal)
 - If ore patch depletes, miner goes idle
-- Multiple miners can share an ore patch
+- Exactly one miner can be bound to a patch (1:1 miner-patch binding)
 - Extraction per tick: if output buffer is not full AND adjacent patch has richness remaining, increment progress by `powerEfficiency / 20.0`. When progress >= 1.0, produce 1 ore, decrement patch richness by 1
 
 **Effective output rates (at 1.0 efficiency):**

@@ -161,31 +161,22 @@ Resources create a multi-layered dependency chain where each tier of processing 
 
 ### 2.3 Resource Node Placement
 
-The map has ore patches at fixed positions defined in level data. Miners must be placed on or adjacent to ore patches to produce.
+Ore patch generation, reveal, depletion, and renewal are defined in `ore_patches_resource_nodes.md` (source of truth). At run start, patches are generated with deterministic seed logic; only Ring 0 is initially revealed.
 
 **Rules:**
 - Each ore patch has a type (iron, copper, coal) and a richness value (total extractable units).
-- A miner placed on/adjacent to an ore patch extracts at its base rate, modified by throughput multiplier.
-- Multiple miners can operate on the same patch (shared depletion, no diminishing returns — keeps it simple).
-- Ore patches are visible on the map before placement, displayed as resource node entities.
-- A miner not adjacent to any ore patch produces nothing.
+- A miner must be placed cardinally adjacent (N/S/E/W) to a revealed ore patch; diagonal adjacency does not count.
+- Each ore patch supports exactly one miner (1:1 binding).
+- Unrevealed rings are hidden until geology survey tech reveals them.
+- Ring 0 guarantees at least one patch each of iron, copper, and coal.
+- A miner not adjacent to a valid revealed patch produces nothing.
 
-**Ore patch richness values (recommended):**
-
-| Type | Richness | Time to deplete (1 miner, 1.0 throughput) |
-|------|----------|-------------------------------------------|
-| Iron | 2000 | ~100 seconds (2000 ticks) |
-| Copper | 1500 | ~94 seconds (1875 ticks at 0.8/tick) |
-| Coal | 1200 | ~100 seconds (2000 ticks at 0.6/tick) |
-
-At these values, a single ore patch lasts through roughly waves 1-5 before the player needs to expand to new patches. This forces map exploration and expansion without being punishing in the early game.
+**Ore patch richness values:** See `ore_patches_resource_nodes.md` Appendix A (canonical table and depletion timelines).
 
 **Starter map layout (recommended):**
-- 2 iron patches near base (accessible immediately)
-- 1 copper patch near base
-- 1 coal patch near base
-- 2-3 additional patches of each type further from base (expansion targets)
-- Distant patches are closer to spawn edges (risk/reward)
+- Player starts with a base building anchor.
+- Ring 0 patches spawn in a small perimeter around the base building to enable immediate mining bootstrap.
+- Outer rings remain hidden until revealed and are progressively richer.
 
 ### 2.4 Implementation Status
 
@@ -432,7 +423,7 @@ When a player issues a `placeStructure` command, the simulation must validate:
 2. **Cell availability** — target cell is not blocked, restricted, or already occupied
 3. **Cost check** — player inventory contains all required items
 4. **Type-specific rules:**
-   - Miners: must be on or adjacent to an ore patch (Manhattan distance <= 1)
+   - Miners: must be cardinally adjacent (N/S/E/W) to a revealed, unreserved ore patch
    - All structures except conveyors: block enemy pathfinding
 5. **Cost deduction** — consume required items from inventory on successful placement
 6. **Failure feedback** — if validation fails, emit an event specifying the reason (insufficient resources, invalid position, etc.)
