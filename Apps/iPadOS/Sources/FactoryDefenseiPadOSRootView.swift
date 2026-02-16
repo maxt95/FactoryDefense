@@ -59,8 +59,11 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     @State private var cameraState = WhiteboxCameraState()
     @State private var dragTranslation: CGSize = .zero
     @State private var zoomGestureScale: CGFloat = 1
+    @State private var selectedEntityID: EntityID?
 
     private static let keyboardPanStep: Float = 56
+    private let picker = WhiteboxPicker()
+    private let objectInspectorBuilder = ObjectInspectorBuilder()
 
     private var selectedStructure: StructureType {
         buildMenu.selectedEntry()?.structure ?? .wall
@@ -119,6 +122,15 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                         }
                 )
 
+                if let inspector = selectedInspectorModel() {
+                    ObjectInspectorPopup(
+                        model: inspector,
+                        onClose: { selectedEntityID = nil }
+                    )
+                    .frame(width: 320)
+                    .position(inspectorPosition(for: inspector, viewport: proxy.size))
+                }
+
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text("Factory Defense iPadOS")
@@ -175,6 +187,9 @@ private struct FactoryDefenseiPadOSGameplayView: View {
             }
             .onChange(of: runtime.world.tick) { _, _ in
                 onboarding.update(from: runtime.world)
+                if let selectedEntityID, runtime.world.entities.entity(id: selectedEntityID) == nil {
+                    self.selectedEntityID = nil
+                }
             }
             .onChange(of: runtime.world.board) { oldBoard, newBoard in
                 reconcileCameraForBoardChange(from: oldBoard, to: newBoard, viewport: proxy.size)
@@ -210,8 +225,15 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     private func handleTap(at location: CGPoint, viewport: CGSize) {
         guard let position = pickGrid(at: location, viewport: viewport) else {
             runtime.clearPlacementPreview()
+            selectedEntityID = nil
             return
         }
+        if let tappedEntity = runtime.world.entities.selectableEntity(at: position) {
+            runtime.clearPlacementPreview()
+            selectedEntityID = selectedEntityID == tappedEntity.id ? nil : tappedEntity.id
+            return
+        }
+        selectedEntityID = nil
         runtime.placeStructure(selectedStructure, at: position)
     }
 
@@ -259,12 +281,33 @@ private struct FactoryDefenseiPadOSGameplayView: View {
     }
 
     private func pickGrid(at location: CGPoint, viewport: CGSize) -> GridPosition? {
-        WhiteboxPicker().gridPosition(
+        picker.gridPosition(
             at: location,
             viewport: viewport,
             board: runtime.world.board,
             camera: cameraState
         )
+    }
+
+    private func selectedInspectorModel() -> ObjectInspectorViewModel? {
+        guard let selectedEntityID else { return nil }
+        return objectInspectorBuilder.build(entityID: selectedEntityID, in: runtime.world)
+    }
+
+    private func inspectorPosition(for model: ObjectInspectorViewModel, viewport: CGSize) -> CGPoint {
+        let anchor = picker.screenPosition(
+            for: model.anchorPosition,
+            viewport: viewport,
+            camera: cameraState,
+            board: runtime.world.board
+        )
+        let tileHeight = CGFloat(max(0.001, cameraState.zoom)) * 22
+        let lift = tileHeight * (CGFloat(model.anchorHeightTiles) + 1.4)
+        let halfWidth: CGFloat = 160
+        let xPadding: CGFloat = 12
+        let x = min(max(halfWidth + xPadding, anchor.x), viewport.width - (halfWidth + xPadding))
+        let y = max(72, anchor.y - lift)
+        return CGPoint(x: x, y: y)
     }
 }
 

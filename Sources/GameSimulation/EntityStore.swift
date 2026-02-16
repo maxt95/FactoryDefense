@@ -29,6 +29,35 @@ public struct EntityStore: Codable, Hashable, Sendable {
         all.filter { $0.category == .projectile }
     }
 
+    public func selectableEntity(at position: GridPosition) -> Entity? {
+        let gridX = position.x
+        let gridY = position.y
+
+        for entity in all where entity.category == .structure {
+            guard let structureType = entity.structureType else { continue }
+            let occupiesCell = structureType.coveredCells(anchor: entity.position).contains(where: { covered in
+                covered.x == gridX && covered.y == gridY
+            })
+            if occupiesCell {
+                return entity
+            }
+        }
+
+        for entity in all where entity.category == .enemy {
+            if entity.position.x == gridX && entity.position.y == gridY {
+                return entity
+            }
+        }
+
+        for entity in all where entity.category == .projectile {
+            if entity.position.x == gridX && entity.position.y == gridY {
+                return entity
+            }
+        }
+
+        return nil
+    }
+
     @discardableResult
     public mutating func spawnStructure(
         _ structure: StructureType,
