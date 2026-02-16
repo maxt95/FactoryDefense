@@ -12,10 +12,12 @@ It is intentionally high level; linked PRDs provide detailed design and implemen
 ## Canonical Alignment Rule
 - This file is the high-level source of truth.
 - `docs/prd/factory_economy.md` defines economy/combat balance and priorities.
+- `docs/prd/wave_threat_system.md` defines the authoritative v1 threat model (grace period, continuous trickle pressure, timed surge waves, and enemy behavior priorities).
 - `docs/prd/building_specifications.md` defines the conveyor-routed building/port/buffer model and supersedes older abstract logistics assumptions.
 - `docs/prd/combat_rendering_vfx.md` defines projectile physics, enemy pathfinding, instanced GPU rendering, and VFX particle system architecture.
 - `docs/prd/tech_tree_runtime.md` defines the tech tree runtime: Lab building, research flow, node effects, gating rules, and simulation integration.
 - `docs/prd/ore_patches_resource_nodes.md` defines ore patch generation, depletion, renewal, reveal rings, and miner–patch binding.
+- `docs/prd/run_bootstrap_session_init.md` defines run lifecycle, bootstrap sequence, difficulty parameterization, map layout, and grace period.
 - `docs/WHITEBOX_ASSET_STRATEGY.md` defines the whitebox rendering path for early playable visuals.
 
 ## Product Pillars
@@ -40,29 +42,29 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 |---|---|
 | Mode | Single-player first, architecture ready for future co-op |
 | Camera | Locked isometric |
-| Session shape | Endless survival with milestone rewards + optional extraction |
-| Waves | Timed wave cycles |
-| Raids | Bounded RNG raids with cooldown windows |
+| Session shape | Endless survival escalation in v1; extraction/meta conversion is deferred |
+| Waves | Continuous threat model: grace period, trickle pressure, and timed surge waves |
+| Raids | No separate raid subsystem in v1 (pressure comes from trickle + surges) |
+| Defense topology | Turrets mount on walls; wall line defines defensive territory |
 | Progression | Resource + money tech tree unlocks |
 | Visual target | Stylized 3D with cinematic fidelity |
 | Terrain | Mostly flat grid with ramps |
 | Input | Touch + keyboard/mouse first-class |
 
 ## Core Loop
-1. Gather raw resources.
-2. Process resources through factory chains.
-3. Expand walls, turret mounts, and base footprint.
-4. Survive waves and raids using physically produced ammo/power.
-5. Bank milestone rewards and choose extract vs continue risk.
-6. Spend rewards on permanent/unlock progression.
+1. Bootstrap the base during an initial grace period.
+2. Gather raw resources and process factory chains.
+3. Expand wall lines and turret mounts while protecting logistics.
+4. Survive continuous trickle pressure plus timed wave surges using physically produced ammo/power.
+5. Repair breaches and recover production when structures are damaged.
+6. Reinvest in production, defense, and research as pressure escalates.
 
 ## Session Structure
-- Boot phase: starter land, basic production chain, early defense.
-- Build windows: low pressure optimization period.
-- Wave windows: structured enemy attacks.
-- Raid windows: bounded random threat spikes.
-- Milestones: periodic safe bank checkpoints.
-- End conditions: defeat or voluntary extraction.
+- Boot phase: starter HQ/resources and initial grace period with no enemy spawns.
+- Continuous pressure: trickle enemies persist after grace period.
+- Wave surges: timed attacks with inter-wave gap compression over time.
+- Endless escalation: authored early waves transition to procedural budgets.
+- End condition: run ends when HQ integrity reaches 0.
 
 ## V1 Gameplay Truths
 - Turrets consume real produced ammo; no ammo means no shots.
@@ -71,6 +73,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Production is recipe-driven and time-based per structure (not instant tick conversion).
 - Logistics is conveyor-routed with per-building buffers, finite capacity, and backpressure.
 - Power uses global supply/demand with uniform brownout scaling of production throughput.
+- There are no build/wave phase gates in v1; building remains available during active threat.
 - Enemies can threaten both base and critical structures, enabling power/factory failure cascades.
 - Waves are timed and data-authored early, with procedural escalation later in endless survival.
 
@@ -89,7 +92,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 ### Combat and Threat
 - Turret behavior is type-specific (ammo type, range, fire rate, damage).
 - Combat outcomes are directly coupled to factory throughput and ammo chain health.
-- Threat model includes wave cadence, bounded raids, weak-side pressure, and structure-targeting enemy behaviors (not base-only pressure).
+- Threat model is continuous: grace period -> trickle pressure -> timed surge waves, with full-perimeter spawns and structure-targeting enemy behaviors (not base-only pressure).
 
 ### Power
 - Power plants generate global supply; production structures consume global demand.
@@ -98,8 +101,8 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 
 ### UX
 - Build/rotate/place/remove interactions are first-class on touch and keyboard/mouse.
-- HUD must always surface resources, ammo, power headroom, wave timing, raid warnings, and milestone state.
-- Non-occluding critical warnings include low ammo, base critical, raid imminent, and power shortage.
+- HUD must always surface resources, ammo, power headroom, wave timing, and base integrity.
+- Non-occluding critical warnings include low ammo, base critical, surge imminent, and power shortage.
 
 ### Rendering and Visual Readability
 - Locked isometric camera and readability-first battlefield presentation.
@@ -117,7 +120,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 ## UX Requirements (v1)
 - Playable with touch and keyboard/mouse.
 - Build/rotate/place/remove must be first-class on all platforms.
-- HUD must surface: resources, ammo stock, power headroom, wave timer, raid warning, milestones.
+- HUD must surface: resources, ammo stock, power headroom, wave timer, and base integrity.
 - Combat-critical notifications must avoid occluding core play area.
 
 ## Out of Scope (v1)
@@ -138,9 +141,12 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Systems implementation plan: `docs/GAME_SYSTEMS_PLAN.md`
 - Factory & Economy PRD: `docs/prd/factory_economy.md`
 - Building Specifications PRD: `docs/prd/building_specifications.md`
+- Wave & Threat System PRD: `docs/prd/wave_threat_system.md`
 - Combat, Rendering & VFX PRD: `docs/prd/combat_rendering_vfx.md`
 - Tech Tree Runtime PRD: `docs/prd/tech_tree_runtime.md`
 - Ore Patches & Resource Nodes PRD: `docs/prd/ore_patches_resource_nodes.md`
+- Run Bootstrap & Session Init PRD: `docs/prd/run_bootstrap_session_init.md`
+- Build Interaction Flow PRD: `docs/prd/build_interaction_flow.md`
 - Whitebox Asset Strategy: `docs/WHITEBOX_ASSET_STRATEGY.md`
 
 ## Change Control
@@ -151,9 +157,9 @@ When updating this file:
 
 ## Open Questions
 - Extraction economy: exact conversion of run results into meta progression.
-- Raid telegraphing: minimum warning window and UX treatment by difficulty.
 - Long-run scaling: when to introduce elite/flying/siege enemy variants.
-- Wave/build interaction: should build actions be unrestricted during active waves or gated by cost/time penalties?
+- Should wave-survived rewards be explicit (currency/resources) or remain pressure-only progression?
+- Maximum concurrent enemy cap by platform tier and quality preset.
 
 ## Changelog
 - 2026-02-15: Added Factory & Economy PRD link.
@@ -161,3 +167,4 @@ When updating this file:
 - 2026-02-16: Initialized living PRD from approved high-level product direction and implemented architecture baseline.
 - 2026-02-16: Aligned high-level living PRD with economy/building/whitebox PRDs; set conveyor + per-building buffer model as canonical v1 logistics direction.
 - 2026-02-16: Landed first-pass logistics runtime in simulation (structure input/output buffers, directed conveyor transfer/backpressure, local turret-ammo-first consumption with global fallback).
+- 2026-02-16: Re-aligned living PRD threat model to `wave_threat_system.md` (continuous pressure, no separate raid subsystem, no build-phase gating).
