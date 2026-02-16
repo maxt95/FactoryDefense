@@ -1,0 +1,29 @@
+{
+  "easy": {
+    "gracePeriodSeconds": 180,
+    "interWaveGapBase": 120,
+    "interWaveGapFloor": 70,
+    "gapCompressionPerWave": 2,
+    "trickleIntervalSeconds": 15,
+    "trickleSize": [1, 1],
+    "waveBudgetMultiplier": 0.85
+  },
+  "normal": {
+    "gracePeriodSeconds": 120,
+    "interWaveGapBase": 90,
+    "interWaveGapFloor": 50,
+    "gapCompressionPerWave": 2,
+    "trickleIntervalSeconds": 12,
+    "trickleSize": [1, 2],
+    "waveBudgetMultiplier": 1.0
+  },
+  "hard": {
+    "gracePeriodSeconds": 60,
+    "interWaveGapBase": 60,
+    "interWaveGapFloor": 35,
+    "gapCompressionPerWave": 2,
+    "trickleIntervalSeconds": 8,
+    "trickleSize": [2, 3],
+    "waveBudgetMultiplier": 1.15
+  }
+}

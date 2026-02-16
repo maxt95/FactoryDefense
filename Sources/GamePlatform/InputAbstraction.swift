@@ -14,7 +14,6 @@ public enum InputGesture: Sendable {
     case pinch(scale: Float)
     case placeStructure(type: StructureType, position: GridPosition)
     case triggerWave
-    case extract
 }
 
 public struct InputEvent: Sendable {
@@ -57,8 +56,6 @@ public struct DefaultInputMapper: InputMapper {
             )
         case .triggerWave:
             return PlayerCommand(tick: tick, actor: actor, payload: .triggerWave)
-        case .extract:
-            return PlayerCommand(tick: tick, actor: actor, payload: .extract)
         case .dragPan, .pinch:
             return nil
         }

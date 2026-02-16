@@ -27,7 +27,7 @@ This document defines everything that happens between "the player starts a new r
 | `gameOver` | HQ destroyed. Run ends. |
 | `extracted` | Player voluntarily ended at a milestone. |
 
-The current `RunState` in code tracks `baseIntegrity`, `extracted`, and `gameOver`. This PRD adds `gracePeriod` as a distinct phase so the simulation and UI can differentiate "safe build time" from "wave play."
+`RunState` now tracks explicit phase + difficulty + seed + HQ entity linkage. `gracePeriod` is a first-class phase so simulation and UI can differentiate "safe build time" from "wave play."
 
 ### 1.2 Transitions
 
@@ -55,9 +55,14 @@ All values sourced from linked PRDs. This table is the canonical cross-reference
 | **Starting ore_iron** | 30 | 20 | 12 | wave_threat |
 | **Starting ore_copper** | 20 | 12 | 8 | wave_threat |
 | **Starting ore_coal** | 10 | 6 | 4 | wave_threat |
-| **Starting plate_iron** | 8 | 4 | 2 | wave_threat |
-| **Starting wall_kit** | 6 | 4 | 2 | wave_threat |
-| **Starting ammo_light** | 20 | 12 | 6 | wave_threat |
+| **Starting plate_iron** | 18 | 14 | 10 | wave_threat |
+| **Starting plate_copper** | 8 | 6 | 4 | wave_threat |
+| **Starting plate_steel** | 10 | 8 | 6 | wave_threat |
+| **Starting gear** | 5 | 4 | 3 | wave_threat |
+| **Starting circuit** | 5 | 4 | 2 | wave_threat |
+| **Starting turret_core** | 2 | 1 | 1 | wave_threat |
+| **Starting wall_kit** | 8 | 6 | 3 | wave_threat |
+| **Starting ammo_light** | 24 | 16 | 8 | wave_threat |
 | **Trickle spawn interval** | 15s | 12s | 8s | wave_threat |
 | **Trickle enemies/spawn** | 1 | 1–2 | 2–3 | wave_threat |
 | **Trickle composition** | Swarmlings | Swarmlings | Swarmlings + scouts | wave_threat |
@@ -66,7 +71,7 @@ All values sourced from linked PRDs. This table is the canonical cross-reference
 
 ### 2.2 Data Representation
 
-Difficulty parameters live in `hq.json` (starting resources, HQ stats) and `waves.json` (grace period, trickle config). The bootstrap sequence reads both.
+HQ properties and starting resources live in `hq.json`. Difficulty timing and spawn pacing live in `difficulty.json`. `waves.json` remains composition-only data for authored surges.
 
 ---
 
@@ -78,7 +83,7 @@ Difficulty parameters live in `hq.json` (starting resources, HQ stats) and `wave
 |----------|-------|-----------|
 | Width | 96 tiles | Enough horizontal space for factory + buffer before spawn edge |
 | Height | 64 tiles | Comfortable vertical space for multi-lane layouts |
-| HQ position | (39, 31) | Bottom-left anchor of 2×2 footprint → cells (39–40, 31–32). Straddles factory/defense zone boundary. |
+| HQ position | (40, 32) | **Top-right anchor** in current simulation footprint semantics. Occupies cells (39–40, 31–32), straddling factory/defense boundary. |
 | Spawn edge X | 56 | 16 tiles east of HQ — room for walls/turrets but close enough for pressure |
 | Spawn Y range | 27–36 | 10-tile corridor centered on HQ row |
 
@@ -93,7 +98,7 @@ The map has three implicit zones that the player discovers through play:
  │  (ore, buildings)│ (walls,turrets)│  (spawn → HQ path)│
  │   x: 0–39       │  x: 40–50     │   x: 50–56+       │
  └──────────────────┴────────────────┴───────────────────┘
-                    ▲ HQ at (39,31) — 2×2 footprint: (39–40, 31–32)
+                    ▲ HQ anchored at (40,32) — 2×2 footprint: (39–40, 31–32)
 ```
 
 - **Factory Zone** (west of HQ): Where ore patches spawn and production chains are built. Protected by distance from spawn edge.
@@ -117,7 +122,7 @@ Per `ore_patches_resource_nodes.md`, Ring 0 patches are within immediate reach o
 
 The following cells cannot have structures or ore patches placed on them:
 
-- HQ footprint: 2×2 anchored at (39, 31) → cells (39–40, 31–32) per `wave_threat_system.md`. Anchor = bottom-left corner.
+- HQ footprint: 2×2 anchored at (40, 32) using **top-right anchor semantics** in current code → cells (39–40, 31–32).
 - Ramp cells: (47, 31), (47, 32), (47, 33) per existing `BoardDef.starter`
 
 > **Note**: The current code has a 5-cell cross pattern for restricted cells around HQ. This should be migrated to the 2×2 HQ footprint (39–40, 31–32) per `wave_threat_system.md`.
@@ -133,7 +138,7 @@ This is the ordered list of operations that compose `WorldState.bootstrap(diffic
 - Apply restricted cells and ramp definitions.
 
 ### Step 2: Place HQ Entity
-- Spawn HQ as a 2×2 structure entity at base position (39, 31) — bottom-left anchor, occupying cells (39–40, 31–32).
+- Spawn HQ as a 2×2 structure entity at base position (40, 32) using top-right anchor semantics, occupying cells (39–40, 31–32).
 - Set HQ health to 500 (from `wave_threat_system.md`).
 - HQ has 24-slot storage capacity and 4 output ports (N/S/E/W).
 - HQ acts as the initial storage hub — starting resources are placed in the HQ's buffer.
@@ -146,11 +151,13 @@ This is the ordered list of operations that compose `WorldState.bootstrap(diffic
 ### Step 4: Grant Starting Resources
 - Load starting resource table from `hq.json` keyed by difficulty.
 - Place resources into HQ storage buffer (not a global inventory).
-- Starting resources include raw ores, some plates, wall kits, and ammo to survive early pressure while the player's factory spins up.
+- Starting resources include raw ores, processed components (plates/gear/circuit), turret cores, wall kits, and ammo to survive early pressure while the player's factory spins up.
 - **There are no other pre-placed structures.** The HQ is the only building on the map at tick 0. The player uses the grace period to place their entire factory and defense line from scratch using starting resources. This maximizes player agency from the very first moment of the run.
 
 ### Step 5: Initialize Threat State
-- Set `nextWaveTick` based on difficulty grace period.
+- Set `graceEndsAtTick = gracePeriodSeconds * 20`.
+- Set `nextWaveTick = graceEndsAtTick + (interWaveGapBase * 20)` for the first surge.
+- For later surges, compress gap by 2s/wave to difficulty floor (`interWaveGapFloor`).
 - Set `waveIndex = 0`, `isWaveActive = false`.
 - Trickle spawns begin when grace period ends (per `wave_threat_system.md`).
 
@@ -174,14 +181,14 @@ During the grace period:
 - Production runs normally (miners extract, smelters process, conveyors move).
 - No enemies spawn. No trickle. No raids.
 - A countdown timer is visible in the HUD showing remaining grace time.
-- The player may optionally end the grace period early (future — not required for T0).
+- Grace-period skipping is disabled in v1. The run always transitions to `playing` when the timer expires.
 
 ### 5.2 Transition to Playing
 
 When the grace timer expires:
 - `RunState.phase` transitions from `gracePeriod` to `playing`.
 - Trickle spawns begin immediately per the difficulty trickle table.
-- The first authored wave is scheduled per `waves.json` timing.
+- The first surge uses `difficulty.json` gap timing (`interWaveGapBase`), then compresses toward `interWaveGapFloor`.
 - `SimEvent.gracePeriodEnded` is emitted.
 
 ---
@@ -278,7 +285,7 @@ The implicit message to the player: "Here's your base and some supplies. The clo
 
 ---
 
-## 7. Seed & Determinism
+## 8. Seed & Determinism
 
 - Each run has a `UInt64` seed set at run creation.
 - The seed determines: ore patch placement, ore type/richness rolls.
@@ -288,36 +295,33 @@ The implicit message to the player: "Here's your base and some supplies. The clo
 
 ---
 
-## 8. Reconciliation with Current Code
+## 9. Reconciliation with Current Code
 
-The current `WorldState.bootstrap()` differs from this PRD in several ways that need to be resolved:
+`WorldState.bootstrap(difficulty:seed:)` and core run lifecycle wiring are now partially aligned to this PRD.
 
-| Current Code | PRD Target | Action |
-|--------------|------------|--------|
-| No difficulty parameter | `bootstrap(difficulty:seed:)` | Add params |
-| No HQ entity (just position + integrity) | HQ is a 2×2 structure with 500HP and storage | Add HQ entity type |
-| No ore patches | Ring 0 patches placed deterministically | Implement ore patch spawning |
-| 6 hardcoded structures in a line | HQ only — no other pre-placed structures | Remove all starter structures from bootstrap |
-| Global inventory (flat dict) | Resources in HQ storage buffer | Move to per-building buffer model |
-| Grace period = 400 ticks (20s) hardcoded | Difficulty-scaled (1200/2400/3600 ticks) | Read from content data |
-| `RunState.baseIntegrity = 100` | HQ entity health = 500 | Migrate to entity health |
-| No run seed | Deterministic seed for ore placement | Add seed field |
-| No phase tracking | `RunState.phase` enum | Add phase field |
-| 5-cell cross restricted zone | 2×2 HQ footprint at (39, 31) | Reconcile geometry |
-| No `gameOver` event emitted | `SimEvent.gameOver` with tick count | Add event kind |
-| No end-of-run summary | Stats summary screen on game over | Build summary view |
-| Extract button visible and functional | Extraction deferred — hide or remove | Remove from T0 UI |
-| Raids deal flat 2 damage to `baseIntegrity` | Enemies deal typed damage to HQ entity | Migrate to entity damage model |
+| Area | PRD Target | Current Status | Next Action |
+|------|------------|----------------|-------------|
+| Bootstrap signature | `bootstrap(difficulty:seed:)` | **Done** | — |
+| HQ entity | 2×2 HQ structure (500 HP) | **Done** | Move full HQ storage semantics to logistics model (remove temporary inventory mirroring) |
+| Ring 0 ore patches | Deterministic difficulty-scaled Ring 0 generation | **Done (v1 slice)** | Add full ore patch runtime: miner adjacency, depletion, renewal, reveal rings |
+| Starter structures | HQ-only at tick 0 | **Done** | — |
+| Difficulty timing | Grace/trickle/gap timing from `difficulty.json` | **Done** | Shift wave composition from formula runtime to authored `waves.json` consumption |
+| Run state | Phase + seed + HQ-linked game-over flow | **Done** | Keep extraction deferred until extraction economy is designed |
+| Restricted geometry | 2×2 HQ footprint restricted cells | **Done** | — |
+| Lifecycle events | `runStarted`, `gracePeriodEnded`, `gameOver` | **Done** | Add summary-screen event consumption in app/UI layer |
+| Extraction UI/command | Hidden/removed for T0 | **Done** | — |
+| End-of-run summary | Summary view after game-over | **Not done** | Implement summary UI + post-summary navigation flow |
+| Raid subsystem cleanup | No separate raid subsystem in v1 | **Partial** (spawning removed, legacy fields remain for compatibility) | Remove/rename remaining legacy raid fields when safe for replay/snapshot migration |
 
 ---
 
-## 9. Implementation Phases
+## 10. Implementation Phases
 
 ### Phase 1: Core Bootstrap (blocks T0 loop)
 - Add `Difficulty` enum and `RunSeed` to `WorldState`.
 - Add `RunPhase` enum (`initializing`, `gracePeriod`, `playing`, `gameOver`, `extracted`) to `RunState`.
 - Refactor `WorldState.bootstrap()` → `WorldState.bootstrap(difficulty:seed:)`.
-- Load starting resources from `hq.json` by difficulty.
+- Load starting resources from `hq.json` by difficulty and timing from `difficulty.json`.
 - Set grace period ticks from difficulty.
 - Emit `runStarted` and `gracePeriodEnded` events.
 
@@ -338,17 +342,17 @@ The current `WorldState.bootstrap()` differs from this PRD in several ways that 
 
 ### Phase 4: Difficulty Tuning (enhances T0, not blocking)
 - Implement full difficulty table for trickle spawns.
-- Add optional early grace-period-end command.
+- Keep grace-period skip disabled for v1 (no early-end command/button).
 - Balance starting resource quantities through playtesting.
 
 ---
 
-## 10. Open Questions
+## 11. Open Questions
 
 1. ~~Should the player choose bootstrap structure placement?~~ **Resolved: HQ only.** The player places everything else. No pre-built production chain.
-2. **Map rotation**: Should the factory-west / spawn-east orientation be fixed, or should spawn direction vary per run for replayability?
-3. **Grace period skipping**: Should the player be able to end grace period early for a score/reward bonus?
-4. **Starting resource balance**: Current difficulty tables from `wave_threat_system.md` were designed assuming some pre-placed structures. With HQ-only bootstrap, do starting resources need to be more generous to cover the cost of placing a power plant + miner + smelter + initial defenses?
+2. ~~Map rotation~~ **Resolved: fixed orientation for v1.** Keep factory-west / spawn-east orientation fixed for tuning consistency and deterministic readability.
+3. ~~Grace period skipping~~ **Resolved: disabled in v1.** No early-end command/button in T0.
+4. ~~Starting resource balance~~ **Resolved: `hq.json` now defines the v1 baseline with a processed starter bundle.** Normal includes enough plate/circuit depth for early power + defense placement; follow-up tuning remains telemetry-driven.
 
 ---
 
@@ -358,3 +362,6 @@ The current `WorldState.bootstrap()` differs from this PRD in several ways that 
 - 2026-02-16: Resolved bootstrap structures — HQ only, player builds everything else.
 - 2026-02-16: Added §6 end-of-run conditions: loss (HQ destroyed), no win condition at T0, summary stats, post-summary flow, complete state machine diagram.
 - 2026-02-16: Cross-PRD alignment: Ring 0 coal now guaranteed (per ore_patches), Ring 0 richness now varied (per ore_patches), ore patch colors corrected to match ore_patches canonical definitions.
+- 2026-02-16: Implementation reconciliation update: bootstrap now uses `difficulty:seed`, HQ entity + phase-based run state are live, `hq.json`/`difficulty.json` are loaded, extraction UI/command removed for T0, and deterministic Ring 0 patch generation landed.
+- 2026-02-16: Decision lock pass: map orientation fixed (factory-west/spawn-east), grace-period skip disabled in v1, and current `hq.json` starting resources kept as the T0 baseline.
+- 2026-02-16: Rebalanced `hq.json` starting resources across all difficulties; added processed starter components (`plate_copper`, `plate_steel`, `gear`, `circuit`, `turret_core`) and increased wall/ammo opening budgets.

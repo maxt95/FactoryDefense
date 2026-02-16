@@ -114,10 +114,6 @@ public final class GameRuntimeController: ObservableObject {
         enqueue(payload: .triggerWave)
     }
 
-    public func extract() {
-        enqueue(payload: .extract)
-    }
-
     public func enqueue(payload: CommandPayload) {
         let command = PlayerCommand(
             tick: world.tick,

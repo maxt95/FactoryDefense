@@ -36,9 +36,14 @@ The HQ begins pre-loaded with enough resources to bootstrap the first production
 | ore_iron | 30 | 20 | 12 |
 | ore_copper | 20 | 12 | 8 |
 | ore_coal | 10 | 6 | 4 |
-| plate_iron | 8 | 4 | 2 |
-| wall_kit | 6 | 4 | 2 |
-| ammo_light | 20 | 12 | 6 |
+| plate_iron | 18 | 14 | 10 |
+| plate_copper | 8 | 6 | 4 |
+| plate_steel | 10 | 8 | 6 |
+| gear | 5 | 4 | 3 |
+| circuit | 5 | 4 | 2 |
+| turret_core | 2 | 1 | 1 |
+| wall_kit | 8 | 6 | 3 |
+| ammo_light | 24 | 16 | 8 |
 
 ### 2.2 HQ Role Across Game Phases
 
@@ -369,8 +374,9 @@ All difficulty-dependent values in one place:
 |---|---|---|---|
 | Grace period | 180s | 120s | 60s |
 | Starting ore_iron | 30 | 20 | 12 |
-| Starting ammo_light | 20 | 12 | 6 |
-| Starting wall_kits | 6 | 4 | 2 |
+| Starting ammo_light | 24 | 16 | 8 |
+| Starting wall_kits | 8 | 6 | 3 |
+| Starting processed bundle | plate/copper/steel + gear/circuit + turret_core | plate/copper/steel + gear/circuit + turret_core | plate/copper/steel + gear/circuit + turret_core |
 | Inter-wave gap (base) | 120s | 90s | 60s |
 | Inter-wave gap (floor) | 70s | 50s | 35s |
 | Wave budget multiplier | ×0.85 | ×1.0 | ×1.15 |
@@ -435,15 +441,21 @@ All difficulty-dependent values in one place:
   "startingResources": {
     "normal": {
       "ore_iron": 20, "ore_copper": 12, "ore_coal": 6,
-      "plate_iron": 4, "wall_kit": 4, "ammo_light": 12
+      "plate_iron": 14, "plate_copper": 6, "plate_steel": 8,
+      "gear": 4, "circuit": 4, "turret_core": 1,
+      "wall_kit": 6, "ammo_light": 16
     },
     "easy": {
       "ore_iron": 30, "ore_copper": 20, "ore_coal": 10,
-      "plate_iron": 8, "wall_kit": 6, "ammo_light": 20
+      "plate_iron": 18, "plate_copper": 8, "plate_steel": 10,
+      "gear": 5, "circuit": 5, "turret_core": 2,
+      "wall_kit": 8, "ammo_light": 24
     },
     "hard": {
       "ore_iron": 12, "ore_copper": 8, "ore_coal": 4,
-      "plate_iron": 2, "wall_kit": 2, "ammo_light": 6
+      "plate_iron": 10, "plate_copper": 4, "plate_steel": 6,
+      "gear": 3, "circuit": 2, "turret_core": 1,
+      "wall_kit": 3, "ammo_light": 8
     }
   }
 }

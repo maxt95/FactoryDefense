@@ -4,6 +4,7 @@ import XCTest
 final class AmmoConsumptionTests: XCTestCase {
     func testTurretsFailToFireWithoutAmmo() {
         var entities = EntityStore()
+        let hqID = entities.spawnStructure(.hq, at: GridPosition(x: 5, y: 5), health: 10, maxHealth: 10)
         _ = entities.spawnStructure(.turretMount, at: GridPosition(x: 0, y: 0))
         let enemyID = entities.spawnEnemy(at: GridPosition(x: 2, y: 0), health: 20)
 
@@ -22,7 +23,7 @@ final class AmmoConsumptionTests: XCTestCase {
                 milestoneEvery: 5,
                 lastMilestoneWave: 0
             ),
-            run: RunState(baseIntegrity: 10),
+            run: RunState(phase: .playing, hqEntityID: hqID),
             combat: CombatState(
                 enemies: [
                     enemyID: EnemyRuntime(
@@ -44,6 +45,6 @@ final class AmmoConsumptionTests: XCTestCase {
         let events = engine.step()
 
         XCTAssertTrue(events.contains(where: { $0.kind == .notEnoughAmmo }))
-        XCTAssertEqual(engine.worldState.run.baseIntegrity, 10)
+        XCTAssertEqual(engine.worldState.hqHealth, 10)
     }
 }

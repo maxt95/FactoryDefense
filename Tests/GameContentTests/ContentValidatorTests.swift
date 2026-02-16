@@ -53,4 +53,62 @@ final class ContentValidatorTests: XCTestCase {
         XCTAssertTrue(errors.contains(.invalidBoard(reason: "spawnEdgeX is out of bounds")))
         XCTAssertTrue(errors.contains(.invalidBoard(reason: "spawn Y range is invalid")))
     }
+
+    func testInvalidDifficultyAndHQAreDetected() {
+        let bundle = GameContentBundle(
+            items: [ItemDef(id: "ore_iron", name: "Iron Ore", kind: .raw)],
+            recipes: [],
+            turrets: [],
+            enemies: [],
+            waves: [],
+            techNodes: [],
+            board: .starter,
+            hq: HQDef(
+                id: "hq",
+                displayName: "Headquarters",
+                footprint: HQFootprintDef(width: 3, height: 2),
+                health: 0,
+                storageCapacity: 0,
+                powerDraw: 0,
+                startingResources: HQStartingResourcesDef(
+                    easy: ["ghost_item": 1],
+                    normal: [:],
+                    hard: [:]
+                )
+            ),
+            difficulty: DifficultyConfigDef(
+                easy: DifficultyDef(
+                    gracePeriodSeconds: 0,
+                    interWaveGapBase: 10,
+                    interWaveGapFloor: 20,
+                    gapCompressionPerWave: -1,
+                    trickleIntervalSeconds: 0,
+                    trickleSize: [2, 1],
+                    waveBudgetMultiplier: 0
+                ),
+                normal: DifficultyDef(
+                    gracePeriodSeconds: 1,
+                    interWaveGapBase: 1,
+                    interWaveGapFloor: 1,
+                    gapCompressionPerWave: 0,
+                    trickleIntervalSeconds: 1,
+                    trickleSize: [1, 1],
+                    waveBudgetMultiplier: 1
+                ),
+                hard: DifficultyDef(
+                    gracePeriodSeconds: 1,
+                    interWaveGapBase: 1,
+                    interWaveGapFloor: 1,
+                    gapCompressionPerWave: 0,
+                    trickleIntervalSeconds: 1,
+                    trickleSize: [1, 1],
+                    waveBudgetMultiplier: 1
+                )
+            )
+        )
+
+        let errors = ContentValidator().validate(bundle: bundle)
+        XCTAssertTrue(errors.contains(.invalidHQ(reason: "hq health must be positive")))
+        XCTAssertTrue(errors.contains(.invalidDifficulty(reason: "easy: gracePeriodSeconds must be positive")))
+    }
 }

@@ -4,7 +4,9 @@ import XCTest
 final class WaveCombatIntegrationTests: XCTestCase {
     func testWaveSpawnsEnemiesAndTurretsFireProjectiles() {
         var world = WorldState.bootstrap()
+        _ = world.entities.spawnStructure(.turretMount, at: GridPosition(x: 50, y: 32))
         world.economy.inventories["ammo_light"] = 400
+        world.run.phase = .playing
         world.threat = ThreatState(
             waveIndex: 0,
             nextWaveTick: 0,
@@ -36,15 +38,28 @@ final class WaveCombatIntegrationTests: XCTestCase {
     }
 
     func testEnemyReachingBaseDamagesIntegrity() {
+        let board = BoardState(
+            width: 6,
+            height: 6,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 5,
+            spawnYMin: 0,
+            spawnYMax: 2,
+            blockedCells: [],
+            restrictedCells: [],
+            ramps: []
+        )
         var entities = EntityStore()
-        let enemyID = entities.spawnEnemy(at: GridPosition(x: 1, y: 0), health: 10)
+        let hqID = entities.spawnStructure(.hq, at: GridPosition(x: 1, y: 1), health: 8, maxHealth: 8)
+        let enemyID = entities.spawnEnemy(at: GridPosition(x: 0, y: 0), health: 10)
 
         let world = WorldState(
             tick: 0,
+            board: board,
             entities: entities,
             economy: EconomyState(),
             threat: ThreatState(),
-            run: RunState(baseIntegrity: 8),
+            run: RunState(phase: .playing, hqEntityID: hqID),
             combat: CombatState(
                 enemies: [
                     enemyID: EnemyRuntime(
@@ -66,7 +81,56 @@ final class WaveCombatIntegrationTests: XCTestCase {
         let events = engine.run(ticks: 2)
 
         XCTAssertTrue(events.contains(where: { $0.kind == .enemyReachedBase }))
-        XCTAssertEqual(engine.worldState.run.baseIntegrity, 6)
+        XCTAssertEqual(engine.worldState.hqHealth, 6)
         XCTAssertTrue(engine.worldState.combat.enemies.isEmpty)
+    }
+
+    func testHQZeroHealthEmitsGameOverAndHaltsSystems() {
+        let board = BoardState(
+            width: 6,
+            height: 6,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 5,
+            spawnYMin: 0,
+            spawnYMax: 2,
+            blockedCells: [],
+            restrictedCells: [],
+            ramps: []
+        )
+        var entities = EntityStore()
+        let hqID = entities.spawnStructure(.hq, at: GridPosition(x: 1, y: 1), health: 2, maxHealth: 2)
+        let enemyID = entities.spawnEnemy(at: GridPosition(x: 0, y: 0), health: 10)
+
+        let world = WorldState(
+            tick: 0,
+            board: board,
+            entities: entities,
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState(phase: .playing, hqEntityID: hqID),
+            combat: CombatState(
+                enemies: [
+                    enemyID: EnemyRuntime(
+                        id: enemyID,
+                        archetype: .scout,
+                        moveEveryTicks: 1,
+                        baseDamage: 2,
+                        rewardCurrency: 1
+                    )
+                ],
+                basePosition: GridPosition(x: 0, y: 0),
+                spawnEdgeX: 3,
+                spawnYMin: 0,
+                spawnYMax: 2
+            )
+        )
+
+        let engine = SimulationEngine(worldState: world, systems: [EnemyMovementSystem()])
+        let firstStepEvents = engine.step()
+        let secondStepEvents = engine.step()
+
+        XCTAssertTrue(firstStepEvents.contains(where: { $0.kind == .gameOver }))
+        XCTAssertEqual(engine.worldState.run.phase, .gameOver)
+        XCTAssertTrue(secondStepEvents.isEmpty)
     }
 }

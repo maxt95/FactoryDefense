@@ -44,7 +44,7 @@ public final class SimulationEngine {
     @discardableResult
     public func step() -> [SimEvent] {
         let previousState = worldState
-        if worldState.run.gameOver || worldState.run.extracted {
+        if worldState.run.phase == .gameOver || worldState.run.phase == .extracted {
             worldState.tick += 1
             interpolationBridge.record(previous: previousState, current: worldState)
             return []

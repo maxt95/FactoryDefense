@@ -32,7 +32,7 @@ let baseHits = events.filter { $0.kind == .enemyReachedBase }.count
 print("FactoryDefensePrototype finished")
 print("tick=\(engine.worldState.tick) waveEvents=\(waveEvents) raidEvents=\(raidEvents) ammoSpent=\(ammoSpent)")
 print("enemiesSpawned=\(spawnedEnemies) enemiesDestroyed=\(destroyedEnemies) baseHits=\(baseHits)")
-print("baseIntegrity=\(engine.worldState.run.baseIntegrity) currency=\(engine.worldState.economy.currency)")
+print("baseIntegrity=\(engine.worldState.hqHealth) currency=\(engine.worldState.economy.currency)")
 
 let snapshotsDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(".local_snapshots")
 let store = FileSnapshotStore(directory: snapshotsDir)

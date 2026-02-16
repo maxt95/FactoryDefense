@@ -2,6 +2,21 @@ import Foundation
 import GameContent
 
 public typealias EntityID = Int
+public typealias RunSeed = UInt64
+
+public enum Difficulty: String, Codable, CaseIterable, Sendable {
+    case easy
+    case normal
+    case hard
+}
+
+public enum RunPhase: String, Codable, Sendable {
+    case initializing
+    case gracePeriod
+    case playing
+    case gameOver
+    case extracted
+}
 
 public struct PlayerID: Codable, Hashable, Sendable, Comparable {
     public var rawValue: Int
@@ -38,6 +53,7 @@ public struct GridPosition: Codable, Hashable, Sendable {
 }
 
 public enum StructureType: String, Codable, CaseIterable, Sendable {
+    case hq
     case wall
     case turretMount
     case miner
@@ -78,7 +94,7 @@ public struct StructureFootprint: Codable, Hashable, Sendable {
 public extension StructureType {
     var footprint: StructureFootprint {
         switch self {
-        case .turretMount, .powerPlant, .storage:
+        case .hq, .turretMount, .powerPlant, .storage:
             return StructureFootprint(width: 2, height: 2)
         case .wall, .miner, .smelter, .assembler, .ammoModule, .conveyor:
             return StructureFootprint(width: 1, height: 1)
@@ -91,6 +107,8 @@ public extension StructureType {
 
     var buildCosts: [ItemStack] {
         switch self {
+        case .hq:
+            return []
         case .powerPlant:
             return [ItemStack(itemID: "circuit", quantity: 2), ItemStack(itemID: "plate_copper", quantity: 4)]
         case .miner:
@@ -114,6 +132,8 @@ public extension StructureType {
 
     var powerDemand: Int {
         switch self {
+        case .hq:
+            return 0
         case .powerPlant:
             return -12
         case .miner:
@@ -215,6 +235,9 @@ public struct PlayerCommand: Codable, Hashable, Sendable {
 }
 
 public enum EventKind: String, Codable, Sendable {
+    case runStarted
+    case gracePeriodEnded
+    case gameOver
     case waveStarted
     case waveEnded
     case raidTriggered
@@ -465,17 +488,35 @@ public struct ThreatState: Codable, Hashable, Sendable {
     public var waveDurationTicks: UInt64
     public var waveEndsAtTick: UInt64?
     public var isWaveActive: Bool
+    public var waveGapBaseTicks: UInt64
+    public var waveGapFloorTicks: UInt64
+    public var waveGapCompressionTicks: UInt64
+    public var gracePeriodTicks: UInt64
+    public var graceEndsAtTick: UInt64
+    public var trickleIntervalTicks: UInt64
+    public var trickleMinCount: Int
+    public var trickleMaxCount: Int
+    public var nextTrickleTick: UInt64
     public var raidCooldownUntilTick: UInt64
     public var milestoneEvery: Int
     public var lastMilestoneWave: Int
 
     public init(
         waveIndex: Int = 0,
-        nextWaveTick: UInt64 = 400,
-        waveIntervalTicks: UInt64 = 400,
+        nextWaveTick: UInt64 = 0,
+        waveIntervalTicks: UInt64 = 1_800,
         waveDurationTicks: UInt64 = 160,
         waveEndsAtTick: UInt64? = nil,
         isWaveActive: Bool = false,
+        waveGapBaseTicks: UInt64? = nil,
+        waveGapFloorTicks: UInt64 = 1_000,
+        waveGapCompressionTicks: UInt64 = 40,
+        gracePeriodTicks: UInt64 = 2_400,
+        graceEndsAtTick: UInt64? = nil,
+        trickleIntervalTicks: UInt64 = 240,
+        trickleMinCount: Int = 1,
+        trickleMaxCount: Int = 2,
+        nextTrickleTick: UInt64 = 0,
         raidCooldownUntilTick: UInt64 = 0,
         milestoneEvery: Int = 5,
         lastMilestoneWave: Int = 0
@@ -486,6 +527,15 @@ public struct ThreatState: Codable, Hashable, Sendable {
         self.waveDurationTicks = waveDurationTicks
         self.waveEndsAtTick = waveEndsAtTick
         self.isWaveActive = isWaveActive
+        self.waveGapBaseTicks = waveGapBaseTicks ?? waveIntervalTicks
+        self.waveGapFloorTicks = waveGapFloorTicks
+        self.waveGapCompressionTicks = waveGapCompressionTicks
+        self.gracePeriodTicks = gracePeriodTicks
+        self.graceEndsAtTick = graceEndsAtTick ?? gracePeriodTicks
+        self.trickleIntervalTicks = max(1, trickleIntervalTicks)
+        self.trickleMinCount = max(1, trickleMinCount)
+        self.trickleMaxCount = max(self.trickleMinCount, trickleMaxCount)
+        self.nextTrickleTick = nextTrickleTick
         self.raidCooldownUntilTick = raidCooldownUntilTick
         self.milestoneEvery = milestoneEvery
         self.lastMilestoneWave = lastMilestoneWave
@@ -493,14 +543,76 @@ public struct ThreatState: Codable, Hashable, Sendable {
 }
 
 public struct RunState: Codable, Hashable, Sendable {
-    public var baseIntegrity: Int
-    public var extracted: Bool
-    public var gameOver: Bool
+    public var phase: RunPhase
+    public var difficulty: Difficulty
+    public var seed: RunSeed
+    public var hqEntityID: EntityID?
+    public var runStartedEmitted: Bool
+    public var gracePeriodEndedEmitted: Bool
+    public var gameOverEmitted: Bool
 
-    public init(baseIntegrity: Int = 100, extracted: Bool = false, gameOver: Bool = false) {
-        self.baseIntegrity = baseIntegrity
-        self.extracted = extracted
-        self.gameOver = gameOver
+    public init(
+        phase: RunPhase = .gracePeriod,
+        difficulty: Difficulty = .normal,
+        seed: RunSeed = 0,
+        hqEntityID: EntityID? = nil,
+        runStartedEmitted: Bool = false,
+        gracePeriodEndedEmitted: Bool = false,
+        gameOverEmitted: Bool = false
+    ) {
+        self.phase = phase
+        self.difficulty = difficulty
+        self.seed = seed
+        self.hqEntityID = hqEntityID
+        self.runStartedEmitted = runStartedEmitted
+        self.gracePeriodEndedEmitted = gracePeriodEndedEmitted
+        self.gameOverEmitted = gameOverEmitted
+    }
+
+    public var gameOver: Bool {
+        get { phase == .gameOver }
+        set {
+            if newValue {
+                phase = .gameOver
+            } else if phase == .gameOver {
+                phase = .playing
+            }
+        }
+    }
+
+    public var extracted: Bool {
+        get { phase == .extracted }
+        set {
+            if newValue {
+                phase = .extracted
+            } else if phase == .extracted {
+                phase = .playing
+            }
+        }
+    }
+}
+
+public enum OrePatchRichness: String, Codable, Sendable {
+    case poor
+    case normal
+    case rich
+}
+
+public struct OrePatch: Codable, Hashable, Sendable {
+    public var id: Int
+    public var oreType: ItemID
+    public var richness: OrePatchRichness
+    public var position: GridPosition
+    public var totalOre: Int
+    public var remainingOre: Int
+
+    public init(id: Int, oreType: ItemID, richness: OrePatchRichness, position: GridPosition, totalOre: Int, remainingOre: Int) {
+        self.id = id
+        self.oreType = oreType
+        self.richness = richness
+        self.position = position
+        self.totalOre = totalOre
+        self.remainingOre = remainingOre
     }
 }
 
@@ -508,6 +620,7 @@ public struct WorldState: Codable, Hashable, Sendable {
     public var tick: UInt64
     public var board: BoardState
     public var entities: EntityStore
+    public var orePatches: [OrePatch]
     public var economy: EconomyState
     public var threat: ThreatState
     public var run: RunState
@@ -517,6 +630,7 @@ public struct WorldState: Codable, Hashable, Sendable {
         tick: UInt64,
         board: BoardState = .bootstrap(),
         entities: EntityStore,
+        orePatches: [OrePatch] = [],
         economy: EconomyState,
         threat: ThreatState,
         run: RunState,
@@ -525,31 +639,39 @@ public struct WorldState: Codable, Hashable, Sendable {
         self.tick = tick
         self.board = board
         self.entities = entities
+        self.orePatches = orePatches
         self.economy = economy
         self.threat = threat
         self.run = run
         self.combat = combat
     }
 
-    public static func bootstrap() -> WorldState {
-        let board = BoardState.bootstrap()
+    public static func bootstrap(difficulty: Difficulty = .normal, seed: RunSeed = 0) -> WorldState {
+        let content = CanonicalBootstrapContent.bundle ?? .empty
+        var board = BoardState(definition: content.board)
         var store = EntityStore()
-        _ = store.spawnStructure(.powerPlant, at: GridPosition(x: 39, y: 30))
-        _ = store.spawnStructure(.miner, at: GridPosition(x: 40, y: 30))
-        _ = store.spawnStructure(.smelter, at: GridPosition(x: 41, y: 30))
-        _ = store.spawnStructure(.ammoModule, at: GridPosition(x: 42, y: 30))
-        _ = store.spawnStructure(.turretMount, at: GridPosition(x: 43, y: 31))
-        _ = store.spawnStructure(.turretMount, at: GridPosition(x: 43, y: 33))
 
-        var startupPowerAvailable = 0
-        var startupPowerDemand = 0
-        for structure in store.all where structure.category == .structure {
-            guard let structureType = structure.structureType else { continue }
-            let demand = structureType.powerDemand
-            if demand < 0 {
-                startupPowerAvailable += abs(demand)
-            } else {
-                startupPowerDemand += demand
+        let hqID = store.spawnStructure(
+            .hq,
+            at: board.basePosition,
+            health: max(1, content.hq.health),
+            maxHealth: max(1, content.hq.health)
+        )
+
+        let difficultyID = DifficultyID(rawValue: difficulty.rawValue) ?? .normal
+        let difficultyValues = content.difficulty.values(for: difficultyID)
+        let graceTicks = UInt64(max(1, difficultyValues.gracePeriodSeconds) * 20)
+        let waveBaseTicks = UInt64(max(1, difficultyValues.interWaveGapBase) * 20)
+        let waveFloorTicks = UInt64(max(1, difficultyValues.interWaveGapFloor) * 20)
+        let waveCompressionTicks = UInt64(max(0, difficultyValues.gapCompressionPerWave) * 20)
+        let trickleTicks = UInt64(max(1, difficultyValues.trickleIntervalSeconds) * 20)
+        let startingResources = content.hq.startingResources.values(for: difficultyID)
+
+        let orePatches = generateRing0OrePatches(seed: seed, difficulty: difficulty)
+        for patch in orePatches {
+            let cell = GridPosition(x: patch.position.x, y: patch.position.y, z: 0)
+            if !board.restrictedCells.contains(where: { $0.x == cell.x && $0.y == cell.y }) {
+                board.restrictedCells.append(cell)
             }
         }
 
@@ -557,23 +679,38 @@ public struct WorldState: Codable, Hashable, Sendable {
             tick: 0,
             board: board,
             entities: store,
+            orePatches: orePatches,
             economy: EconomyState(
-                inventories: [
-                    "ore_iron": 10,
-                    "ammo_light": 80,
-                    // Starter construction stock prevents early-game deadlock
-                    // while recipe pinning and richer logistics are still pending.
-                    "plate_iron": 12,
-                    "plate_copper": 4,
-                    "plate_steel": 4,
-                    "gear": 6,
-                    "circuit": 4
-                ],
-                powerAvailable: startupPowerAvailable,
-                powerDemand: startupPowerDemand
+                inventories: startingResources,
+                structureInputBuffers: [hqID: startingResources],
+                structureOutputBuffers: [hqID: startingResources]
             ),
-            threat: ThreatState(),
-            run: RunState(),
+            threat: ThreatState(
+                waveIndex: 0,
+                nextWaveTick: graceTicks + waveBaseTicks,
+                waveIntervalTicks: waveBaseTicks,
+                waveDurationTicks: 160,
+                waveEndsAtTick: nil,
+                isWaveActive: false,
+                waveGapBaseTicks: waveBaseTicks,
+                waveGapFloorTicks: waveFloorTicks,
+                waveGapCompressionTicks: waveCompressionTicks,
+                gracePeriodTicks: graceTicks,
+                graceEndsAtTick: graceTicks,
+                trickleIntervalTicks: trickleTicks,
+                trickleMinCount: max(1, difficultyValues.trickleSize.first ?? 1),
+                trickleMaxCount: max(1, difficultyValues.trickleSize.dropFirst().first ?? 1),
+                nextTrickleTick: graceTicks,
+                raidCooldownUntilTick: 0,
+                milestoneEvery: 5,
+                lastMilestoneWave: 0
+            ),
+            run: RunState(
+                phase: .gracePeriod,
+                difficulty: difficulty,
+                seed: seed,
+                hqEntityID: hqID
+            ),
             combat: CombatState(
                 basePosition: board.basePosition,
                 spawnEdgeX: board.spawnEdgeX,
@@ -581,6 +718,179 @@ public struct WorldState: Codable, Hashable, Sendable {
                 spawnYMax: board.spawnYMax
             )
         )
+    }
+
+    public var hqHealth: Int {
+        guard let hqID = run.hqEntityID else { return 0 }
+        return entities.entity(id: hqID)?.health ?? 0
+    }
+
+    public var hqMaxHealth: Int {
+        guard let hqID = run.hqEntityID else { return 0 }
+        return entities.entity(id: hqID)?.maxHealth ?? 0
+    }
+}
+
+private enum CanonicalBootstrapContent {
+    static let bundle: GameContentBundle? = {
+        let contentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Content/bootstrap")
+        return try? ContentLoader().loadBundle(from: contentDirectory)
+    }()
+}
+
+private struct DeterministicRNG {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        self.state = seed == 0 ? 0xA076_1D64_78BD_642F : seed
+    }
+
+    mutating func nextUInt64() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+
+    mutating func nextInt(upperBound: Int) -> Int {
+        guard upperBound > 1 else { return 0 }
+        return Int(nextUInt64() % UInt64(upperBound))
+    }
+}
+
+private func generateRing0OrePatches(seed: RunSeed, difficulty: Difficulty) -> [OrePatch] {
+    let patchCount: Int
+    switch difficulty {
+    case .easy:
+        patchCount = 7
+    case .normal:
+        patchCount = 5
+    case .hard:
+        patchCount = 3
+    }
+
+    let minX = 34
+    let maxX = 46
+    let minY = 26
+    let maxY = 38
+    let restrictedCells: Set<GridPosition> = [
+        GridPosition(x: 39, y: 31),
+        GridPosition(x: 40, y: 31),
+        GridPosition(x: 39, y: 32),
+        GridPosition(x: 40, y: 32),
+        GridPosition(x: 47, y: 31),
+        GridPosition(x: 47, y: 32),
+        GridPosition(x: 47, y: 33)
+    ]
+
+    var candidates: [GridPosition] = []
+    for y in minY...maxY {
+        for x in minX...maxX {
+            let position = GridPosition(x: x, y: y)
+            if !restrictedCells.contains(position) {
+                candidates.append(position)
+            }
+        }
+    }
+    candidates.sort {
+        if $0.y == $1.y { return $0.x < $1.x }
+        return $0.y < $1.y
+    }
+
+    var rng = DeterministicRNG(seed: seed)
+    var placed: [GridPosition] = []
+
+    func isValid(_ candidate: GridPosition) -> Bool {
+        placed.allSatisfy { existing in
+            max(abs(existing.x - candidate.x), abs(existing.y - candidate.y)) >= 3
+        }
+    }
+
+    func pickPosition() -> GridPosition? {
+        guard !candidates.isEmpty else { return nil }
+        for _ in 0..<(candidates.count * 2) {
+            let candidate = candidates[rng.nextInt(upperBound: candidates.count)]
+            if isValid(candidate) {
+                return candidate
+            }
+        }
+        return candidates.first(where: isValid)
+    }
+
+    func rollRichness() -> OrePatchRichness {
+        let roll = rng.nextInt(upperBound: 100)
+        if roll < 40 { return .poor }
+        if roll < 90 { return .normal }
+        return .rich
+    }
+
+    func oreAmount(itemID: ItemID, richness: OrePatchRichness) -> Int {
+        switch (itemID, richness) {
+        case ("ore_iron", .poor): return 300
+        case ("ore_iron", .normal): return 500
+        case ("ore_iron", .rich): return 800
+        case ("ore_copper", .poor): return 200
+        case ("ore_copper", .normal): return 400
+        case ("ore_copper", .rich): return 650
+        case ("ore_coal", .poor): return 150
+        case ("ore_coal", .normal): return 300
+        case ("ore_coal", .rich): return 500
+        default: return 300
+        }
+    }
+
+    func rollOreType() -> ItemID {
+        let roll = rng.nextInt(upperBound: 20)
+        if roll < 10 { return "ore_iron" }
+        if roll < 16 { return "ore_copper" }
+        return "ore_coal"
+    }
+
+    var patches: [OrePatch] = []
+    let guaranteedTypes: [ItemID] = ["ore_iron", "ore_copper", "ore_coal"]
+    let guaranteedCount = min(patchCount, guaranteedTypes.count)
+    for oreType in guaranteedTypes.prefix(guaranteedCount) {
+        guard let position = pickPosition() else { break }
+        placed.append(position)
+        let richness = rollRichness()
+        let totalOre = oreAmount(itemID: oreType, richness: richness)
+        patches.append(
+            OrePatch(
+                id: patches.count + 1,
+                oreType: oreType,
+                richness: richness,
+                position: position,
+                totalOre: totalOre,
+                remainingOre: totalOre
+            )
+        )
+    }
+
+    while patches.count < patchCount {
+        guard let position = pickPosition() else { break }
+        placed.append(position)
+        let oreType = rollOreType()
+        let richness = rollRichness()
+        let totalOre = oreAmount(itemID: oreType, richness: richness)
+        patches.append(
+            OrePatch(
+                id: patches.count + 1,
+                oreType: oreType,
+                richness: richness,
+                position: position,
+                totalOre: totalOre,
+                remainingOre: totalOre
+            )
+        )
+    }
+
+    return patches.sorted { lhs, rhs in
+        if lhs.position.x == rhs.position.x {
+            return lhs.position.y < rhs.position.y
+        }
+        return lhs.position.x < rhs.position.x
     }
 }
 

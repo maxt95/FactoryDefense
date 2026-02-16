@@ -4,6 +4,12 @@ public typealias ItemID = String
 public typealias UnlockID = String
 public typealias EnemyID = String
 
+public enum DifficultyID: String, Codable, CaseIterable, Sendable {
+    case easy
+    case normal
+    case hard
+}
+
 public enum ItemKind: String, Codable, CaseIterable, Sendable {
     case raw
     case processed
@@ -185,17 +191,208 @@ public struct BoardDef: Codable, Hashable, Sendable {
         spawnYMax: 36,
         blockedCells: [],
         restrictedCells: [
-            BoardPointDef(x: 40, y: 32),
-            BoardPointDef(x: 39, y: 32),
-            BoardPointDef(x: 41, y: 32),
+            BoardPointDef(x: 39, y: 31),
             BoardPointDef(x: 40, y: 31),
-            BoardPointDef(x: 40, y: 33)
+            BoardPointDef(x: 39, y: 32),
+            BoardPointDef(x: 40, y: 32)
         ],
         ramps: [
             BoardRampDef(position: BoardPointDef(x: 47, y: 31), elevation: 1),
             BoardRampDef(position: BoardPointDef(x: 47, y: 32), elevation: 1),
             BoardRampDef(position: BoardPointDef(x: 47, y: 33), elevation: 1)
         ]
+    )
+}
+
+public struct HQFootprintDef: Codable, Hashable, Sendable {
+    public var width: Int
+    public var height: Int
+
+    public init(width: Int, height: Int) {
+        self.width = width
+        self.height = height
+    }
+}
+
+public struct HQStartingResourcesDef: Codable, Hashable, Sendable {
+    public var easy: [ItemID: Int]
+    public var normal: [ItemID: Int]
+    public var hard: [ItemID: Int]
+
+    public init(easy: [ItemID: Int], normal: [ItemID: Int], hard: [ItemID: Int]) {
+        self.easy = easy
+        self.normal = normal
+        self.hard = hard
+    }
+
+    public func values(for difficulty: DifficultyID) -> [ItemID: Int] {
+        switch difficulty {
+        case .easy:
+            return easy
+        case .normal:
+            return normal
+        case .hard:
+            return hard
+        }
+    }
+}
+
+public struct HQDef: Codable, Hashable, Sendable {
+    public var id: String
+    public var displayName: String
+    public var footprint: HQFootprintDef
+    public var health: Int
+    public var storageCapacity: Int
+    public var powerDraw: Int
+    public var startingResources: HQStartingResourcesDef
+
+    public init(
+        id: String,
+        displayName: String,
+        footprint: HQFootprintDef,
+        health: Int,
+        storageCapacity: Int,
+        powerDraw: Int,
+        startingResources: HQStartingResourcesDef
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.footprint = footprint
+        self.health = health
+        self.storageCapacity = storageCapacity
+        self.powerDraw = powerDraw
+        self.startingResources = startingResources
+    }
+
+    public static let v1Default = HQDef(
+        id: "hq",
+        displayName: "Headquarters",
+        footprint: HQFootprintDef(width: 2, height: 2),
+        health: 500,
+        storageCapacity: 24,
+        powerDraw: 0,
+        startingResources: HQStartingResourcesDef(
+            easy: [
+                "ore_iron": 30,
+                "ore_copper": 20,
+                "ore_coal": 10,
+                "plate_iron": 18,
+                "plate_copper": 8,
+                "plate_steel": 10,
+                "gear": 5,
+                "circuit": 5,
+                "turret_core": 2,
+                "wall_kit": 8,
+                "ammo_light": 24
+            ],
+            normal: [
+                "ore_iron": 20,
+                "ore_copper": 12,
+                "ore_coal": 6,
+                "plate_iron": 14,
+                "plate_copper": 6,
+                "plate_steel": 8,
+                "gear": 4,
+                "circuit": 4,
+                "turret_core": 1,
+                "wall_kit": 6,
+                "ammo_light": 16
+            ],
+            hard: [
+                "ore_iron": 12,
+                "ore_copper": 8,
+                "ore_coal": 4,
+                "plate_iron": 10,
+                "plate_copper": 4,
+                "plate_steel": 6,
+                "gear": 3,
+                "circuit": 2,
+                "turret_core": 1,
+                "wall_kit": 3,
+                "ammo_light": 8
+            ]
+        )
+    )
+}
+
+public struct DifficultyDef: Codable, Hashable, Sendable {
+    public var gracePeriodSeconds: Int
+    public var interWaveGapBase: Int
+    public var interWaveGapFloor: Int
+    public var gapCompressionPerWave: Int
+    public var trickleIntervalSeconds: Int
+    public var trickleSize: [Int]
+    public var waveBudgetMultiplier: Double
+
+    public init(
+        gracePeriodSeconds: Int,
+        interWaveGapBase: Int,
+        interWaveGapFloor: Int,
+        gapCompressionPerWave: Int,
+        trickleIntervalSeconds: Int,
+        trickleSize: [Int],
+        waveBudgetMultiplier: Double
+    ) {
+        self.gracePeriodSeconds = gracePeriodSeconds
+        self.interWaveGapBase = interWaveGapBase
+        self.interWaveGapFloor = interWaveGapFloor
+        self.gapCompressionPerWave = gapCompressionPerWave
+        self.trickleIntervalSeconds = trickleIntervalSeconds
+        self.trickleSize = trickleSize
+        self.waveBudgetMultiplier = waveBudgetMultiplier
+    }
+}
+
+public struct DifficultyConfigDef: Codable, Hashable, Sendable {
+    public var easy: DifficultyDef
+    public var normal: DifficultyDef
+    public var hard: DifficultyDef
+
+    public init(easy: DifficultyDef, normal: DifficultyDef, hard: DifficultyDef) {
+        self.easy = easy
+        self.normal = normal
+        self.hard = hard
+    }
+
+    public func values(for difficulty: DifficultyID) -> DifficultyDef {
+        switch difficulty {
+        case .easy:
+            return easy
+        case .normal:
+            return normal
+        case .hard:
+            return hard
+        }
+    }
+
+    public static let v1Default = DifficultyConfigDef(
+        easy: DifficultyDef(
+            gracePeriodSeconds: 180,
+            interWaveGapBase: 120,
+            interWaveGapFloor: 70,
+            gapCompressionPerWave: 2,
+            trickleIntervalSeconds: 15,
+            trickleSize: [1, 1],
+            waveBudgetMultiplier: 0.85
+        ),
+        normal: DifficultyDef(
+            gracePeriodSeconds: 120,
+            interWaveGapBase: 90,
+            interWaveGapFloor: 50,
+            gapCompressionPerWave: 2,
+            trickleIntervalSeconds: 12,
+            trickleSize: [1, 2],
+            waveBudgetMultiplier: 1.0
+        ),
+        hard: DifficultyDef(
+            gracePeriodSeconds: 60,
+            interWaveGapBase: 60,
+            interWaveGapFloor: 35,
+            gapCompressionPerWave: 2,
+            trickleIntervalSeconds: 8,
+            trickleSize: [2, 3],
+            waveBudgetMultiplier: 1.15
+        )
     )
 }
 
@@ -207,6 +404,8 @@ public struct GameContentBundle: Codable, Sendable {
     public var waves: [WaveDef]
     public var techNodes: [TechNodeDef]
     public var board: BoardDef
+    public var hq: HQDef
+    public var difficulty: DifficultyConfigDef
 
     public init(
         items: [ItemDef],
@@ -215,7 +414,9 @@ public struct GameContentBundle: Codable, Sendable {
         enemies: [EnemyDef],
         waves: [WaveDef],
         techNodes: [TechNodeDef],
-        board: BoardDef = .starter
+        board: BoardDef = .starter,
+        hq: HQDef = .v1Default,
+        difficulty: DifficultyConfigDef = .v1Default
     ) {
         self.items = items
         self.recipes = recipes
@@ -224,6 +425,8 @@ public struct GameContentBundle: Codable, Sendable {
         self.waves = waves
         self.techNodes = techNodes
         self.board = board
+        self.hq = hq
+        self.difficulty = difficulty
     }
 
     public static let empty = GameContentBundle(
@@ -233,7 +436,9 @@ public struct GameContentBundle: Codable, Sendable {
         enemies: [],
         waves: [],
         techNodes: [],
-        board: .starter
+        board: .starter,
+        hq: .v1Default,
+        difficulty: .v1Default
     )
 }
 

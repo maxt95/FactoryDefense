@@ -1,0 +1,49 @@
+{
+  "id": "hq",
+  "displayName": "Headquarters",
+  "footprint": { "width": 2, "height": 2 },
+  "health": 500,
+  "storageCapacity": 24,
+  "powerDraw": 0,
+  "startingResources": {
+    "normal": {
+      "ore_iron": 20,
+      "ore_copper": 12,
+      "ore_coal": 6,
+      "plate_iron": 14,
+      "plate_copper": 6,
+      "plate_steel": 8,
+      "gear": 4,
+      "circuit": 4,
+      "turret_core": 1,
+      "wall_kit": 6,
+      "ammo_light": 16
+    },
+    "easy": {
+      "ore_iron": 30,
+      "ore_copper": 20,
+      "ore_coal": 10,
+      "plate_iron": 18,
+      "plate_copper": 8,
+      "plate_steel": 10,
+      "gear": 5,
+      "circuit": 5,
+      "turret_core": 2,
+      "wall_kit": 8,
+      "ammo_light": 24
+    },
+    "hard": {
+      "ore_iron": 12,
+      "ore_copper": 8,
+      "ore_coal": 4,
+      "plate_iron": 10,
+      "plate_copper": 4,
+      "plate_steel": 6,
+      "gear": 3,
+      "circuit": 2,
+      "turret_core": 1,
+      "wall_kit": 3,
+      "ammo_light": 8
+    }
+  }
+}

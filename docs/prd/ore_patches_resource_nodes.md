@@ -84,8 +84,8 @@ The player should never feel permanently resource-starved, but should always fee
 | Ore items (ore_iron, ore_copper, ore_coal) in `items.json` | Exists |
 | Miner structure type in `SimulationTypes.swift` | Exists |
 | Miner ore generation (global, no patches) in `EconomySystem` | Exists — placeholder, must be replaced |
-| Ore patch entity type | Does not exist |
-| Patch generation / map layout | Does not exist |
+| Ore patch entity/runtime type | Exists — bootstrap `OrePatch` model and deterministic Ring 0 generation landed |
+| Patch generation / map layout | Partial — Ring 0 deterministic placement exists; full ring reveal/renewal generation remains |
 | Depletion tracking | Does not exist |
 | Reveal ring system | Does not exist |
 | Renewal spawning | Does not exist |

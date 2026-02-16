@@ -63,8 +63,8 @@ public struct CommandSystem: SimulationSystem {
                 )
                 _ = state.entities.spawnStructure(request.structure, at: placementPosition)
             case .extract:
-                state.run.extracted = true
-                context.emit(SimEvent(tick: state.tick, kind: .extracted, value: state.economy.currency))
+                // Extraction is deferred for v1; command retained for snapshot compatibility.
+                continue
             case .triggerWave:
                 state.threat.nextWaveTick = state.tick
             }
@@ -676,6 +676,27 @@ public struct WaveSystem: SimulationSystem {
     }
 
     public func update(state: inout WorldState, context: SystemContext) {
+        emitLifecycleEvents(state: &state, context: context)
+
+        if state.run.phase == .gracePeriod {
+            guard state.tick >= state.threat.graceEndsAtTick else { return }
+            state.run.phase = .playing
+            state.threat.nextTrickleTick = state.tick
+            state.threat.nextWaveTick = state.tick + state.threat.waveGapBaseTicks
+            if !state.run.gracePeriodEndedEmitted {
+                state.run.gracePeriodEndedEmitted = true
+                context.emit(SimEvent(tick: state.tick, kind: .gracePeriodEnded))
+            }
+            return
+        }
+
+        guard state.run.phase == .playing else { return }
+
+        if state.tick >= state.threat.nextTrickleTick {
+            spawnTrickleEnemies(state: &state, context: context)
+            state.threat.nextTrickleTick = state.tick + state.threat.trickleIntervalTicks
+        }
+
         if !state.threat.isWaveActive && state.tick >= state.threat.nextWaveTick {
             state.threat.isWaveActive = true
             state.threat.waveIndex += 1
@@ -689,7 +710,7 @@ public struct WaveSystem: SimulationSystem {
            state.tick >= endTick {
             state.threat.isWaveActive = false
             state.threat.waveEndsAtTick = nil
-            state.threat.nextWaveTick = state.tick + state.threat.waveIntervalTicks
+            state.threat.nextWaveTick = state.tick + nextWaveGapTicks(state: state)
             context.emit(SimEvent(tick: state.tick, kind: .waveEnded, value: state.threat.waveIndex))
 
             if state.threat.waveIndex % state.threat.milestoneEvery == 0,
@@ -698,20 +719,6 @@ public struct WaveSystem: SimulationSystem {
                 let milestoneReward = state.threat.waveIndex * 10
                 state.economy.currency += milestoneReward
                 context.emit(SimEvent(tick: state.tick, kind: .milestoneReached, value: state.threat.waveIndex))
-            }
-        }
-
-        guard enableRaids else { return }
-        guard state.tick >= state.threat.raidCooldownUntilTick else { return }
-
-        let roll = deterministicRaidRoll(tick: state.tick, wave: state.threat.waveIndex, modulus: raidRollModulus)
-        if roll <= raidRollTrigger {
-            state.threat.raidCooldownUntilTick = state.tick + raidCooldownTicks
-            state.run.baseIntegrity = max(0, state.run.baseIntegrity - 2)
-            context.emit(SimEvent(tick: state.tick, kind: .raidTriggered, value: Int(roll)))
-            spawnRaidEnemies(state: &state, context: context)
-            if state.run.baseIntegrity == 0 {
-                state.run.gameOver = true
             }
         }
     }
@@ -725,7 +732,7 @@ public struct WaveSystem: SimulationSystem {
             let archetype: EnemyArchetype = isRaider ? .raider : .scout
             let health = isRaider ? (45 + wave * 5) : (20 + wave * 3)
             let moveEvery = isRaider ? max(4, 10 - wave / 3) : max(3, 8 - wave / 4)
-            let damage = isRaider ? 3 : 1
+            let damage = isRaider ? 12 : 8
             let reward = isRaider ? (4 + wave / 2) : (2 + wave / 3)
 
             spawnEnemy(
@@ -742,21 +749,35 @@ public struct WaveSystem: SimulationSystem {
         }
     }
 
-    private func spawnRaidEnemies(state: inout WorldState, context: SystemContext) {
-        let wave = max(1, state.threat.waveIndex)
-        let raidCount = min(8, max(1, 1 + wave / 3))
+    private func spawnTrickleEnemies(state: inout WorldState, context: SystemContext) {
+        let minCount = max(1, state.threat.trickleMinCount)
+        let maxCount = max(minCount, state.threat.trickleMaxCount)
+        let span = maxCount - minCount + 1
+        let count = minCount + deterministicRoll(tick: state.tick, wave: state.threat.waveIndex, modulus: UInt64(span))
 
-        for offset in 0..<raidCount {
+        for offset in 0..<count {
+            let roll = deterministicRoll(
+                tick: state.tick + UInt64(offset),
+                wave: state.threat.waveIndex + offset,
+                modulus: 4
+            )
+            let spawnRaiderOnHard = state.run.difficulty == .hard && roll == 0
+            let archetype: EnemyArchetype = spawnRaiderOnHard ? .raider : .scout
+            let health = spawnRaiderOnHard ? 45 : 20
+            let moveEveryTicks: UInt64 = spawnRaiderOnHard ? 6 : 8
+            let damage = spawnRaiderOnHard ? 12 : 8
+            let reward = spawnRaiderOnHard ? 3 : 1
+
             spawnEnemy(
                 state: &state,
                 context: context,
-                wave: wave + 10,
-                index: offset,
-                archetype: .raider,
-                health: 55 + wave * 5,
-                moveEveryTicks: UInt64(max(3, 7 - wave / 4)),
-                baseDamage: 3,
-                rewardCurrency: 5 + wave / 2
+                wave: state.threat.waveIndex,
+                index: offset + 100,
+                archetype: archetype,
+                health: health,
+                moveEveryTicks: moveEveryTicks,
+                baseDamage: damage,
+                rewardCurrency: reward
             )
         }
     }
@@ -788,9 +809,24 @@ public struct WaveSystem: SimulationSystem {
         context.emit(SimEvent(tick: state.tick, kind: .enemySpawned, entity: enemyID, value: health))
     }
 
-    private func deterministicRaidRoll(tick: UInt64, wave: Int, modulus: UInt64) -> UInt64 {
-        let seed = tick &* 1_103_515_245 &+ UInt64(wave &* 12_345) &+ 0x9E3779B97F4A7C15
-        return seed % max(1, modulus)
+    private func emitLifecycleEvents(state: inout WorldState, context: SystemContext) {
+        if !state.run.runStartedEmitted {
+            state.run.runStartedEmitted = true
+            context.emit(SimEvent(tick: state.tick, kind: .runStarted))
+        }
+    }
+
+    private func nextWaveGapTicks(state: WorldState) -> UInt64 {
+        let compression = UInt64(max(0, state.threat.waveIndex)) * state.threat.waveGapCompressionTicks
+        let compressed = state.threat.waveGapBaseTicks > compression
+            ? state.threat.waveGapBaseTicks - compression
+            : 0
+        return max(state.threat.waveGapFloorTicks, compressed)
+    }
+
+    private func deterministicRoll(tick: UInt64, wave: Int, modulus: UInt64) -> Int {
+        let seed = tick &* 1_103_515_245 &+ UInt64(max(0, wave) &* 12_345) &+ 0x9E3779B97F4A7C15
+        return Int(seed % max(1, modulus))
     }
 }
 
@@ -840,13 +876,19 @@ public struct EnemyMovementSystem: SimulationSystem {
     }
 
     private func applyBaseHit(state: inout WorldState, context: SystemContext, enemyID: EntityID, damage: Int) {
-        state.run.baseIntegrity = max(0, state.run.baseIntegrity - max(1, damage))
         context.emit(SimEvent(tick: state.tick, kind: .enemyReachedBase, entity: enemyID, value: damage))
         state.entities.remove(enemyID)
         state.combat.enemies.removeValue(forKey: enemyID)
 
-        if state.run.baseIntegrity == 0 {
-            state.run.gameOver = true
+        guard let hqID = state.run.hqEntityID else { return }
+        state.entities.damage(hqID, amount: max(1, damage))
+        let hqHealth = state.entities.entity(id: hqID)?.health ?? 0
+        if hqHealth == 0 {
+            state.run.phase = .gameOver
+            if !state.run.gameOverEmitted {
+                state.run.gameOverEmitted = true
+                context.emit(SimEvent(tick: state.tick, kind: .gameOver, value: Int(min(state.tick, UInt64(Int.max)))))
+            }
         }
     }
 }
