@@ -86,26 +86,8 @@ public struct PlacementValidator {
     private func blocksPath(coveredCells: [GridPosition], atElevation elevation: Int, in world: WorldState) -> Bool {
         let pendingBlockingCells = coveredCells.map { GridPosition(x: $0.x, y: $0.y, z: elevation) }
         let map = navigationMap(for: world, pendingBlockingCells: pendingBlockingCells)
-        let pathfinder = Pathfinder()
-
         let base = GridPosition(x: world.board.basePosition.x, y: world.board.basePosition.y)
-        guard let baseTile = map.tile(at: base), baseTile.walkable else {
-            return true
-        }
-
-        let spawns = world.board.spawnPositions()
-        guard !spawns.isEmpty else { return true }
-
-        for spawn in spawns where spawn != base {
-            guard let spawnTile = map.tile(at: spawn), spawnTile.walkable else {
-                continue
-            }
-            if pathfinder.findPath(on: map, from: spawn, to: base) != nil {
-                return false
-            }
-        }
-
-        return true
+        return !hasReachableSpawnToBase(on: map, base: base)
     }
 
     public func resolvedMinerPatchID(
@@ -167,5 +149,50 @@ public struct PlacementValidator {
         )
 
         return map
+    }
+
+    public func hasReachableSpawnToBase(on map: GridMap, base: GridPosition) -> Bool {
+        guard map.contains(base), let baseTile = map.tile(at: base), baseTile.walkable else {
+            return false
+        }
+
+        func isSpawnTile(_ position: GridPosition) -> Bool {
+            let isPerimeter = position.x == 0
+                || position.x == map.width - 1
+                || position.y == 0
+                || position.y == map.height - 1
+            return isPerimeter && position != base
+        }
+
+        var visited: Set<GridPosition> = [base]
+        var queue: [GridPosition] = [base]
+        var cursor = 0
+
+        while cursor < queue.count {
+            let current = queue[cursor]
+            cursor += 1
+
+            if isSpawnTile(current) {
+                return true
+            }
+
+            let neighbors = [
+                current.translated(byX: 1),
+                current.translated(byX: -1),
+                current.translated(byY: 1),
+                current.translated(byY: -1)
+            ]
+            for neighbor in neighbors {
+                guard !visited.contains(neighbor),
+                      let tile = map.tile(at: neighbor),
+                      tile.walkable else {
+                    continue
+                }
+                visited.insert(neighbor)
+                queue.append(neighbor)
+            }
+        }
+
+        return false
     }
 }

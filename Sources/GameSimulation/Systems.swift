@@ -264,21 +264,8 @@ public struct CommandSystem: SimulationSystem {
 
     private func blocksCriticalPath(afterRemovalWorld world: WorldState, placementValidator: PlacementValidator) -> Bool {
         let map = placementValidator.navigationMap(for: world)
-        let pathfinder = Pathfinder()
         let base = GridPosition(x: world.board.basePosition.x, y: world.board.basePosition.y)
-        guard let baseTile = map.tile(at: base), baseTile.walkable else {
-            return true
-        }
-
-        let spawns = world.board.spawnPositions()
-        guard !spawns.isEmpty else { return true }
-        for spawn in spawns where spawn != base {
-            guard let spawnTile = map.tile(at: spawn), spawnTile.walkable else { continue }
-            if pathfinder.findPath(on: map, from: spawn, to: base) != nil {
-                return false
-            }
-        }
-        return true
+        return !placementValidator.hasReachableSpawnToBase(on: map, base: base)
     }
 
     private func applyRefund(for structureType: StructureType, state: inout WorldState) {

@@ -485,8 +485,8 @@ public struct HQDef: Codable, Hashable, Sendable {
                 "plate_steel": 10,
                 "gear": 5,
                 "circuit": 5,
-                "turret_core": 2,
-                "wall_kit": 8,
+                "turret_core": 4,
+                "wall_kit": 80,
                 "ammo_light": 24
             ],
             normal: [
@@ -498,8 +498,8 @@ public struct HQDef: Codable, Hashable, Sendable {
                 "plate_steel": 8,
                 "gear": 4,
                 "circuit": 4,
-                "turret_core": 1,
-                "wall_kit": 6,
+                "turret_core": 4,
+                "wall_kit": 80,
                 "ammo_light": 16
             ],
             hard: [
@@ -508,11 +508,11 @@ public struct HQDef: Codable, Hashable, Sendable {
                 "ore_coal": 4,
                 "plate_iron": 10,
                 "plate_copper": 4,
-                "plate_steel": 6,
+                "plate_steel": 8,
                 "gear": 3,
                 "circuit": 2,
-                "turret_core": 1,
-                "wall_kit": 3,
+                "turret_core": 4,
+                "wall_kit": 80,
                 "ammo_light": 8
             ]
         )

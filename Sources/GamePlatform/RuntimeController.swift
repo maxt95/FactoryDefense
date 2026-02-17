@@ -101,10 +101,15 @@ public final class GameRuntimeController: ObservableObject {
             return
         }
 
-        var previewWorld = world
-        previewWorld.applyBoardExpansion(expansionInsets)
-        let adjustedPosition = anchorPosition.translated(byX: expansionInsets.left, byY: expansionInsets.top)
-        let result = placementValidator.canPlace(structure, at: adjustedPosition, in: previewWorld)
+        let result: PlacementResult
+        if expansionInsets.isEmpty {
+            result = placementValidator.canPlace(structure, at: anchorPosition, in: world)
+        } else {
+            var previewWorld = world
+            previewWorld.applyBoardExpansion(expansionInsets)
+            let adjustedPosition = anchorPosition.translated(byX: expansionInsets.left, byY: expansionInsets.top)
+            result = placementValidator.canPlace(structure, at: adjustedPosition, in: previewWorld)
+        }
         guard result == .ok else {
             placementResult = result
             placementPreviewCache = PlacementPreviewCache(
