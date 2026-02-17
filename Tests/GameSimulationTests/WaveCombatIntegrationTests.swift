@@ -186,6 +186,70 @@ final class WaveCombatIntegrationTests: XCTestCase {
         XCTAssertFalse(events.contains(where: { $0.kind == .enemyReachedBase }))
     }
 
+    func testEnemiesPreferBreachingWallsWhenBaseIsFullySealed() {
+        let board = BoardState(
+            width: 9,
+            height: 9,
+            basePosition: GridPosition(x: 4, y: 4),
+            spawnEdgeX: 8,
+            spawnYMin: 0,
+            spawnYMax: 8,
+            blockedCells: [],
+            restrictedCells: [],
+            ramps: []
+        )
+        var entities = EntityStore()
+        let wallPositions = [
+            GridPosition(x: 3, y: 3),
+            GridPosition(x: 4, y: 3),
+            GridPosition(x: 5, y: 3),
+            GridPosition(x: 3, y: 4),
+            GridPosition(x: 5, y: 4),
+            GridPosition(x: 3, y: 5),
+            GridPosition(x: 4, y: 5),
+            GridPosition(x: 5, y: 5)
+        ]
+        let wallIDs = wallPositions.map { entities.spawnStructure(.wall, at: $0) }
+        let decoyStructureID = entities.spawnStructure(.assembler, at: GridPosition(x: 1, y: 4))
+        let enemyID = entities.spawnEnemy(at: GridPosition(x: 0, y: 4), health: 20)
+
+        let world = WorldState(
+            tick: 0,
+            board: board,
+            entities: entities,
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState(phase: .playing),
+            combat: CombatState(
+                enemies: [
+                    enemyID: EnemyRuntime(
+                        id: enemyID,
+                        archetype: .droneScout,
+                        moveEveryTicks: 1,
+                        baseDamage: 2,
+                        rewardCurrency: 1
+                    )
+                ],
+                basePosition: GridPosition(x: 4, y: 4),
+                spawnEdgeX: 8,
+                spawnYMin: 0,
+                spawnYMax: 8
+            )
+        )
+
+        let engine = SimulationEngine(worldState: world, systems: [EnemyMovementSystem()])
+        let events = engine.run(ticks: 8)
+        let damagedStructureIDs = Set(
+            events.compactMap { event -> EntityID? in
+                guard event.kind == .structureDamaged else { return nil }
+                return event.entity
+            }
+        )
+
+        XCTAssertTrue(damagedStructureIDs.contains(where: { wallIDs.contains($0) }))
+        XCTAssertFalse(damagedStructureIDs.contains(decoyStructureID))
+    }
+
     func testWaveSpawnsEnemiesAndTurretsFireProjectiles() {
         var world = WorldState.bootstrap()
         let turretID = world.entities.spawnStructure(.turretMount, at: GridPosition(x: 50, y: 32))

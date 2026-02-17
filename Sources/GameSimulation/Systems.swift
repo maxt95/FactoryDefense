@@ -2002,6 +2002,7 @@ public struct EnemyMovementSystem: SimulationSystem {
         let pathfinder = Pathfinder()
         let map = buildNavigationMap(state: state)
         let flowField = buildFlowField(on: map, goal: state.combat.basePosition)
+        let wallApproachFlowField = buildWallApproachFlowField(on: map, state: state)
         let sortedEnemyIDs = state.combat.enemies.keys.sorted()
         let occupiedBlockingStructures = blockingStructureOccupancy(state: state)
 
@@ -2033,6 +2034,19 @@ public struct EnemyMovementSystem: SimulationSystem {
                 continue
             }
 
+            let current = GridPosition(x: enemy.position.x, y: enemy.position.y, z: 0)
+            if flowField[current] == nil, !wallApproachFlowField.isEmpty {
+                if let adjacentWall = adjacentWallTarget(enemy: enemy, occupancy: occupiedBlockingStructures, state: state) {
+                    attackStructure(targetID: adjacentWall.id, runtime: runtime, auraBuffed: auraBuffed, state: &state, context: context)
+                    continue
+                }
+                if let next = nextFlowStep(from: enemy.position, map: map, flowField: wallApproachFlowField) {
+                    state.entities.updatePosition(enemyID, to: next)
+                    context.emit(SimEvent(tick: state.tick, kind: .enemyMoved, entity: enemyID))
+                    continue
+                }
+            }
+
             if runtime.behaviorModifier == .structureSeeker,
                let raiderTarget = nearestReachableRaiderTarget(enemy: enemy, map: map, pathfinder: pathfinder, state: state) {
                 if isAdjacent(enemy.position, to: raiderTarget.position) {
@@ -2048,9 +2062,11 @@ public struct EnemyMovementSystem: SimulationSystem {
 
             if let breachTarget = preferredWallBreachTarget(
                 enemy: enemy,
+                runtime: runtime,
                 map: map,
                 flowField: flowField,
-                pathfinder: pathfinder,
+                wallApproachFlowField: wallApproachFlowField,
+                occupancy: occupiedBlockingStructures,
                 state: state
             ) {
                 if let step = breachTarget.nextStep {
@@ -2160,6 +2176,59 @@ public struct EnemyMovementSystem: SimulationSystem {
         return distances
     }
 
+    private func buildWallApproachFlowField(on map: GridMap, state: WorldState) -> [GridPosition: Int] {
+        let walls = state.entities.structures(of: .wall).sorted { $0.id < $1.id }
+        guard !walls.isEmpty else { return [:] }
+
+        var distances: [GridPosition: Int] = [:]
+        var queue: [GridPosition] = []
+
+        for wall in walls {
+            for wallCell in StructureType.wall.coveredCells(anchor: wall.position) {
+                let neighbors = [
+                    wallCell.translated(byX: 1),
+                    wallCell.translated(byX: -1),
+                    wallCell.translated(byY: 1),
+                    wallCell.translated(byY: -1)
+                ]
+
+                for neighbor in neighbors {
+                    guard let tile = map.tile(at: neighbor), tile.walkable else { continue }
+                    let key = GridPosition(x: neighbor.x, y: neighbor.y, z: 0)
+                    guard distances[key] == nil else { continue }
+                    distances[key] = 0
+                    queue.append(key)
+                }
+            }
+        }
+
+        guard !queue.isEmpty else { return [:] }
+
+        var index = 0
+        while index < queue.count {
+            let current = queue[index]
+            index += 1
+            let nextDistance = distances[current, default: 0] + 1
+
+            let neighbors = [
+                current.translated(byX: 1),
+                current.translated(byX: -1),
+                current.translated(byY: 1),
+                current.translated(byY: -1)
+            ]
+
+            for neighbor in neighbors {
+                guard let tile = map.tile(at: neighbor), tile.walkable else { continue }
+                let key = GridPosition(x: neighbor.x, y: neighbor.y, z: 0)
+                guard distances[key] == nil else { continue }
+                distances[key] = nextDistance
+                queue.append(key)
+            }
+        }
+
+        return distances
+    }
+
     private func nextFlowStep(from position: GridPosition, map: GridMap, flowField: [GridPosition: Int]) -> GridPosition? {
         let current = GridPosition(x: position.x, y: position.y, z: 0)
         let currentDistance = flowField[current]
@@ -2222,71 +2291,50 @@ public struct EnemyMovementSystem: SimulationSystem {
 
     private func preferredWallBreachTarget(
         enemy: Entity,
+        runtime: EnemyRuntime,
         map: GridMap,
         flowField: [GridPosition: Int],
-        pathfinder: Pathfinder,
+        wallApproachFlowField: [GridPosition: Int],
+        occupancy: [GridPosition: EntityID],
         state: WorldState
     ) -> (target: Entity, nextStep: GridPosition?)? {
         let current = GridPosition(x: enemy.position.x, y: enemy.position.y, z: 0)
         guard let distanceToBase = flowField[current] else { return nil }
-        guard let wallTarget = nearestReachableWallTarget(enemy: enemy, map: map, pathfinder: pathfinder, state: state) else {
-            return nil
+        guard let distanceToWall = wallApproachFlowField[current] else { return nil }
+
+        let threshold = runtime.behaviorModifier == .wallBreaker ? 0 : Self.wallBreachDetourThreshold
+        let detourDelta = distanceToBase - distanceToWall
+        guard detourDelta >= threshold else { return nil }
+
+        if let adjacentWall = adjacentWallTarget(enemy: enemy, occupancy: occupancy, state: state) {
+            return (target: adjacentWall, nextStep: nil)
         }
 
-        let detourDelta = distanceToBase - wallTarget.pathLength
-        guard detourDelta >= Self.wallBreachDetourThreshold else { return nil }
-        return (target: wallTarget.target, nextStep: wallTarget.nextStep)
+        guard let nextStep = nextFlowStep(from: enemy.position, map: map, flowField: wallApproachFlowField) else {
+            return nil
+        }
+        guard let wallTarget = nearestWallByManhattanDistance(enemy: enemy, state: state) else {
+            return nil
+        }
+        return (target: wallTarget, nextStep: nextStep)
     }
 
-    private func nearestReachableWallTarget(
+    private func nearestWallByManhattanDistance(
         enemy: Entity,
-        map: GridMap,
-        pathfinder: Pathfinder,
         state: WorldState
-    ) -> (target: Entity, nextStep: GridPosition?, pathLength: Int)? {
+    ) -> Entity? {
         let candidates = state.entities.all.filter { entity in
             entity.category == .structure && entity.structureType == .wall
         }
-
-        var best: (entity: Entity, nextStep: GridPosition?, pathLength: Int, directDistance: Int)?
-
-        for candidate in candidates {
-            let directDistance = enemy.position.manhattanDistance(to: candidate.position)
-            let score: (entity: Entity, nextStep: GridPosition?, pathLength: Int, directDistance: Int)?
-
-            if isAdjacent(enemy.position, toStructure: candidate) {
-                score = (candidate, nil, 0, directDistance)
-            } else if let approach = nextStepTowardStructure(
-                enemy: enemy,
-                structure: candidate,
-                map: map,
-                pathfinder: pathfinder,
-                returnPathLength: true
-            ) {
-                let pathLength = max(0, approach.pathLength - 1)
-                score = (candidate, approach.step, pathLength, directDistance)
-            } else {
-                score = nil
+        guard !candidates.isEmpty else { return nil }
+        return candidates.min { lhs, rhs in
+            let lDist = enemy.position.manhattanDistance(to: lhs.position)
+            let rDist = enemy.position.manhattanDistance(to: rhs.position)
+            if lDist == rDist {
+                return lhs.id < rhs.id
             }
-
-            guard let score else { continue }
-            if let current = best {
-                let isBetterPath = score.pathLength < current.pathLength
-                let isBetterDistance = score.pathLength == current.pathLength
-                    && score.directDistance < current.directDistance
-                let isBetterTieBreak = score.pathLength == current.pathLength
-                    && score.directDistance == current.directDistance
-                    && score.entity.id < current.entity.id
-                if isBetterPath || isBetterDistance || isBetterTieBreak {
-                    best = score
-                }
-            } else {
-                best = score
-            }
+            return lDist < rDist
         }
-
-        guard let best else { return nil }
-        return (best.entity, best.nextStep, best.pathLength)
     }
 
     private func nearestReachableStructureTarget(
@@ -2409,6 +2457,28 @@ public struct EnemyMovementSystem: SimulationSystem {
             }
             return lDist < rDist
         }
+    }
+
+    private func adjacentWallTarget(
+        enemy: Entity,
+        occupancy: [GridPosition: EntityID],
+        state: WorldState
+    ) -> Entity? {
+        let adjacentCells = [
+            enemy.position.translated(byX: 1),
+            enemy.position.translated(byX: -1),
+            enemy.position.translated(byY: 1),
+            enemy.position.translated(byY: -1)
+        ]
+
+        let walls = adjacentCells.compactMap { cell -> Entity? in
+            let key = GridPosition(x: cell.x, y: cell.y, z: 0)
+            guard let wallID = occupancy[key] else { return nil }
+            guard let wall = state.entities.entity(id: wallID), wall.structureType == .wall else { return nil }
+            return wall
+        }
+
+        return walls.min { $0.id < $1.id }
     }
 
     private func isAdjacent(_ lhs: GridPosition, to rhs: GridPosition) -> Bool {

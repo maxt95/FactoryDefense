@@ -289,38 +289,96 @@ public final class WhiteboxRenderer {
         guard maxSegmentCount > 0 else { return [] }
         guard !world.combat.enemies.isEmpty else { return [] }
 
-        let pathfinder = Pathfinder()
         let map = navigationMap(for: world)
-        let base = world.combat.basePosition
+        let base = GridPosition(x: world.combat.basePosition.x, y: world.combat.basePosition.y, z: 0)
+        let flowField = buildFlowField(on: map, goal: base)
+        guard !flowField.isEmpty else { return [] }
 
         var segments: [WhiteboxPathSegmentShader] = []
         segments.reserveCapacity(min(maxSegmentCount, 512))
 
         for enemyID in world.combat.enemies.keys.sorted() {
             guard let enemy = world.entities.entity(id: enemyID) else { continue }
-            guard let path = pathfinder.findPath(on: map, from: enemy.position, to: base), path.count > 1 else {
-                continue
-            }
+            var current = GridPosition(x: enemy.position.x, y: enemy.position.y, z: 0)
+            guard flowField[current] != nil else { continue }
 
-            for index in 0..<(path.count - 1) {
-                let from = path[index]
-                let to = path[index + 1]
+            var guardSteps = min(maxSegmentCount, max(1, world.board.width * world.board.height))
+            while current != base, guardSteps > 0, segments.count < maxSegmentCount {
+                guard let next = nextFlowStep(from: current, map: map, flowField: flowField) else { break }
                 segments.append(
                     WhiteboxPathSegmentShader(
-                        fromX: Int32(from.x),
-                        fromY: Int32(from.y),
-                        toX: Int32(to.x),
-                        toY: Int32(to.y)
+                        fromX: Int32(current.x),
+                        fromY: Int32(current.y),
+                        toX: Int32(next.x),
+                        toY: Int32(next.y)
                     )
                 )
-
-                if segments.count >= maxSegmentCount {
-                    return segments
-                }
+                current = next
+                guardSteps -= 1
             }
         }
 
         return segments
+    }
+
+    private func buildFlowField(on map: GridMap, goal: GridPosition) -> [GridPosition: Int] {
+        guard let goalTile = map.tile(at: goal), goalTile.walkable else { return [:] }
+
+        var distances: [GridPosition: Int] = [goal: 0]
+        var queue: [GridPosition] = [goal]
+        var index = 0
+
+        while index < queue.count {
+            let current = queue[index]
+            index += 1
+            let nextDistance = distances[current, default: 0] + 1
+
+            let neighbors = [
+                current.translated(byX: 1),
+                current.translated(byX: -1),
+                current.translated(byY: 1),
+                current.translated(byY: -1)
+            ]
+
+            for neighbor in neighbors {
+                guard distances[neighbor] == nil else { continue }
+                guard let tile = map.tile(at: neighbor), tile.walkable else { continue }
+                distances[neighbor] = nextDistance
+                queue.append(neighbor)
+            }
+        }
+
+        return distances
+    }
+
+    private func nextFlowStep(from position: GridPosition, map: GridMap, flowField: [GridPosition: Int]) -> GridPosition? {
+        let current = GridPosition(x: position.x, y: position.y, z: 0)
+        let currentDistance = flowField[current]
+        var candidates: [(position: GridPosition, distance: Int)] = []
+
+        let neighbors = [
+            current.translated(byX: 1),
+            current.translated(byX: -1),
+            current.translated(byY: 1),
+            current.translated(byY: -1)
+        ]
+
+        for neighbor in neighbors {
+            guard let tile = map.tile(at: neighbor), tile.walkable else { continue }
+            guard let neighborDistance = flowField[neighbor] else { continue }
+            if let currentDistance {
+                guard neighborDistance < currentDistance else { continue }
+            }
+            candidates.append((neighbor, neighborDistance))
+        }
+
+        guard !candidates.isEmpty else { return nil }
+        let best = candidates.min { lhs, rhs in
+            if lhs.distance != rhs.distance { return lhs.distance < rhs.distance }
+            if lhs.position.y != rhs.position.y { return lhs.position.y < rhs.position.y }
+            return lhs.position.x < rhs.position.x
+        }
+        return best?.position
     }
 
     private func navigationMap(for world: WorldState) -> GridMap {
