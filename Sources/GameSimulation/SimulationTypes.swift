@@ -44,7 +44,7 @@ public struct GridPosition: Codable, Hashable, Sendable {
     public static let zero = GridPosition(x: 0, y: 0, z: 0)
 
     public func manhattanDistance(to other: GridPosition) -> Int {
-        abs(x - other.x) + abs(y - other.y) + abs(z - other.z)
+        abs(x - other.x) + abs(y - other.y)
     }
 
     public func translated(byX dx: Int = 0, byY dy: Int = 0, byZ dz: Int = 0) -> GridPosition {
@@ -1290,13 +1290,7 @@ private func generateRing0OrePatches(seed: RunSeed, difficulty: Difficulty) -> [
         GridPosition(x: 39, y: 32),
         GridPosition(x: 40, y: 32)
     ]
-    let rampCells: Set<GridPosition> = [
-        GridPosition(x: 47, y: 31),
-        GridPosition(x: 47, y: 32),
-        GridPosition(x: 47, y: 33)
-    ]
-
-    var restrictedCells = hqFootprint.union(rampCells)
+    var restrictedCells = hqFootprint
     // Keep the immediate one-tile moat around the HQ clear so players can form a closed starter wall ring.
     for hqCell in hqFootprint {
         for dy in -1...1 {

@@ -400,11 +400,7 @@ public struct BoardDef: Codable, Hashable, Sendable {
             BoardPointDef(x: 39, y: 32),
             BoardPointDef(x: 40, y: 32)
         ],
-        ramps: [
-            BoardRampDef(position: BoardPointDef(x: 47, y: 31), elevation: 1),
-            BoardRampDef(position: BoardPointDef(x: 47, y: 32), elevation: 1),
-            BoardRampDef(position: BoardPointDef(x: 47, y: 33), elevation: 1)
-        ]
+        ramps: []
     )
 }
 

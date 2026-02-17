@@ -98,13 +98,13 @@ public struct BoardState: Codable, Hashable, Sendable {
     ) {
         self.width = width
         self.height = height
-        self.basePosition = basePosition
+        self.basePosition = GridPosition(x: basePosition.x, y: basePosition.y, z: 0)
         self.spawnEdgeX = spawnEdgeX
         self.spawnYMin = spawnYMin
         self.spawnYMax = spawnYMax
-        self.blockedCells = blockedCells
-        self.restrictedCells = restrictedCells
-        self.ramps = ramps
+        self.blockedCells = blockedCells.map { GridPosition(x: $0.x, y: $0.y, z: 0) }
+        self.restrictedCells = restrictedCells.map { GridPosition(x: $0.x, y: $0.y, z: 0) }
+        self.ramps = []
     }
 
     public init(definition: BoardDef) {
@@ -113,19 +113,14 @@ public struct BoardState: Codable, Hashable, Sendable {
         self.basePosition = GridPosition(
             x: definition.basePosition.x,
             y: definition.basePosition.y,
-            z: definition.basePosition.z
+            z: 0
         )
         self.spawnEdgeX = definition.spawnEdgeX
         self.spawnYMin = definition.spawnYMin
         self.spawnYMax = definition.spawnYMax
-        self.blockedCells = definition.blockedCells.map { GridPosition(x: $0.x, y: $0.y, z: $0.z) }
-        self.restrictedCells = definition.restrictedCells.map { GridPosition(x: $0.x, y: $0.y, z: $0.z) }
-        self.ramps = definition.ramps.map {
-            RampCell(
-                position: GridPosition(x: $0.position.x, y: $0.position.y, z: $0.position.z),
-                elevation: $0.elevation
-            )
-        }
+        self.blockedCells = definition.blockedCells.map { GridPosition(x: $0.x, y: $0.y, z: 0) }
+        self.restrictedCells = definition.restrictedCells.map { GridPosition(x: $0.x, y: $0.y, z: 0) }
+        self.ramps = []
     }
 
     public static func bootstrap() -> BoardState {
@@ -196,22 +191,18 @@ public struct BoardState: Codable, Hashable, Sendable {
     }
 
     public func elevation(at position: GridPosition) -> Int {
-        for ramp in ramps where ramp.position.x == position.x && ramp.position.y == position.y {
-            return ramp.elevation
-        }
-        return position.z
+        _ = position
+        return 0
     }
 
     public func terrain(at position: GridPosition) -> TerrainTile? {
         guard contains(position) else { return nil }
         let blocked = isBlocked(position)
         let restricted = isRestricted(position)
-        let elevation = elevation(at: position)
-        let ramp = ramps.contains { $0.position.x == position.x && $0.position.y == position.y }
         return TerrainTile(
             walkable: !blocked,
-            elevation: elevation,
-            isRamp: ramp,
+            elevation: 0,
+            isRamp: false,
             isRestricted: restricted
         )
     }
@@ -224,25 +215,25 @@ public struct BoardState: Codable, Hashable, Sendable {
 
         if height >= 1 {
             for x in 0..<width {
-                positions.append(GridPosition(x: x, y: 0, z: basePosition.z))
+                positions.append(GridPosition(x: x, y: 0, z: 0))
             }
         }
 
         if width >= 1, height >= 2 {
             for y in 1..<height {
-                positions.append(GridPosition(x: width - 1, y: y, z: basePosition.z))
+                positions.append(GridPosition(x: width - 1, y: y, z: 0))
             }
         }
 
         if height >= 2, width >= 2 {
             for x in stride(from: width - 2, through: 0, by: -1) {
-                positions.append(GridPosition(x: x, y: height - 1, z: basePosition.z))
+                positions.append(GridPosition(x: x, y: height - 1, z: 0))
             }
         }
 
         if width >= 2, height >= 3 {
             for y in stride(from: height - 2, through: 1, by: -1) {
-                positions.append(GridPosition(x: 0, y: y, z: basePosition.z))
+                positions.append(GridPosition(x: 0, y: y, z: 0))
             }
         }
 
@@ -255,7 +246,7 @@ public struct BoardState: Codable, Hashable, Sendable {
             entity.position.x == position.x && entity.position.y == position.y && entity.category != .projectile
         })
         return BoardCell(
-            position: GridPosition(x: position.x, y: position.y, z: terrain.elevation),
+            position: GridPosition(x: position.x, y: position.y, z: 0),
             terrain: terrain,
             occupiedEntityID: occupant?.id,
             occupiedStructure: occupant?.structureType

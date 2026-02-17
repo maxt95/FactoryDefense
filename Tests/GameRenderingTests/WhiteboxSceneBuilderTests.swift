@@ -10,7 +10,7 @@ final class WhiteboxSceneBuilderTests: XCTestCase {
         XCTAssertEqual(scene.summary.boardCellCount, 6144)
         XCTAssertEqual(scene.summary.blockedCellCount, 0)
         XCTAssertEqual(scene.summary.restrictedCellCount, 9)
-        XCTAssertEqual(scene.summary.rampCount, 3)
+        XCTAssertEqual(scene.summary.rampCount, 0)
         XCTAssertEqual(scene.summary.structureCount, 1)
         XCTAssertEqual(scene.summary.enemyCount, 0)
         XCTAssertEqual(scene.summary.projectileCount, 0)

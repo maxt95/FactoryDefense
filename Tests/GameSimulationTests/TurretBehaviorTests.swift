@@ -67,6 +67,73 @@ final class TurretBehaviorTests: XCTestCase {
         XCTAssertGreaterThan(gattlingShots, plasmaShots)
     }
 
+    func testSharedWallAmmoPoolAllowsOnlyAvailableShotsPerTick() {
+        var entities = EntityStore()
+        let wallA = entities.spawnStructure(.wall, at: GridPosition(x: 0, y: 0))
+        let wallB = entities.spawnStructure(.wall, at: GridPosition(x: 2, y: 0))
+        _ = entities.spawnStructure(.turretMount, at: GridPosition(x: 0, y: 0), hostWallID: wallA)
+        _ = entities.spawnStructure(.turretMount, at: GridPosition(x: 2, y: 0), hostWallID: wallB)
+        let enemyA = entities.spawnEnemy(at: GridPosition(x: 0, y: 3), health: 10_000)
+        let enemyB = entities.spawnEnemy(at: GridPosition(x: 2, y: 3), health: 10_000)
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState(),
+            combat: CombatState(
+                enemies: [
+                    enemyA: EnemyRuntime(
+                        id: enemyA,
+                        archetype: .droneScout,
+                        moveEveryTicks: 10,
+                        baseDamage: 1,
+                        rewardCurrency: 1
+                    ),
+                    enemyB: EnemyRuntime(
+                        id: enemyB,
+                        archetype: .droneScout,
+                        moveEveryTicks: 10,
+                        baseDamage: 1,
+                        rewardCurrency: 1
+                    )
+                ],
+                basePosition: GridPosition(x: 0, y: 0),
+                spawnEdgeX: 6,
+                spawnYMin: 0,
+                spawnYMax: 6,
+                wallNetworkByWallEntityID: [wallA: 1, wallB: 1],
+                wallNetworks: [
+                    1: WallNetworkState(
+                        id: 1,
+                        wallEntityIDs: [wallA, wallB],
+                        ammoPoolByItemID: ["ammo_light": 1],
+                        capacity: 24
+                    )
+                ],
+                wallNetworksDirty: false
+            )
+        )
+
+        let engine = SimulationEngine(worldState: world, systems: [CombatSystem()])
+        let events = engine.step()
+
+        XCTAssertEqual(events.filter { $0.kind == .projectileFired }.count, 1)
+
+        let ammoSpent = events
+            .filter { $0.kind == .ammoSpent && $0.itemID == "ammo_light" }
+            .reduce(0) { $0 + ($1.value ?? 0) }
+        XCTAssertEqual(ammoSpent, 1)
+
+        let dryFires = events
+            .filter { $0.kind == .notEnoughAmmo && $0.itemID == "ammo_light" }
+            .reduce(0) { $0 + ($1.value ?? 0) }
+        XCTAssertEqual(dryFires, 1)
+
+        XCTAssertEqual(engine.worldState.combat.wallNetworks[1]?.ammoPoolByItemID["ammo_light"] ?? 0, 0)
+    }
+
     private func shotsFired(turretDefID: String, ammoItemID: String, ticks: Int) -> Int {
         var entities = EntityStore()
         let turretID = entities.spawnStructure(.turretMount, at: GridPosition(x: 0, y: 0), turretDefID: turretDefID)

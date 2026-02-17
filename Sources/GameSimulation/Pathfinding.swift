@@ -98,10 +98,10 @@ public struct Pathfinder {
     }
 
     private func movementCost(from a: GridPosition, to b: GridPosition, on map: GridMap) -> Int {
-        let elevationA = map.tile(at: a)?.elevation ?? 0
-        let elevationB = map.tile(at: b)?.elevation ?? 0
-        let elevationDelta = abs(elevationA - elevationB)
-        return 1 + elevationDelta
+        _ = a
+        _ = b
+        _ = map
+        return 1
     }
 
     private func heuristic(_ a: GridPosition, _ b: GridPosition) -> Int {

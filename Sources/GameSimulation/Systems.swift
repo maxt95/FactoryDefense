@@ -1290,8 +1290,18 @@ public struct EconomySystem: SimulationSystem {
             return
         }
 
+        func wallTopologyKey(_ position: GridPosition) -> GridPosition {
+            GridPosition(x: position.x, y: position.y, z: 0)
+        }
+
         let wallsByID = Dictionary(uniqueKeysWithValues: walls.map { ($0.id, $0) })
-        let wallIDsByPosition = Dictionary(uniqueKeysWithValues: walls.map { ($0.position, $0.id) })
+        var wallIDsByTopologyKey: [GridPosition: EntityID] = [:]
+        for wall in walls {
+            let key = wallTopologyKey(wall.position)
+            if wallIDsByTopologyKey[key] == nil {
+                wallIDsByTopologyKey[key] = wall.id
+            }
+        }
         var visited: Set<EntityID> = []
         var components: [[EntityID]] = []
 
@@ -1306,14 +1316,19 @@ public struct EconomySystem: SimulationSystem {
                 component.append(currentID)
                 guard let currentWall = wallsByID[currentID] else { continue }
 
+                let currentTopologyKey = wallTopologyKey(currentWall.position)
                 let neighbors = [
-                    currentWall.position.translated(byX: 1),
-                    currentWall.position.translated(byX: -1),
-                    currentWall.position.translated(byY: 1),
-                    currentWall.position.translated(byY: -1)
+                    currentTopologyKey.translated(byX: 1),
+                    currentTopologyKey.translated(byX: -1),
+                    currentTopologyKey.translated(byY: 1),
+                    currentTopologyKey.translated(byY: -1),
+                    currentTopologyKey.translated(byX: 1, byY: 1),
+                    currentTopologyKey.translated(byX: 1, byY: -1),
+                    currentTopologyKey.translated(byX: -1, byY: 1),
+                    currentTopologyKey.translated(byX: -1, byY: -1)
                 ]
                 for neighbor in neighbors {
-                    guard let neighborID = wallIDsByPosition[neighbor] else { continue }
+                    guard let neighborID = wallIDsByTopologyKey[neighbor] else { continue }
                     guard !visited.contains(neighborID) else { continue }
                     visited.insert(neighborID)
                     queue.append(neighborID)
@@ -2597,6 +2612,27 @@ public struct CombatSystem: SimulationSystem {
     private let overrideRange: Int?
     private let overrideDamage: Int?
 
+    private struct NetworkAmmoKey: Hashable {
+        let networkID: Int
+        let itemID: ItemID
+    }
+
+    private enum TurretAmmoSource {
+        case wallNetwork(Int)
+        case localBuffer
+        case missingWallNetwork
+    }
+
+    private struct TurretFireIntent {
+        let turretID: EntityID
+        let targetEnemyID: EntityID
+        let turretPosition: GridPosition
+        let ammoItemID: ItemID
+        let damage: Int
+        let travelTicks: UInt64
+        let ammoSource: TurretAmmoSource
+    }
+
     public init(
         turretDefinitions: [TurretDef] = CombatSystem.defaultTurretDefinitions,
         defaultTurretDefID: String = "turret_mk1",
@@ -2615,8 +2651,8 @@ public struct CombatSystem: SimulationSystem {
         let turrets = state.entities.structures(of: .turretMount).sorted { $0.id < $1.id }
         guard !turrets.isEmpty else { return }
 
-        var spentByItem: [ItemID: Int] = [:]
-        var dryFiresByItem: [ItemID: Int] = [:]
+        var intents: [TurretFireIntent] = []
+        intents.reserveCapacity(turrets.count)
 
         for turret in turrets {
             guard let turretDef = resolveTurretDef(for: turret) else { continue }
@@ -2630,27 +2666,101 @@ public struct CombatSystem: SimulationSystem {
             let range = overrideRange.map(Double.init) ?? Double(turretDef.range)
             guard let target = nearestEnemy(to: turret.position, state: state, range: range) else { continue }
 
-            state.combat.lastFireTickByTurret[turret.id] = state.tick
+            let distance = turret.position.manhattanDistance(to: target.position)
+            let travelTicks = UInt64(max(1, distance / 2 + 1))
+            let damage = overrideDamage ?? turretDef.damage
 
-            if consumeAmmo(for: turret.id, itemID: ammoItemID, state: &state) {
-                let distance = turret.position.manhattanDistance(to: target.position)
-                let travelTicks = UInt64(max(1, distance / 2 + 1))
-                let damage = overrideDamage ?? turretDef.damage
-
-                let projectileID = state.entities.spawnProjectile(at: turret.position)
-                state.combat.projectiles[projectileID] = ProjectileRuntime(
-                    id: projectileID,
-                    sourceTurretID: turret.id,
-                    targetEnemyID: target.id,
-                    damage: damage,
-                    impactTick: state.tick + travelTicks
-                )
-
-                spentByItem[ammoItemID, default: 0] += 1
-                context.emit(SimEvent(tick: state.tick, kind: .projectileFired, entity: projectileID, value: Int(travelTicks)))
+            let ammoSource: TurretAmmoSource
+            if let hostWallID = turret.hostWallID {
+                if let networkID = state.combat.wallNetworkByWallEntityID[hostWallID] {
+                    ammoSource = .wallNetwork(networkID)
+                } else {
+                    ammoSource = .missingWallNetwork
+                }
             } else {
-                dryFiresByItem[ammoItemID, default: 0] += 1
+                ammoSource = .localBuffer
             }
+
+            state.combat.lastFireTickByTurret[turret.id] = state.tick
+            intents.append(
+                TurretFireIntent(
+                    turretID: turret.id,
+                    targetEnemyID: target.id,
+                    turretPosition: turret.position,
+                    ammoItemID: ammoItemID,
+                    damage: damage,
+                    travelTicks: travelTicks,
+                    ammoSource: ammoSource
+                )
+            )
+        }
+
+        guard !intents.isEmpty else { return }
+
+        var spentByItem: [ItemID: Int] = [:]
+        var dryFiresByItem: [ItemID: Int] = [:]
+        var pendingByWallNetwork: [NetworkAmmoKey: [TurretFireIntent]] = [:]
+
+        for intent in intents {
+            switch intent.ammoSource {
+            case .wallNetwork(let networkID):
+                let key = NetworkAmmoKey(networkID: networkID, itemID: intent.ammoItemID)
+                pendingByWallNetwork[key, default: []].append(intent)
+            case .localBuffer:
+                if consumeLocalAmmo(for: intent.turretID, itemID: intent.ammoItemID, state: &state) {
+                    spawnProjectile(for: intent, state: &state, context: context)
+                    spentByItem[intent.ammoItemID, default: 0] += 1
+                } else {
+                    dryFiresByItem[intent.ammoItemID, default: 0] += 1
+                }
+            case .missingWallNetwork:
+                dryFiresByItem[intent.ammoItemID, default: 0] += 1
+            }
+        }
+
+        let sortedNetworkKeys = pendingByWallNetwork.keys.sorted { lhs, rhs in
+            if lhs.networkID != rhs.networkID {
+                return lhs.networkID < rhs.networkID
+            }
+            return lhs.itemID < rhs.itemID
+        }
+        for key in sortedNetworkKeys {
+            let pendingIntents = pendingByWallNetwork[key, default: []]
+            guard !pendingIntents.isEmpty else { continue }
+
+            guard var network = state.combat.wallNetworks[key.networkID] else {
+                dryFiresByItem[key.itemID, default: 0] += pendingIntents.count
+                continue
+            }
+
+            let available = network.ammoPoolByItemID[key.itemID, default: 0]
+            guard available > 0 else {
+                dryFiresByItem[key.itemID, default: 0] += pendingIntents.count
+                continue
+            }
+
+            let allowedCount = min(available, pendingIntents.count)
+            let resolved = pendingIntents.sorted { lhs, rhs in
+                let lhsPriority = ammoResolutionPriority(for: lhs.turretID, tick: state.tick)
+                let rhsPriority = ammoResolutionPriority(for: rhs.turretID, tick: state.tick)
+                if lhsPriority != rhsPriority {
+                    return lhsPriority < rhsPriority
+                }
+                return lhs.turretID < rhs.turretID
+            }
+            let firingIntents = resolved.prefix(allowedCount)
+            for intent in firingIntents {
+                spawnProjectile(for: intent, state: &state, context: context)
+                spentByItem[key.itemID, default: 0] += 1
+            }
+
+            let deniedCount = pendingIntents.count - allowedCount
+            if deniedCount > 0 {
+                dryFiresByItem[key.itemID, default: 0] += deniedCount
+            }
+
+            network.ammoPoolByItemID[key.itemID] = available - allowedCount
+            state.combat.wallNetworks[key.networkID] = network
         }
 
         for itemID in spentByItem.keys.sorted() {
@@ -2667,22 +2777,7 @@ public struct CombatSystem: SimulationSystem {
         }
     }
 
-    private func consumeAmmo(for turretID: EntityID, itemID: ItemID, state: inout WorldState) -> Bool {
-        if let turret = state.entities.entity(id: turretID),
-           let hostWallID = turret.hostWallID {
-            guard let networkID = state.combat.wallNetworkByWallEntityID[hostWallID],
-                  var network = state.combat.wallNetworks[networkID] else {
-                return false
-            }
-
-            let available = network.ammoPoolByItemID[itemID, default: 0]
-            guard available > 0 else { return false }
-
-            network.ammoPoolByItemID[itemID] = available - 1
-            state.combat.wallNetworks[networkID] = network
-            return true
-        }
-
+    private func consumeLocalAmmo(for turretID: EntityID, itemID: ItemID, state: inout WorldState) -> Bool {
         if var localBuffer = state.economy.structureInputBuffers[turretID],
            let localAmmo = localBuffer[itemID],
            localAmmo > 0 {
@@ -2696,6 +2791,26 @@ public struct CombatSystem: SimulationSystem {
         }
 
         return false
+    }
+
+    private func spawnProjectile(for intent: TurretFireIntent, state: inout WorldState, context: SystemContext) {
+        let projectileID = state.entities.spawnProjectile(at: intent.turretPosition)
+        state.combat.projectiles[projectileID] = ProjectileRuntime(
+            id: projectileID,
+            sourceTurretID: intent.turretID,
+            targetEnemyID: intent.targetEnemyID,
+            damage: intent.damage,
+            impactTick: state.tick + intent.travelTicks
+        )
+        context.emit(SimEvent(tick: state.tick, kind: .projectileFired, entity: projectileID, value: Int(intent.travelTicks)))
+    }
+
+    private func ammoResolutionPriority(for turretID: EntityID, tick: UInt64) -> UInt64 {
+        var z = UInt64(bitPattern: Int64(turretID))
+        z &+= tick &* 0x9E37_79B9_7F4A_7C15
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
     }
 
     private func resolveTurretDef(for turret: Entity) -> TurretDef? {

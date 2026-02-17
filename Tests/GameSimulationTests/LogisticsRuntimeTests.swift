@@ -2,6 +2,80 @@ import XCTest
 @testable import GameSimulation
 
 final class LogisticsRuntimeTests: XCTestCase {
+    func testWallNetworksKeepDisconnectedSegmentsSeparate() {
+        var entities = EntityStore()
+        let wallA = entities.spawnStructure(.wall, at: GridPosition(x: 1, y: 1))
+        let wallB = entities.spawnStructure(.wall, at: GridPosition(x: 4, y: 1))
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState()
+        )
+
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+        _ = engine.step()
+
+        XCTAssertEqual(engine.worldState.combat.wallNetworks.count, 2)
+        let networkA = engine.worldState.combat.wallNetworkByWallEntityID[wallA]
+        let networkB = engine.worldState.combat.wallNetworkByWallEntityID[wallB]
+        XCTAssertNotNil(networkA)
+        XCTAssertNotNil(networkB)
+        XCTAssertNotEqual(networkA, networkB)
+    }
+
+    func testWallNetworksConnectAcrossCornersWithOrthogonalAdjacency() {
+        var entities = EntityStore()
+        _ = entities.spawnStructure(.wall, at: GridPosition(x: 1, y: 1))
+        _ = entities.spawnStructure(.wall, at: GridPosition(x: 2, y: 1))
+        _ = entities.spawnStructure(.wall, at: GridPosition(x: 2, y: 2))
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState()
+        )
+
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+        _ = engine.step()
+
+        XCTAssertEqual(engine.worldState.combat.wallNetworks.count, 1)
+        XCTAssertEqual(engine.worldState.combat.wallNetworks.first?.value.wallEntityIDs.count, 3)
+    }
+
+    func testWallNetworksConnectAcrossDiagonalCornerContact() {
+        var entities = EntityStore()
+        _ = entities.spawnStructure(.wall, at: GridPosition(x: 1, y: 1))
+        _ = entities.spawnStructure(.wall, at: GridPosition(x: 2, y: 2))
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(),
+            threat: ThreatState(),
+            run: RunState()
+        )
+
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+        _ = engine.step()
+
+        XCTAssertEqual(engine.worldState.combat.wallNetworks.count, 1)
+        XCTAssertEqual(engine.worldState.combat.wallNetworks.first?.value.wallEntityIDs.count, 2)
+    }
+
     func testConveyorTransfersByRotationDirection() {
         var entities = EntityStore()
         let northTarget = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 2), rotation: .north)
