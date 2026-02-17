@@ -1292,15 +1292,27 @@ private func generateRing0OrePatches(seed: RunSeed, difficulty: Difficulty) -> [
     let maxX = 46
     let minY = 26
     let maxY = 38
-    let restrictedCells: Set<GridPosition> = [
+    let hqFootprint: Set<GridPosition> = [
         GridPosition(x: 39, y: 31),
         GridPosition(x: 40, y: 31),
         GridPosition(x: 39, y: 32),
-        GridPosition(x: 40, y: 32),
+        GridPosition(x: 40, y: 32)
+    ]
+    let rampCells: Set<GridPosition> = [
         GridPosition(x: 47, y: 31),
         GridPosition(x: 47, y: 32),
         GridPosition(x: 47, y: 33)
     ]
+
+    var restrictedCells = hqFootprint.union(rampCells)
+    // Keep the immediate one-tile moat around the HQ clear so players can form a closed starter wall ring.
+    for hqCell in hqFootprint {
+        for dy in -1...1 {
+            for dx in -1...1 {
+                restrictedCells.insert(hqCell.translated(byX: dx, byY: dy))
+            }
+        }
+    }
 
     var candidates: [GridPosition] = []
     for y in minY...maxY {

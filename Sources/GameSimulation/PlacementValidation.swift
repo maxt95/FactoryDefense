@@ -38,11 +38,7 @@ public struct PlacementValidator {
             return .invalidMinerPlacement
         }
 
-        guard structure.blocksMovement else {
-            return .ok
-        }
-
-        return blocksPath(coveredCells: coveredCells, atElevation: position.z, in: world) ? .blocksCriticalPath : .ok
+        return .ok
     }
 
     public func resolvedTurretHostWallID(forTurretAt turretPosition: GridPosition, in entities: EntityStore) -> EntityID? {
@@ -81,13 +77,6 @@ public struct PlacementValidator {
             guard covered.contains(position) else { return false }
             return true
         })
-    }
-
-    private func blocksPath(coveredCells: [GridPosition], atElevation elevation: Int, in world: WorldState) -> Bool {
-        let pendingBlockingCells = coveredCells.map { GridPosition(x: $0.x, y: $0.y, z: elevation) }
-        let map = navigationMap(for: world, pendingBlockingCells: pendingBlockingCells)
-        let base = GridPosition(x: world.board.basePosition.x, y: world.board.basePosition.y)
-        return !hasReachableSpawnToBase(on: map, base: base)
     }
 
     public func resolvedMinerPatchID(

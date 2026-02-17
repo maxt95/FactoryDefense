@@ -166,23 +166,6 @@ public struct CommandSystem: SimulationSystem {
                     removalIDs.append(contentsOf: mountedTurretIDs)
                 }
 
-                var previewState = state
-                for removalID in removalIDs {
-                    previewState.entities.remove(removalID)
-                }
-                if blocksCriticalPath(afterRemovalWorld: previewState, placementValidator: placementValidator) {
-                    context.emit(
-                        SimEvent(
-                            tick: state.tick,
-                            kind: .placementRejected,
-                            value: PlacementResult.blocksCriticalPath.rawValue,
-                            placementReason: .blocksCriticalPath,
-                            reasonDetail: "removal-seals-path"
-                        )
-                    )
-                    continue
-                }
-
                 for removalID in removalIDs.sorted() {
                     guard let removed = state.entities.entity(id: removalID),
                           let removedStructureType = removed.structureType else { continue }
@@ -260,12 +243,6 @@ public struct CommandSystem: SimulationSystem {
         case .west:
             return .west
         }
-    }
-
-    private func blocksCriticalPath(afterRemovalWorld world: WorldState, placementValidator: PlacementValidator) -> Bool {
-        let map = placementValidator.navigationMap(for: world)
-        let base = GridPosition(x: world.board.basePosition.x, y: world.board.basePosition.y)
-        return !placementValidator.hasReachableSpawnToBase(on: map, base: base)
     }
 
     private func applyRefund(for structureType: StructureType, state: inout WorldState) {
@@ -2023,6 +2000,8 @@ public struct WaveSystem: SimulationSystem {
 }
 
 public struct EnemyMovementSystem: SimulationSystem {
+    private static let wallBreachDetourThreshold = 4
+
     public init() {}
 
     public func update(state: inout WorldState, context: SystemContext) {
@@ -2075,6 +2054,28 @@ public struct EnemyMovementSystem: SimulationSystem {
                 }
             }
 
+            if let breachTarget = preferredWallBreachTarget(
+                enemy: enemy,
+                map: map,
+                flowField: flowField,
+                pathfinder: pathfinder,
+                state: state
+            ) {
+                if let step = breachTarget.nextStep {
+                    state.entities.updatePosition(enemyID, to: step)
+                    context.emit(SimEvent(tick: state.tick, kind: .enemyMoved, entity: enemyID))
+                } else {
+                    attackStructure(
+                        targetID: breachTarget.target.id,
+                        runtime: runtime,
+                        auraBuffed: auraBuffed,
+                        state: &state,
+                        context: context
+                    )
+                }
+                continue
+            }
+
             if let next = nextFlowStep(from: enemy.position, map: map, flowField: flowField) {
                 state.entities.updatePosition(enemyID, to: next)
                 context.emit(SimEvent(tick: state.tick, kind: .enemyMoved, entity: enemyID))
@@ -2092,6 +2093,27 @@ public struct EnemyMovementSystem: SimulationSystem {
 
             if let adjacentTarget = preferredAdjacentTarget(enemy: enemy, runtime: runtime, occupancy: occupiedBlockingStructures, state: state) {
                 attackStructure(targetID: adjacentTarget.id, runtime: runtime, auraBuffed: auraBuffed, state: &state, context: context)
+                continue
+            }
+
+            if let fallbackTarget = nearestReachableStructureTarget(
+                enemy: enemy,
+                map: map,
+                pathfinder: pathfinder,
+                state: state
+            ) {
+                if let step = fallbackTarget.nextStep {
+                    state.entities.updatePosition(enemyID, to: step)
+                    context.emit(SimEvent(tick: state.tick, kind: .enemyMoved, entity: enemyID))
+                } else {
+                    attackStructure(
+                        targetID: fallbackTarget.target.id,
+                        runtime: runtime,
+                        auraBuffed: auraBuffed,
+                        state: &state,
+                        context: context
+                    )
+                }
             }
         }
     }
@@ -2206,6 +2228,125 @@ public struct EnemyMovementSystem: SimulationSystem {
         return best?.entity
     }
 
+    private func preferredWallBreachTarget(
+        enemy: Entity,
+        map: GridMap,
+        flowField: [GridPosition: Int],
+        pathfinder: Pathfinder,
+        state: WorldState
+    ) -> (target: Entity, nextStep: GridPosition?)? {
+        let current = GridPosition(x: enemy.position.x, y: enemy.position.y, z: 0)
+        guard let distanceToBase = flowField[current] else { return nil }
+        guard let wallTarget = nearestReachableWallTarget(enemy: enemy, map: map, pathfinder: pathfinder, state: state) else {
+            return nil
+        }
+
+        let detourDelta = distanceToBase - wallTarget.pathLength
+        guard detourDelta >= Self.wallBreachDetourThreshold else { return nil }
+        return (target: wallTarget.target, nextStep: wallTarget.nextStep)
+    }
+
+    private func nearestReachableWallTarget(
+        enemy: Entity,
+        map: GridMap,
+        pathfinder: Pathfinder,
+        state: WorldState
+    ) -> (target: Entity, nextStep: GridPosition?, pathLength: Int)? {
+        let candidates = state.entities.all.filter { entity in
+            entity.category == .structure && entity.structureType == .wall
+        }
+
+        var best: (entity: Entity, nextStep: GridPosition?, pathLength: Int, directDistance: Int)?
+
+        for candidate in candidates {
+            let directDistance = enemy.position.manhattanDistance(to: candidate.position)
+            let score: (entity: Entity, nextStep: GridPosition?, pathLength: Int, directDistance: Int)?
+
+            if isAdjacent(enemy.position, toStructure: candidate) {
+                score = (candidate, nil, 0, directDistance)
+            } else if let approach = nextStepTowardStructure(
+                enemy: enemy,
+                structure: candidate,
+                map: map,
+                pathfinder: pathfinder,
+                returnPathLength: true
+            ) {
+                let pathLength = max(0, approach.pathLength - 1)
+                score = (candidate, approach.step, pathLength, directDistance)
+            } else {
+                score = nil
+            }
+
+            guard let score else { continue }
+            if let current = best {
+                let isBetterPath = score.pathLength < current.pathLength
+                let isBetterDistance = score.pathLength == current.pathLength
+                    && score.directDistance < current.directDistance
+                let isBetterTieBreak = score.pathLength == current.pathLength
+                    && score.directDistance == current.directDistance
+                    && score.entity.id < current.entity.id
+                if isBetterPath || isBetterDistance || isBetterTieBreak {
+                    best = score
+                }
+            } else {
+                best = score
+            }
+        }
+
+        guard let best else { return nil }
+        return (best.entity, best.nextStep, best.pathLength)
+    }
+
+    private func nearestReachableStructureTarget(
+        enemy: Entity,
+        map: GridMap,
+        pathfinder: Pathfinder,
+        state: WorldState
+    ) -> (target: Entity, nextStep: GridPosition?)? {
+        let candidates = state.entities.all.filter { entity in
+            entity.category == .structure && entity.structureType != nil
+        }
+
+        var best: (entity: Entity, nextStep: GridPosition?, pathLength: Int, directDistance: Int)?
+
+        for candidate in candidates {
+            let directDistance = enemy.position.manhattanDistance(to: candidate.position)
+            let score: (entity: Entity, nextStep: GridPosition?, pathLength: Int, directDistance: Int)?
+
+            if isAdjacent(enemy.position, toStructure: candidate) {
+                score = (candidate, nil, 0, directDistance)
+            } else if let approach = nextStepTowardStructure(
+                enemy: enemy,
+                structure: candidate,
+                map: map,
+                pathfinder: pathfinder,
+                returnPathLength: true
+            ) {
+                score = (candidate, approach.step, approach.pathLength, directDistance)
+            } else {
+                score = nil
+            }
+
+            guard let score else { continue }
+            if let current = best {
+                let isBetterPath = score.pathLength < current.pathLength
+                let isBetterDistance = score.pathLength == current.pathLength
+                    && score.directDistance < current.directDistance
+                let isBetterTieBreak = score.pathLength == current.pathLength
+                    && score.directDistance == current.directDistance
+                    && score.entity.id < current.entity.id
+                if isBetterPath || isBetterDistance || isBetterTieBreak {
+                    best = score
+                }
+            } else {
+                best = score
+            }
+        }
+
+        guard let best else { return nil }
+        return (best.entity, best.nextStep)
+    }
+
     private func nextStepTowardStructure(
         enemy: Entity,
         structure: Entity,
@@ -2280,6 +2421,13 @@ public struct EnemyMovementSystem: SimulationSystem {
 
     private func isAdjacent(_ lhs: GridPosition, to rhs: GridPosition) -> Bool {
         abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y) == 1
+    }
+
+    private func isAdjacent(_ position: GridPosition, toStructure structure: Entity) -> Bool {
+        guard let structureType = structure.structureType else { return false }
+        return structureType.coveredCells(anchor: structure.position).contains { cell in
+            abs(position.x - cell.x) + abs(position.y - cell.y) == 1
+        }
     }
 
     private func hasOverseerAura(for enemyID: EntityID, state: WorldState) -> Bool {

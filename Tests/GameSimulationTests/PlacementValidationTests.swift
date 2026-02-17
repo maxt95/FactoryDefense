@@ -28,6 +28,38 @@ final class PlacementValidationTests: XCTestCase {
         )
     }
 
+    func testBootstrapSupportsClosedWallPerimeterAroundHQ() {
+        let world = WorldState.bootstrap(seed: 0)
+        let validator = PlacementValidator()
+
+        let hqCells = Set(
+            StructureType.hq.coveredCells(anchor: world.board.basePosition).map {
+                GridPosition(x: $0.x, y: $0.y, z: 0)
+            }
+        )
+        guard let minX = hqCells.map(\.x).min(),
+              let maxX = hqCells.map(\.x).max(),
+              let minY = hqCells.map(\.y).min(),
+              let maxY = hqCells.map(\.y).max() else {
+            XCTFail("Expected HQ footprint cells")
+            return
+        }
+
+        for y in (minY - 1)...(maxY + 1) {
+            for x in (minX - 1)...(maxX + 1) {
+                let position = GridPosition(x: x, y: y)
+                if hqCells.contains(GridPosition(x: x, y: y, z: 0)) {
+                    continue
+                }
+                XCTAssertEqual(
+                    validator.canPlace(.wall, at: position, in: world),
+                    .ok,
+                    "Expected wall to be placeable at (\(x), \(y)) around HQ perimeter"
+                )
+            }
+        }
+    }
+
     func testOutOfBoundsPlacementIsRejected() {
         let validator = PlacementValidator()
         let world = WorldState.bootstrap()
@@ -128,7 +160,7 @@ final class PlacementValidationTests: XCTestCase {
         )
     }
 
-    func testPlacementThatSealsCriticalPathIsRejected() {
+    func testPlacementThatSealsCriticalPathIsAllowed() {
         let blocked = (0..<5).flatMap { x in
             (0..<5).compactMap { y -> GridPosition? in
                 if y == 2 { return nil }
@@ -166,7 +198,7 @@ final class PlacementValidationTests: XCTestCase {
         let validator = PlacementValidator()
         XCTAssertEqual(
             validator.canPlace(.wall, at: GridPosition(x: 2, y: 2), in: world),
-            .blocksCriticalPath
+            .ok
         )
     }
 
