@@ -1248,14 +1248,6 @@ public struct WorldState: Codable, Hashable, Sendable {
     }
 }
 
-private enum CanonicalBootstrapContent {
-    static let bundle: GameContentBundle? = {
-        let contentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("Content/bootstrap")
-        return try? ContentLoader().loadBundle(from: contentDirectory)
-    }()
-}
-
 private struct DeterministicRNG {
     private var state: UInt64
 

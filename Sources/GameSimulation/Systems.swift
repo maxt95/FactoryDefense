@@ -1,14 +1,6 @@
 import Foundation
 import GameContent
 
-private enum CanonicalBootstrapContent {
-    static let bundle: GameContentBundle? = {
-        let contentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("Content/bootstrap")
-        return try? ContentLoader().loadBundle(from: contentDirectory)
-    }()
-}
-
 public struct CommandSystem: SimulationSystem {
     public init() {}
 

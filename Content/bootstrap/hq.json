@@ -7,43 +7,43 @@
   "powerDraw": 0,
   "startingResources": {
     "normal": {
-      "ore_iron": 20,
-      "ore_copper": 12,
-      "ore_coal": 6,
-      "plate_iron": 14,
-      "plate_copper": 6,
-      "plate_steel": 8,
-      "gear": 4,
-      "circuit": 4,
-      "turret_core": 4,
-      "wall_kit": 80,
-      "ammo_light": 16
-    },
-    "easy": {
-      "ore_iron": 30,
+      "ore_iron": 32,
       "ore_copper": 20,
       "ore_coal": 10,
-      "plate_iron": 18,
-      "plate_copper": 8,
-      "plate_steel": 10,
-      "gear": 5,
-      "circuit": 5,
-      "turret_core": 4,
-      "wall_kit": 80,
-      "ammo_light": 24
+      "plate_iron": 24,
+      "plate_copper": 12,
+      "plate_steel": 24,
+      "gear": 8,
+      "circuit": 8,
+      "turret_core": 6,
+      "wall_kit": 120,
+      "ammo_light": 32
+    },
+    "easy": {
+      "ore_iron": 45,
+      "ore_copper": 30,
+      "ore_coal": 15,
+      "plate_iron": 30,
+      "plate_copper": 15,
+      "plate_steel": 30,
+      "gear": 10,
+      "circuit": 10,
+      "turret_core": 6,
+      "wall_kit": 140,
+      "ammo_light": 40
     },
     "hard": {
-      "ore_iron": 12,
-      "ore_copper": 8,
-      "ore_coal": 4,
-      "plate_iron": 10,
-      "plate_copper": 4,
-      "plate_steel": 8,
-      "gear": 3,
-      "circuit": 2,
-      "turret_core": 4,
-      "wall_kit": 80,
-      "ammo_light": 8
+      "ore_iron": 20,
+      "ore_copper": 14,
+      "ore_coal": 7,
+      "plate_iron": 16,
+      "plate_copper": 8,
+      "plate_steel": 18,
+      "gear": 5,
+      "circuit": 4,
+      "turret_core": 5,
+      "wall_kit": 100,
+      "ammo_light": 16
     }
   }
 }
