@@ -196,6 +196,8 @@ public struct GameplayOverlayWindowChrome<Content: View>: View {
     public var onFocus: () -> Void
     public var onDragChanged: (CGSize) -> Void
     public var onDragEnded: (CGSize) -> Void
+    public var onResizeChanged: (CGSize) -> Void
+    public var onResizeEnded: (CGSize) -> Void
     @ViewBuilder public var content: Content
 
     public init(
@@ -203,61 +205,87 @@ public struct GameplayOverlayWindowChrome<Content: View>: View {
         onFocus: @escaping () -> Void,
         onDragChanged: @escaping (CGSize) -> Void,
         onDragEnded: @escaping (CGSize) -> Void,
+        onResizeChanged: @escaping (CGSize) -> Void,
+        onResizeEnded: @escaping (CGSize) -> Void,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.onFocus = onFocus
         self.onDragChanged = onDragChanged
         self.onDragEnded = onDragEnded
+        self.onResizeChanged = onResizeChanged
+        self.onResizeEnded = onResizeEnded
         self.content = content()
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Spacer(minLength: 8)
-                Image(systemName: "line.3.horizontal")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+        ZStack(alignment: .bottomTrailing) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    Image(systemName: "line.3.horizontal")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(.thinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                        .onChanged { value in
+                            onDragChanged(value.translation)
+                        }
+                        .onEnded { value in
+                            onDragEnded(value.translation)
+                        }
+                )
+                .simultaneousGesture(
+                    TapGesture().onEnded { onFocus() }
+                )
+
+                ScrollView(.vertical, showsIndicators: true) {
+                    content
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(.thinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                    .onChanged { value in
-                        onDragChanged(value.translation)
-                    }
-                    .onEnded { value in
-                        onDragEnded(value.translation)
-                    }
-            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(8)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+            }
             .simultaneousGesture(
                 TapGesture().onEnded { onFocus() }
             )
 
-            ScrollView(.vertical, showsIndicators: true) {
-                content
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(6)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
+                .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onChanged { value in
+                        onResizeChanged(value.translation)
+                    }
+                    .onEnded { value in
+                        onResizeEnded(value.translation)
+                    }
+                )
+                .simultaneousGesture(
+                    TapGesture().onEnded { onFocus() }
+                )
+                .padding(10)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(8)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
-        }
-        .simultaneousGesture(
-            TapGesture().onEnded { onFocus() }
-        )
     }
 }
 
@@ -298,6 +326,14 @@ public struct GameplayOverlayHost<Content: View>: View {
                             layoutState.setDragPosition(
                                 windowID: definition.id,
                                 origin: finalOrigin,
+                                viewportSize: viewportSize,
+                                safeAreaInsets: safeAreaInsets
+                            )
+                        },
+                        onResizeCommit: { finalSize in
+                            layoutState.updateWindowSize(
+                                id: definition.id,
+                                size: finalSize,
                                 viewportSize: viewportSize,
                                 safeAreaInsets: safeAreaInsets
                             )
@@ -371,13 +407,17 @@ private struct GameplayOverlayWindowInstance<Content: View>: View {
     var safeAreaInsets: SafeAreaInsets
     var onFocus: () -> Void
     var onCommit: (CGPoint) -> Void
+    var onResizeCommit: (CGSize) -> Void
     @ViewBuilder var content: Content
 
     @State private var dragStartOrigin: CGPoint?
     @State private var dragTranslation: CGSize = .zero
+    @State private var resizeStartSize: CGSize?
+    @State private var resizeTranslation: CGSize = .zero
 
     var body: some View {
         let origin = resolvedOrigin
+        let size = resolvedSize
         GameplayOverlayWindowChrome(
             title: title,
             onFocus: onFocus,
@@ -398,17 +438,38 @@ private struct GameplayOverlayWindowInstance<Content: View>: View {
                 onCommit(finalOrigin)
                 dragStartOrigin = nil
                 dragTranslation = .zero
+            },
+            onResizeChanged: { translation in
+                if resizeStartSize == nil {
+                    resizeStartSize = state.size
+                    onFocus()
+                }
+                resizeTranslation = translation
+            },
+            onResizeEnded: { translation in
+                if resizeStartSize == nil {
+                    resizeStartSize = state.size
+                    onFocus()
+                }
+                resizeTranslation = translation
+                onResizeCommit(resolvedSize)
+                resizeStartSize = nil
+                resizeTranslation = .zero
             }
         ) {
             content
         }
-        .frame(width: state.size.width, height: state.size.height, alignment: .topLeading)
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
         .clipped()
         .contentShape(Rectangle())
         .offset(x: origin.x, y: origin.y)
         .onChange(of: state.origin) { _, _ in
             guard dragStartOrigin == nil else { return }
             dragTranslation = .zero
+        }
+        .onChange(of: state.size) { _, _ in
+            guard resizeStartSize == nil else { return }
+            resizeTranslation = .zero
         }
     }
 
@@ -419,6 +480,15 @@ private struct GameplayOverlayWindowInstance<Content: View>: View {
             y: base.y + dragTranslation.height
         )
         return clamped(origin: next, windowSize: state.size)
+    }
+
+    private var resolvedSize: CGSize {
+        let base = resizeStartSize ?? state.size
+        let next = CGSize(
+            width: base.width + resizeTranslation.width,
+            height: base.height + resizeTranslation.height
+        )
+        return clamped(size: next, origin: resolvedOrigin)
     }
 
     private func clamped(origin: CGPoint, windowSize: CGSize) -> CGPoint {
@@ -435,6 +505,20 @@ private struct GameplayOverlayWindowInstance<Content: View>: View {
         return CGPoint(
             x: min(max(origin.x, minX), max(minX, maxX)),
             y: min(max(origin.y, minY), max(minY, maxY))
+        )
+    }
+
+    private func clamped(size: CGSize, origin: CGPoint) -> CGSize {
+        let margin: CGFloat = 12
+        let minWidth: CGFloat = 120
+        let minHeight: CGFloat = 64
+        let availableWidth = viewportSize.width - safeAreaInsets.trailing - margin - origin.x
+        let availableHeight = viewportSize.height - safeAreaInsets.bottom - margin - origin.y
+        let maxWidth = max(minWidth, availableWidth)
+        let maxHeight = max(minHeight, availableHeight)
+        return CGSize(
+            width: min(max(size.width, minWidth), maxWidth),
+            height: min(max(size.height, minHeight), maxHeight)
         )
     }
 }

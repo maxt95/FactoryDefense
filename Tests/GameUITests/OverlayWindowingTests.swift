@@ -90,6 +90,49 @@ final class OverlayWindowingTests: XCTestCase {
         }
     }
 
+    func testUpdateWindowSizeAppliesRequestedDimensions() {
+        let viewport = CGSize(width: 1800, height: 1200)
+        var layout = GameplayOverlayLayoutState.defaultLayout(viewportSize: viewport)
+
+        layout.updateWindowSize(
+            id: .resources,
+            size: CGSize(width: 700, height: 300),
+            viewportSize: viewport
+        )
+
+        guard let state = layout.windowState(for: .resources) else {
+            return XCTFail("Expected resources state")
+        }
+        XCTAssertEqual(state.size.width, 700, accuracy: 0.001)
+        XCTAssertEqual(state.size.height, 300, accuracy: 0.001)
+    }
+
+    func testUpdateWindowSizeClampsToMinAndViewport() {
+        let viewport = CGSize(width: 500, height: 360)
+        var layout = GameplayOverlayLayoutState.defaultLayout(viewportSize: viewport)
+
+        layout.updateWindowSize(
+            id: .buildMenu,
+            size: CGSize(width: 10_000, height: 10_000),
+            viewportSize: viewport
+        )
+        layout.updateWindowSize(
+            id: .buildMenu,
+            size: .zero,
+            viewportSize: viewport
+        )
+
+        guard let state = layout.windowState(for: .buildMenu) else {
+            return XCTFail("Expected build menu state")
+        }
+
+        XCTAssertGreaterThanOrEqual(state.size.width, 120)
+        XCTAssertGreaterThanOrEqual(state.size.height, 64)
+        let margin: CGFloat = 12
+        XCTAssertLessThanOrEqual(state.origin.x + state.size.width, viewport.width - margin + 0.001)
+        XCTAssertLessThanOrEqual(state.origin.y + state.size.height, viewport.height - margin + 0.001)
+    }
+
     func testSessionOnlyLayoutStateDoesNotPersistAcrossNewInstances() {
         let baseline = GameplayOverlayLayoutState.defaultLayout(
             viewportSize: CGSize(width: 1366, height: 768)
