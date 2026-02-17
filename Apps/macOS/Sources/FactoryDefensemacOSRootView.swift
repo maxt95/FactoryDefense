@@ -415,7 +415,6 @@ private struct FactoryDefensemacOSGameplayView: View {
             .onChange(of: runtime.world.tick) { _, _ in
                 onboarding.update(from: runtime.world)
                 validateSelection()
-                syncSelectedConveyorEditor()
             }
             .onChange(of: runtime.latestEvents) { _, events in
                 placementFeedback.consume(events: events)
