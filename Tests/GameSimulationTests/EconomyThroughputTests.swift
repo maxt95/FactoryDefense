@@ -10,7 +10,7 @@ final class EconomyThroughputTests: XCTestCase {
         let world = WorldState(
             tick: 0,
             entities: entities,
-            economy: EconomyState(inventories: ["ore_iron": 2]),
+            economy: EconomyState(structureInputBuffers: [smelterID: ["ore_iron": 2]]),
             threat: ThreatState(),
             run: RunState()
         )
@@ -65,7 +65,7 @@ final class EconomyThroughputTests: XCTestCase {
         let world = WorldState(
             tick: 0,
             entities: entities,
-            economy: EconomyState(inventories: inventory),
+            economy: EconomyState(structureInputBuffers: [structureID: inventory]),
             threat: ThreatState(),
             run: RunState()
         )

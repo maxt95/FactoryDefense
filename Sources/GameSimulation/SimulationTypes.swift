@@ -269,6 +269,7 @@ public enum CommandPayload: Codable, Hashable, Sendable {
     case placeStructure(BuildRequest)
     case removeStructure(entityID: EntityID)
     case placeConveyor(position: GridPosition, direction: CardinalDirection)
+    case configureConveyorIO(entityID: EntityID, inputDirection: CardinalDirection, outputDirection: CardinalDirection)
     case rotateBuilding(entityID: EntityID)
     case pinRecipe(entityID: EntityID, recipeID: String)
     case extract
@@ -280,6 +281,8 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         case entityID
         case position
         case direction
+        case inputDirection
+        case outputDirection
         case recipeID
     }
 
@@ -287,6 +290,7 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         case placeStructure
         case removeStructure
         case placeConveyor
+        case configureConveyorIO
         case rotateBuilding
         case pinRecipe
         case extract
@@ -305,6 +309,12 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             self = .placeConveyor(
                 position: try container.decode(GridPosition.self, forKey: .position),
                 direction: try container.decode(CardinalDirection.self, forKey: .direction)
+            )
+        case .configureConveyorIO:
+            self = .configureConveyorIO(
+                entityID: try container.decode(EntityID.self, forKey: .entityID),
+                inputDirection: try container.decode(CardinalDirection.self, forKey: .inputDirection),
+                outputDirection: try container.decode(CardinalDirection.self, forKey: .outputDirection)
             )
         case .rotateBuilding:
             self = .rotateBuilding(entityID: try container.decode(EntityID.self, forKey: .entityID))
@@ -333,6 +343,11 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             try container.encode(Kind.placeConveyor, forKey: .kind)
             try container.encode(position, forKey: .position)
             try container.encode(direction, forKey: .direction)
+        case .configureConveyorIO(let entityID, let inputDirection, let outputDirection):
+            try container.encode(Kind.configureConveyorIO, forKey: .kind)
+            try container.encode(entityID, forKey: .entityID)
+            try container.encode(inputDirection, forKey: .inputDirection)
+            try container.encode(outputDirection, forKey: .outputDirection)
         case .rotateBuilding(let entityID):
             try container.encode(Kind.rotateBuilding, forKey: .kind)
             try container.encode(entityID, forKey: .entityID)
@@ -356,6 +371,8 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             return "remove:\(entityID)"
         case .placeConveyor(let position, let direction):
             return "conveyor:\(position.x):\(position.y):\(position.z):\(direction.rawValue)"
+        case .configureConveyorIO(let entityID, let inputDirection, let outputDirection):
+            return "conveyorIO:\(entityID):\(inputDirection.rawValue):\(outputDirection.rawValue)"
         case .rotateBuilding(let entityID):
             return "rotate:\(entityID)"
         case .pinRecipe(let entityID, let recipeID):
@@ -669,6 +686,21 @@ public struct ConveyorPayload: Codable, Hashable, Sendable {
     }
 }
 
+public struct ConveyorIOConfig: Codable, Hashable, Sendable {
+    public var inputDirection: CardinalDirection
+    public var outputDirection: CardinalDirection
+
+    public init(inputDirection: CardinalDirection, outputDirection: CardinalDirection) {
+        self.inputDirection = inputDirection
+        self.outputDirection = outputDirection
+    }
+
+    public static func `default`(for rotation: Rotation) -> ConveyorIOConfig {
+        let output = rotation.direction
+        return ConveyorIOConfig(inputDirection: output.opposite, outputDirection: output)
+    }
+}
+
 public struct EconomyState: Codable, Hashable, Sendable {
     public var inventories: [ItemID: Int]
     public var activeRecipeByStructure: [EntityID: String]
@@ -679,6 +711,7 @@ public struct EconomyState: Codable, Hashable, Sendable {
     public var structureOutputBuffers: [EntityID: [ItemID: Int]]
     public var storageSharedPoolByEntity: [EntityID: [ItemID: Int]]
     public var conveyorPayloadByEntity: [EntityID: ConveyorPayload]
+    public var conveyorIOByEntity: [EntityID: ConveyorIOConfig]
     public var splitterOutputToggleByEntity: [EntityID: Int]
     public var mergerInputToggleByEntity: [EntityID: Int]
     public var powerAvailable: Int
@@ -696,6 +729,7 @@ public struct EconomyState: Codable, Hashable, Sendable {
         structureOutputBuffers: [EntityID: [ItemID: Int]] = [:],
         storageSharedPoolByEntity: [EntityID: [ItemID: Int]] = [:],
         conveyorPayloadByEntity: [EntityID: ConveyorPayload] = [:],
+        conveyorIOByEntity: [EntityID: ConveyorIOConfig] = [:],
         splitterOutputToggleByEntity: [EntityID: Int] = [:],
         mergerInputToggleByEntity: [EntityID: Int] = [:],
         powerAvailable: Int = 0,
@@ -712,12 +746,50 @@ public struct EconomyState: Codable, Hashable, Sendable {
         self.structureOutputBuffers = structureOutputBuffers
         self.storageSharedPoolByEntity = storageSharedPoolByEntity
         self.conveyorPayloadByEntity = conveyorPayloadByEntity
+        self.conveyorIOByEntity = conveyorIOByEntity
         self.splitterOutputToggleByEntity = splitterOutputToggleByEntity
         self.mergerInputToggleByEntity = mergerInputToggleByEntity
         self.powerAvailable = powerAvailable
         self.powerDemand = powerDemand
         self.currency = currency
         self.telemetry = telemetry
+    }
+
+    public init(
+        inventories: [ItemID: Int],
+        activeRecipeByStructure: [EntityID: String],
+        pinnedRecipeByStructure: [EntityID: String],
+        productionProgressByStructure: [EntityID: Double],
+        fractionalProductionRemainders: [ItemID: Double],
+        structureInputBuffers: [EntityID: [ItemID: Int]],
+        structureOutputBuffers: [EntityID: [ItemID: Int]],
+        storageSharedPoolByEntity: [EntityID: [ItemID: Int]],
+        conveyorPayloadByEntity: [EntityID: ConveyorPayload],
+        splitterOutputToggleByEntity: [EntityID: Int],
+        mergerInputToggleByEntity: [EntityID: Int],
+        powerAvailable: Int,
+        powerDemand: Int,
+        currency: Int,
+        telemetry: EconomyTelemetry
+    ) {
+        self.init(
+            inventories: inventories,
+            activeRecipeByStructure: activeRecipeByStructure,
+            pinnedRecipeByStructure: pinnedRecipeByStructure,
+            productionProgressByStructure: productionProgressByStructure,
+            fractionalProductionRemainders: fractionalProductionRemainders,
+            structureInputBuffers: structureInputBuffers,
+            structureOutputBuffers: structureOutputBuffers,
+            storageSharedPoolByEntity: storageSharedPoolByEntity,
+            conveyorPayloadByEntity: conveyorPayloadByEntity,
+            conveyorIOByEntity: [:],
+            splitterOutputToggleByEntity: splitterOutputToggleByEntity,
+            mergerInputToggleByEntity: mergerInputToggleByEntity,
+            powerAvailable: powerAvailable,
+            powerDemand: powerDemand,
+            currency: currency,
+            telemetry: telemetry
+        )
     }
 
     public init(
@@ -1137,15 +1209,16 @@ public struct WorldState: Codable, Hashable, Sendable {
     }
 
     public mutating func rebuildAggregatedInventory() {
-        guard run.hqEntityID != nil else { return }
-
         let hasPhysicalStores =
             !economy.structureInputBuffers.isEmpty
             || !economy.structureOutputBuffers.isEmpty
             || !economy.storageSharedPoolByEntity.isEmpty
             || !economy.conveyorPayloadByEntity.isEmpty
             || !combat.wallNetworks.isEmpty
-        guard hasPhysicalStores else { return }
+        guard hasPhysicalStores else {
+            economy.inventories = [:]
+            return
+        }
 
         var aggregate: [ItemID: Int] = [:]
 

@@ -1,6 +1,6 @@
 # Factory Defense - Living PRD
 
-Last updated: 2026-02-16
+Last updated: 2026-02-17
 Owner: Product + Engineering
 Status: Active living document
 
@@ -83,6 +83,7 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Miners require ore patches (1:1 binding, cardinal adjacency). Ore extraction depletes patches; Ring 0 guarantees at least one patch each of iron, copper, and coal with varied richness.
 - Production is recipe-driven and time-based per structure (not instant tick conversion).
 - Logistics is conveyor-routed with per-building buffers, finite capacity, and backpressure.
+- Production/storage buildings are side-agnostic at runtime (any cardinal side can accept or emit). Conveyors are directional and define transfer I/O.
 - Power uses global supply/demand with uniform brownout scaling of production throughput.
 - There are no build/wave phase gates in v1; building remains available during active threat. The threat model is continuous: grace period → trickle → surge waves.
 - Enemies follow a shared flow field toward the HQ. They attack the nearest structure blocking their path. Enemy types have behavioral modifiers (raiders seek structures, breachers target walls, overseers buff nearby enemies). Artillery_bug is deferred to post-v1.
@@ -114,7 +115,8 @@ Build and optimize a factory that manufactures the exact resources consumed by d
 - Content JSON is authoritative for items, recipes, waves, turret definitions, and tech data.
 - Buildings run allowed recipes with priority + optional recipe pinning override. Some recipes are gated behind tech research.
 - Items physically move via directed conveyors, splitters, mergers, and storage hubs.
-- Per-building input/output buffers are the primary inventory truth; global inventory is a computed aggregate for HUD display.
+- Conveyors expose explicit input/output directions per entity. Placement rotation provides defaults, and interact-mode configuration can remap conveyor intake/output sides later.
+- Per-building input/output buffers are the primary inventory truth; global inventory is a computed aggregate for HUD display and analytics only (not a simulation pull source).
 
 ### Combat and Threat
 - Turrets mount on wall segments (1:1). Each connected wall network has a shared ammo pool (capacity = segmentCount × 12). Conveyors inject ammo into wall networks at any segment. Turrets draw from their network's pool.
@@ -232,7 +234,7 @@ All individual PRDs have been updated to align with the locked decisions above (
 - 2026-02-15: Added Tech Tree Runtime PRD link.
 - 2026-02-16: Initialized living PRD from approved high-level product direction and implemented architecture baseline.
 - 2026-02-16: Aligned high-level living PRD with economy/building/whitebox PRDs; set conveyor + per-building buffer model as canonical v1 logistics direction.
-- 2026-02-16: Landed first-pass logistics runtime in simulation (structure input/output buffers, directed conveyor transfer/backpressure, local turret-ammo-first consumption with global fallback).
+- 2026-02-16: Landed first-pass logistics runtime in simulation (structure input/output buffers, directed conveyor transfer/backpressure, local turret-ammo-first consumption with global fallback; later superseded by 2026-02-17 no-fallback policy).
 - 2026-02-16: Re-aligned living PRD threat model to `wave_threat_system.md` (continuous pressure, no separate raid subsystem, no build-phase gating).
 - 2026-02-16: Major cross-PRD alignment pass. Resolved ~20 conflicts across individual PRDs. Locked decisions: HQ-only bootstrap (supersedes factory_economy 6-structure start), wall-mounted turrets with wall network ammo pools (supersedes building_specifications standalone turret), difficulty-scaled grace period 60–180s (supersedes factory_economy 20s), quadratic wave budget formula (supersedes factory_economy linear), Ring 0 guarantees iron+copper+coal with varied richness. Added HQ, Ore Patches, Tech Tree, and Build Interaction subsections to systems model. Added cross-PRD reconciliation tracker. Updated system execution order to 8 systems.
 - 2026-02-16: Completed cross-PRD reconciliation. Updated all 5 individual PRDs to align with living PRD locked decisions: factory_economy (continuous model, HQ-only bootstrap, quadratic formula, wall-mounted turrets, deterministic targeting), building_specifications (wall-mounted turret rewrite), run_bootstrap_session_init (coal guarantee, varied richness, ore colors), build_interaction_flow (ammo module ports), combat_rendering_vfx (M0 status, deterministic targeting).
@@ -244,9 +246,10 @@ All individual PRDs have been updated to align with the locked decisions above (
 - 2026-02-16: Rebalanced HQ starting resources across all difficulties to include processed starter components (`plate_copper`, `plate_steel`, `gear`, `circuit`, `turret_core`) and higher initial wall/ammo budgets; updated PRDs and tests to match the new baseline.
 - 2026-02-16: Landed Wave Threat v1 runtime slice in code: authored waves 1–8 + procedural waves 9+, deterministic full-perimeter clustered spawning with staggered queues, structure-targeting enemy modifiers (raider/breacher/overseer), wall-network shared ammo pools with split/rebuild events, host-wall turret mounting, and new threat telemetry counters. Supersedes prior spawn-east lock for threat ingress.
 - 2026-02-16: Landed first build-interaction/building-specs refactor slice: added rotation/direction command surface (`Rotation`, `CardinalDirection`, `BuildRequest.rotation`, command payload expansion), added `splitter`/`merger` structure types, implemented demolish command path with immediate 50% refund + HQ/path safety guards, added schema-versioned snapshots with explicit legacy rejection, introduced `buildings.json` + loader/validator schema (`BuildingDef`/`PortDef`/`ItemFilter`), regenerated golden replay fingerprint, and expanded tests for command encoding/ordering/snapshot compatibility and command-system behaviors.
-- 2026-02-16: Landed directional belt-node logistics runtime follow-up: conveyor transfer now respects all facings, splitter/merger alternation state is runtime-backed, storage uses a shared ingress/egress pool (`west/north` in, `east/south` out), and side-aware structure intake checks reject invalid ingress paths. Added logistics tests for directional transfer, splitter alternation, storage shared-pool behavior, and invalid-port rejection.
+- 2026-02-16: Landed directional belt-node logistics runtime follow-up: conveyor transfer now respects all facings, splitter/merger alternation state is runtime-backed, storage uses a shared ingress/egress pool (`west/north` in, `east/south` out), and side-aware structure intake checks reject invalid ingress paths (side constraints later superseded by 2026-02-17 side-agnostic building I/O policy).
 - 2026-02-16: Removed manual `Wave` trigger buttons from gameplay overlays across macOS/iOS/iPadOS/CLI so threat cadence remains simulation-timed (grace → trickle → surge) in normal player flow.
 - 2026-02-16: Realigned building data/UI to building-spec parity: `assembler` and `ammoModule` now expose dual west+north input ports in `buildings.json`, and build menus now include `splitter` and `merger` entries.
 - 2026-02-16: Expanded HUD warning/timing surfacing: resources panel now shows explicit grace/surge timers, power headroom, and lightweight research progress plus additional warnings for power shortage and patch exhaustion.
 - 2026-02-16: Updated enemy movement to use a shared BFS flow field toward HQ (per tick) and tightened default attack targeting to blocking structures, reducing per-enemy path solve churn and preventing non-blocking structure focus in default behavior.
 - 2026-02-16: Shifted construction affordability/consumption toward physical stock sources: HQ now participates as a storage-style logistics pool, bootstrap starts in HQ pool (not loose global inventory), and structure placement costs resolve against physical buffers/HQ stock while preserving legacy global-inventory compatibility for non-HQ test worlds.
+- 2026-02-17: Locked conveyor/building I/O policy update: production+storage buildings now accept and emit on any cardinal side, conveyors have explicit configurable input/output directions, and global inventory is aggregate/display-only (no transport/production pull fallback).

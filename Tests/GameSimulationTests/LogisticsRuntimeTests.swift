@@ -152,13 +152,13 @@ final class LogisticsRuntimeTests: XCTestCase {
         )
         _ = engine.step()
 
-        XCTAssertEqual(engine.worldState.economy.storageSharedPoolByEntity[storageID]?["plate_iron", default: 0] ?? 0, 0)
-        XCTAssertEqual(engine.worldState.economy.storageSharedPoolByEntity[storageID]?["plate_copper", default: 0] ?? 0, 0)
-        XCTAssertNotNil(engine.worldState.economy.conveyorPayloadByEntity[westIn]?.itemID)
-        XCTAssertNotNil(engine.worldState.economy.conveyorPayloadByEntity[eastIn]?.itemID)
+        XCTAssertEqual(engine.worldState.economy.storageSharedPoolByEntity[storageID]?["plate_iron", default: 0] ?? 0, 1)
+        XCTAssertEqual(engine.worldState.economy.storageSharedPoolByEntity[storageID]?["plate_copper", default: 0] ?? 0, 1)
+        XCTAssertNil(engine.worldState.economy.conveyorPayloadByEntity[westIn])
+        XCTAssertNil(engine.worldState.economy.conveyorPayloadByEntity[eastIn])
     }
 
-    func testAssemblerRejectsInputFromInvalidPortSide() {
+    func testAssemblerAcceptsInputFromAnySide() {
         var entities = EntityStore()
         let assemblerID = entities.spawnStructure(.assembler, at: GridPosition(x: 4, y: 4))
         let southConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 4, y: 5), rotation: .north)
@@ -181,8 +181,8 @@ final class LogisticsRuntimeTests: XCTestCase {
         )
         _ = engine.step()
 
-        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[assemblerID]?["plate_iron", default: 0] ?? 0, 0)
-        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[southConveyor]?.itemID, "plate_iron")
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[assemblerID]?["plate_iron", default: 0] ?? 0, 1)
+        XCTAssertNil(engine.worldState.economy.conveyorPayloadByEntity[southConveyor])
     }
 
     func testSmelterRejectsItemNotAllowedByPortFilter() {
@@ -215,14 +215,19 @@ final class LogisticsRuntimeTests: XCTestCase {
     func testConveyorCarriesOutputToNeighborInputBuffer() {
         var entities = EntityStore()
         _ = entities.spawnStructure(.powerPlant, at: GridPosition(x: 0, y: 1))
-        _ = entities.spawnStructure(.smelter, at: GridPosition(x: 0, y: 0))
+        let smelterID = entities.spawnStructure(.smelter, at: GridPosition(x: 0, y: 0))
         _ = entities.spawnStructure(.conveyor, at: GridPosition(x: 1, y: 0), rotation: .east)
         let assemblerID = entities.spawnStructure(.assembler, at: GridPosition(x: 2, y: 0))
 
         let world = WorldState(
             tick: 0,
             entities: entities,
-            economy: EconomyState(inventories: ["ore_iron": 2], structureInputBuffers: [assemblerID: [:]]),
+            economy: EconomyState(
+                structureInputBuffers: [
+                    smelterID: ["ore_iron": 2],
+                    assemblerID: [:]
+                ]
+            ),
             threat: ThreatState(),
             run: RunState()
         )
@@ -234,20 +239,78 @@ final class LogisticsRuntimeTests: XCTestCase {
 
         _ = engine.run(ticks: 50)
 
-        XCTAssertEqual(engine.worldState.economy.inventories["plate_iron", default: 0], 0)
+        XCTAssertEqual(engine.worldState.economy.inventories["plate_iron", default: 0], 1)
         XCTAssertEqual(engine.worldState.economy.structureInputBuffers[assemblerID]?["plate_iron", default: 0], 1)
+    }
+
+    func testConveyorConfiguredInputDirectionControlsAcceptedSourceSide() {
+        var entities = EntityStore()
+        let targetConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 3), rotation: .east)
+        let northSource = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 2), rotation: .south)
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(
+                conveyorPayloadByEntity: [
+                    northSource: ConveyorPayload(itemID: "plate_iron", progressTicks: 5)
+                ]
+            ),
+            threat: ThreatState(),
+            run: RunState()
+        )
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+
+        _ = engine.step()
+        XCTAssertNil(engine.worldState.economy.conveyorPayloadByEntity[targetConveyor])
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[northSource]?.itemID, "plate_iron")
+
+        engine.worldState.economy.conveyorIOByEntity[targetConveyor] = ConveyorIOConfig(
+            inputDirection: .north,
+            outputDirection: .east
+        )
+        _ = engine.step()
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[targetConveyor]?.itemID, "plate_iron")
+        XCTAssertNil(engine.worldState.economy.conveyorPayloadByEntity[northSource])
+    }
+
+    func testSmelterCanOutputToConveyorOnAnySide() {
+        var entities = EntityStore()
+        let smelterID = entities.spawnStructure(.smelter, at: GridPosition(x: 3, y: 3))
+        let northConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 2), rotation: .north)
+
+        let world = WorldState(
+            tick: 0,
+            entities: entities,
+            economy: EconomyState(
+                structureOutputBuffers: [smelterID: ["plate_iron": 1]]
+            ),
+            threat: ThreatState(),
+            run: RunState()
+        )
+        let engine = SimulationEngine(
+            worldState: world,
+            systems: [EconomySystem(minimumConstructionStock: [:], reserveProtectedRecipeIDs: [])]
+        )
+
+        _ = engine.step()
+        XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[northConveyor]?.itemID, "plate_iron")
+        XCTAssertEqual(engine.worldState.economy.structureOutputBuffers[smelterID]?["plate_iron", default: 0] ?? 0, 0)
     }
 
     func testConnectedConveyorBackpressureBlocksOutputDrain() {
         var entities = EntityStore()
         _ = entities.spawnStructure(.powerPlant, at: GridPosition(x: 0, y: 1))
         let ammoModuleID = entities.spawnStructure(.ammoModule, at: GridPosition(x: 0, y: 0))
-        let conveyorID = entities.spawnStructure(.conveyor, at: GridPosition(x: 1, y: 0))
+        let conveyorID = entities.spawnStructure(.conveyor, at: GridPosition(x: 1, y: 0), rotation: .east)
 
         let world = WorldState(
             tick: 0,
             entities: entities,
-            economy: EconomyState(inventories: ["plate_iron": 8]),
+            economy: EconomyState(structureInputBuffers: [ammoModuleID: ["plate_iron": 8]]),
             threat: ThreatState(),
             run: RunState()
         )
@@ -259,7 +322,7 @@ final class LogisticsRuntimeTests: XCTestCase {
 
         _ = engine.run(ticks: 200)
 
-        XCTAssertEqual(engine.worldState.economy.inventories["ammo_light", default: 0], 0)
+        XCTAssertEqual(engine.worldState.economy.inventories["ammo_light", default: 0], 8)
         XCTAssertEqual(engine.worldState.economy.structureOutputBuffers[ammoModuleID]?["ammo_light", default: 0], 7)
         XCTAssertEqual(engine.worldState.economy.conveyorPayloadByEntity[conveyorID]?.itemID, "ammo_light")
     }
@@ -329,7 +392,7 @@ final class LogisticsRuntimeTests: XCTestCase {
                     remainingOre: 500
                 )
             ],
-            economy: EconomyState(inventories: ["plate_iron": 6, "gear": 3]),
+            economy: EconomyState(storageSharedPoolByEntity: [1: ["plate_iron": 6, "gear": 3]]),
             threat: ThreatState(),
             run: RunState()
         )
@@ -384,7 +447,7 @@ final class LogisticsRuntimeTests: XCTestCase {
                     remainingOre: 500
                 )
             ],
-            economy: EconomyState(inventories: ["plate_iron": 6, "gear": 3]),
+            economy: EconomyState(storageSharedPoolByEntity: [1: ["plate_iron": 6, "gear": 3]]),
             threat: ThreatState(),
             run: RunState()
         )
@@ -438,7 +501,7 @@ final class LogisticsRuntimeTests: XCTestCase {
                     remainingOre: 150
                 )
             ],
-            economy: EconomyState(inventories: ["plate_iron": 6, "gear": 3]),
+            economy: EconomyState(storageSharedPoolByEntity: [1: ["plate_iron": 6, "gear": 3]]),
             threat: ThreatState(),
             run: RunState()
         )
@@ -510,7 +573,7 @@ final class LogisticsRuntimeTests: XCTestCase {
 
         XCTAssertEqual(engine.worldState.orePatches.first?.remainingOre, 0)
         XCTAssertEqual(engine.worldState.economy.structureOutputBuffers[minerID]?["ore_iron", default: 0], 2)
-        XCTAssertEqual(engine.worldState.economy.inventories["ore_iron", default: 0], 0)
+        XCTAssertEqual(engine.worldState.economy.inventories["ore_iron", default: 0], 2)
         XCTAssertEqual(engine.worldState.economy.powerDemand, 0)
         XCTAssertTrue(events.contains(where: { $0.kind == .patchExhausted && $0.entity == minerID && $0.value == 21 }))
         XCTAssertTrue(events.contains(where: { $0.kind == .minerIdled && $0.entity == minerID && $0.value == 21 }))

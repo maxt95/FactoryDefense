@@ -4,8 +4,9 @@ import XCTest
 final class WaveCombatIntegrationTests: XCTestCase {
     func testWaveSpawnsEnemiesAndTurretsFireProjectiles() {
         var world = WorldState.bootstrap()
-        _ = world.entities.spawnStructure(.turretMount, at: GridPosition(x: 50, y: 32))
-        world.economy.inventories["ammo_light"] = 400
+        let turretID = world.entities.spawnStructure(.turretMount, at: GridPosition(x: 50, y: 32))
+        world.economy.structureInputBuffers[turretID] = ["ammo_light": 400]
+        world.rebuildAggregatedInventory()
         world.run.phase = .playing
         world.threat = ThreatState(
             waveIndex: 0,

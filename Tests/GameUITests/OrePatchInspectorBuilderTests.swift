@@ -4,18 +4,19 @@ import XCTest
 
 final class OrePatchInspectorBuilderTests: XCTestCase {
     func testBuilderProducesStageOnlyDepositRowsForActiveUnboundPatch() {
-        let world = makeWorld(
-            patch: OrePatch(
-                id: 11,
-                oreType: "ore_copper",
-                richness: .rich,
-                position: GridPosition(x: 4, y: 6),
-                totalOre: 650,
-                remainingOre: 300
+        let model = OrePatchInspectorBuilder().build(
+            patchID: 11,
+            in: makeWorld(
+                patch: OrePatch(
+                    id: 11,
+                    oreType: "ore_copper",
+                    richness: .rich,
+                    position: GridPosition(x: 4, y: 6),
+                    totalOre: 650,
+                    remainingOre: 300
+                )
             )
         )
-
-        let model = OrePatchInspectorBuilder().build(patchID: 11, in: world)
         XCTAssertNotNil(model)
         XCTAssertEqual(model?.title, "Copper Ore")
         XCTAssertEqual(model?.subtitle, "Ore Deposit")
@@ -32,19 +33,20 @@ final class OrePatchInspectorBuilderTests: XCTestCase {
     }
 
     func testBuilderShowsBoundMinerAndExhaustedState() {
-        let world = makeWorld(
-            patch: OrePatch(
-                id: 29,
-                oreType: "ore_coal",
-                richness: .poor,
-                position: GridPosition(x: 9, y: 2),
-                totalOre: 150,
-                remainingOre: 0,
-                boundMinerID: 42
+        let model = OrePatchInspectorBuilder().build(
+            patchID: 29,
+            in: makeWorld(
+                patch: OrePatch(
+                    id: 29,
+                    oreType: "ore_coal",
+                    richness: .poor,
+                    position: GridPosition(x: 9, y: 2),
+                    totalOre: 150,
+                    remainingOre: 0,
+                    boundMinerID: 42
+                )
             )
         )
-
-        let model = OrePatchInspectorBuilder().build(patchID: 29, in: world)
         XCTAssertNotNil(model)
         XCTAssertEqual(value(for: "Type", in: model), "Coal")
         XCTAssertEqual(value(for: "Stage", in: model), "Exhausted")

@@ -382,7 +382,7 @@ This is simple, already works in the current implementation, and creates a clear
 - Backpressure propagates naturally through the conveyor network when downstream buffers fill.
 - Splitters and mergers provide explicit routing control.
 - Storage acts as a shared-pool logistics hub with 4 ports (2 in, 2 out) rather than a radius-based capacity booster.
-- The "global inventory" becomes a computed aggregate for HUD display and turret ammo pool fallback.
+- The "global inventory" becomes a computed aggregate for HUD display/analytics only and is not used as a simulation pull fallback.
 - Storage power draw is 0 (not +1 as previously specified in this section).
 
 **What remains valid from this section's design intent:**

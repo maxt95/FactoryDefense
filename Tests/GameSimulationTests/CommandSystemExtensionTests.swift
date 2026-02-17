@@ -61,10 +61,32 @@ final class CommandSystemExtensionTests: XCTestCase {
         XCTAssertEqual(engine.worldState.economy.pinnedRecipeByStructure[smelterID], "smelt_iron")
     }
 
+    func testConfigureConveyorIOCommandStoresRouting() {
+        var entities = EntityStore()
+        let conveyorID = entities.spawnStructure(.conveyor, at: GridPosition(x: 1, y: 1), rotation: .east)
+        let world = makeWorld(entities: entities)
+        let engine = SimulationEngine(worldState: world, systems: [CommandSystem()])
+
+        engine.enqueue(
+            PlayerCommand(
+                tick: 0,
+                actor: PlayerID(1),
+                payload: .configureConveyorIO(entityID: conveyorID, inputDirection: .north, outputDirection: .east)
+            )
+        )
+        _ = engine.step()
+
+        XCTAssertEqual(
+            engine.worldState.economy.conveyorIOByEntity[conveyorID],
+            ConveyorIOConfig(inputDirection: .north, outputDirection: .east)
+        )
+    }
+
     private func makeWorld(
         entities: EntityStore = EntityStore(),
         inventories: [ItemID: Int] = [:]
     ) -> WorldState {
+        var entities = entities
         let board = BoardState(
             width: 12,
             height: 8,
@@ -76,14 +98,19 @@ final class CommandSystemExtensionTests: XCTestCase {
             restrictedCells: [],
             ramps: []
         )
+        let hqID = entities.structures(of: .hq).first?.id
+            ?? entities.spawnStructure(.hq, at: GridPosition(x: 11, y: 7))
 
         return WorldState(
             tick: 0,
             board: board,
             entities: entities,
-            economy: EconomyState(inventories: inventories),
+            economy: EconomyState(
+                inventories: inventories,
+                storageSharedPoolByEntity: inventories.isEmpty ? [:] : [hqID: inventories]
+            ),
             threat: ThreatState(),
-            run: RunState(),
+            run: RunState(hqEntityID: hqID),
             combat: CombatState(
                 basePosition: GridPosition(x: 0, y: 0),
                 spawnEdgeX: 11,

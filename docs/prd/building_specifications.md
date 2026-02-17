@@ -3,9 +3,15 @@
 **Version:** 1.0-draft
 **Parent:** `docs/prd/factory_economy.md`
 **Status:** Implemented in v1 runtime
-**Last updated:** 2026-02-16
+**Last updated:** 2026-02-17
 
 > **Design model:** Conveyor-routed connections with per-building buffers. Items physically move between buildings via directed conveyor tiles. Each building has local input/output buffers with limited capacity. Backpressure propagates naturally through the system.
+
+> **Implementation decision update (2026-02-17):**
+> - Production/storage buildings are side-agnostic at runtime: any cardinal side may accept valid input or emit output.
+> - Conveyors own directionality via explicit per-entity input/output directions; placement rotation sets defaults, interact mode can reconfigure later.
+> - `EconomyState.inventories` is aggregate/display-only and is not a transport or production pull source.
+> - If older examples/tables in this doc imply fixed building-side ingress/egress, this update supersedes those side constraints.
 
 ---
 
@@ -66,25 +72,26 @@ Item filters:
 
 ### 1.3 Default Orientation & Rotation
 
-All buildings have a **default orientation** where:
-- **West** = input side (items flow in from the left/base side)
-- **East** = output side (items flow out toward the right/spawn side)
+Building rotation is still placement metadata and visual orientation. Runtime intake/output for production/storage structures is side-agnostic.
 
-This aligns with the map layout: base at x=2, spawn at x=18. Factory chains naturally flow left-to-right.
+For conveyors, rotation determines default I/O only:
+- default `outputDirection` = facing direction from rotation
+- default `inputDirection` = opposite of output
 
-**Rotation:** Players can rotate buildings in 90-degree increments at placement time. Rotation transforms all port directions. A building rotated 90 degrees clockwise swaps: N->E, E->S, S->W, W->N.
+Players can later override conveyor I/O explicitly from interact controls.
 
 ### 1.4 How Items Enter & Exit Ports
 
-**Entering (input ports):**
-1. An adjacent conveyor pushes its carried item into the port's buffer.
-2. The port accepts only if: (a) buffer is not full, AND (b) item passes the port's filter.
-3. If rejected, the item stays on the conveyor (backpressure).
+**Entering (building inputs):**
+1. An adjacent conveyor pushes its carried item toward a building.
+2. The building accepts if: (a) input capacity is not full, AND (b) the item passes structure/item filter rules.
+3. Building side does not gate acceptance; conveyors gate ingress by their configured output and the receiver's acceptance rules.
+4. If rejected, the item stays on the conveyor (backpressure).
 
-**Exiting (output ports):**
-1. When a building finishes crafting, output items are placed into the output port buffer.
-2. An adjacent conveyor pulls items from the output port buffer.
-3. If no conveyor is connected or the conveyor is full, items remain in the buffer (backpressure halts further crafting once the output buffer is full).
+**Exiting (building outputs):**
+1. When a building finishes crafting, output items are placed into the structure output buffer.
+2. The building attempts to push output to adjacent consumers on any cardinal side.
+3. If no valid route is available (or target is full), items remain buffered (backpressure halts further crafting once output capacity is full).
 
 ---
 
@@ -93,7 +100,8 @@ This aligns with the map layout: base at x=2, spawn at x=18. Factory chains natu
 ### 2.1 Conveyor Tile Model
 
 Each conveyor occupies 1 tile and has:
-- **Direction** — the cardinal direction items travel toward
+- **Input direction** — side where the conveyor accepts incoming items
+- **Output direction** — side where the conveyor forwards items
 - **Item slot** — holds at most **1 item** at a time
 - **Progress** — 0.0 (just entered) to 1.0 (ready to hand off to next tile)
 
@@ -113,23 +121,24 @@ Speed rationale at 20 Hz:
 
 ### 2.3 Connection Rules
 
-Connections are **implicit** based on adjacency and direction:
+Connections are **implicit** based on adjacency and conveyor I/O direction:
 
 **Conveyor to conveyor:**
-A conveyor at position P facing East hands off to the tile at P+(1,0) if that tile is a conveyor. The receiving tile must be empty.
+A conveyor at position P with `outputDirection = east` hands off to P+(1,0) if that tile is a conveyor, the receiving conveyor is empty, and P matches the receiver's configured input side.
 
-**Conveyor to building input port:**
-A conveyor at P facing East, where P+(1,0) is a building with a West-facing input port, pushes its item into that port's buffer.
+**Conveyor to building input:**
+A conveyor at P with `outputDirection = east`, where P+(1,0) is a building, attempts delivery into that building's input buffer. The target building side is not fixed; item acceptance is validated by structure/filter/capacity rules.
 
-**Building output port to conveyor:**
-A building's East output port at P, where P+(1,0) is a conveyor tile, places an item onto that conveyor (conveyor must be empty).
+**Building output to conveyor:**
+A building at P can push output to an adjacent conveyor on any side, as long as the conveyor is empty and configured to intake from P.
 
 No explicit "link" entities needed. Adjacency + direction alignment = connection.
 
 ### 2.4 Conveyor Variants
 
 **Standard Conveyor** (`conveyor`):
-- 1 input side (opposite of direction), 1 output side (direction)
+- 1 input side + 1 output side, both explicitly configurable per entity
+- Rotation at placement time sets default input/output directions
 - Holds 1 item, 5 ticks to traverse
 - Does NOT block enemy movement
 
@@ -205,6 +214,8 @@ Each building shows its current status:
 ---
 
 ## 4. Building Specifications
+
+Runtime note: production/storage building tables below keep item filter/capacity intent, but side-specific ingress/egress is superseded by side-agnostic building I/O in current runtime.
 
 ### 4.1 Miner
 
@@ -629,9 +640,9 @@ W  | W |  E
 
 | Transfer | Model | Description |
 |----------|-------|-------------|
-| Building output -> conveyor | Push | Buildings push finished items onto adjacent conveyors each tick |
-| Conveyor -> conveyor | Push | Items advance along direction automatically |
-| Conveyor -> building input | Push | Conveyors push items into adjacent input ports |
+| Building output -> conveyor | Push | Buildings push finished items onto adjacent conveyors on any cardinal side each tick |
+| Conveyor -> conveyor | Push | Items advance along configured conveyor output/input directions |
+| Conveyor -> building input | Push | Conveyors push items into adjacent buildings when structure/filter/capacity checks pass |
 | Building input -> processing | Pull | Buildings pull items from their own input buffers to start crafting |
 
 ### 5.2 Conveyor System Execution Order
@@ -644,8 +655,8 @@ Command > Economy/Production > Conveyor > Tech > Wave > EnemyMovement > Combat >
 
 Processing within the ConveyorSystem per tick:
 
-**Phase 1 — Output Port Ejection:**
-For each production building (sorted by EntityID ascending), attempt to push items from output buffers onto adjacent conveyors.
+**Phase 1 — Output Ejection:**
+For each production/storage building (sorted by EntityID ascending), attempt to push items from output buffers onto adjacent conveyors on all cardinal sides.
 
 **Phase 2 — Conveyor Advancement:**
 For each conveyor tile carrying an item with progress < 1.0, advance progress by 0.2.
@@ -653,7 +664,7 @@ For each conveyor tile carrying an item with progress < 1.0, advance progress by
 **Phase 3 — Conveyor Handoff:**
 For each conveyor tile with item progress >= 1.0 (processed **downstream-first** to prevent multi-tile jumps in one tick):
 1. If next tile is empty conveyor: transfer item, reset progress to 0.0
-2. If next tile is building with matching input port with space: transfer into buffer
+2. If next tile is a building that accepts the item and has space: transfer into buffer
 3. Otherwise: item waits (backpressure)
 
 ### 5.3 Edge Cases
@@ -752,15 +763,15 @@ For each conveyor tile with item progress >= 1.0 (processed **downstream-first**
 
 | Building | HP | Power | In Ports (side: filter, cap) | Out Ports (side: filter, cap) | Internal | Recipes | Blocks |
 |----------|-----|-------|-----|------|-----|---------|--------|
-| Miner | 60 | +2 | — | E: raw, 8 | 1 | extraction | Yes |
-| Smelter | 80 | +3 | W: ore+plate, 8 | E: processed, 4 | 1 batch | smelt_* | Yes |
-| Assembler | 80 | +3 | W: any, 6; N: any, 6 | E: any, 4 | 1 batch | forge/etch/assemble/craft_* | Yes |
-| Ammo Module | 100 | +4 | W: any, 6; N: any, 6 | E: ammo, 8 | 1 batch | craft_ammo_* | Yes |
+| Miner | 60 | +2 | — | Any side: raw, 8 | 1 | extraction | Yes |
+| Smelter | 80 | +3 | Any side: ore+plate, 8 | Any side: processed, 4 | 1 batch | smelt_* | Yes |
+| Assembler | 80 | +3 | Any side: any, 12 total | Any side: any, 4 | 1 batch | forge/etch/assemble/craft_* | Yes |
+| Ammo Module | 100 | +4 | Any side: any, 12 total | Any side: ammo, 8 | 1 batch | craft_ammo_* | Yes |
 | Power Plant | 80 | -12 | — | — | — | — | Yes |
-| Conveyor | 30 | +1 | back: any, 1 | front: any, 1 | 1 item | — | No |
+| Conveyor | 30 | +1 | Configured input side: any, 1 | Configured output side: any, 1 | 1 item | — | No |
 | Splitter | 30 | +1 | back: any, 1 | 2x front: any, 1 | 1 item | — | No |
 | Merger | 30 | +1 | 2x back: any, 1 | front: any, 1 | 1 item | — | No |
-| Storage | 60 | 0 | W: any, 24; N: any, 24 | E: any, 24; S: any, 24 | 48 shared | pass-through | Yes |
+| Storage | 60 | 0 | Any side: any, 48 shared | Any side: any, 48 shared | 48 shared | pass-through | Yes |
 | Wall | 150 | 0 | — | — | — | — | Yes |
 | Turret Mount | 100 | 0 | — (wall network pool) | — | — | wall-mounted, fires projectiles; also destroyed if wall dies | Yes (wall) |
 
@@ -873,7 +884,7 @@ This document **supersedes** section 5 (Logistics & Transport) of `docs/prd/fact
 - Build costs (section 6.2)
 - Balance framework (section 8)
 
-The key change: items no longer live in a global `EconomyState.inventories` dictionary. They live in building buffers and on conveyor tiles. The "global inventory" becomes a computed aggregate for HUD display and turret ammo pool fallback.
+The key change: items no longer live in a global `EconomyState.inventories` dictionary. They live in building buffers and on conveyor tiles. The "global inventory" is a computed aggregate for HUD/analytics and is not used as a logistics fallback.
 
 ---
 
@@ -882,3 +893,4 @@ The key change: items no longer live in a global `EconomyState.inventories` dict
 - 2026-02-15: Initial draft — conveyor-routed connection model with per-building buffers.
 - 2026-02-16: Cross-PRD alignment: Rewrote Turret Mount section (§4.11) from standalone building with ammo input port to wall-mounted model with wall network shared ammo pools per wave_threat_system.md and living PRD. Updated terminology, quick reference table, ammo pool references in Ammo Module and Storage sections, and worked example §6.3.
 - 2026-02-16: Implementation status updated to reflect shipped v1 runtime parity for directional conveyors, splitter/merger behavior, storage shared pools, rotation-aware ports, and recipe pinning integration.
+- 2026-02-17: Runtime policy update: production/storage I/O is side-agnostic; conveyors now expose explicit per-entity input/output directions configurable after placement; global inventory fallback removed from logistics/production flows.

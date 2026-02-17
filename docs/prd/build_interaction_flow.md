@@ -1,7 +1,7 @@
 # Build Interaction Flow
 
 Version: 1.0-draft
-Date: 2026-02-16
+Date: 2026-02-17
 Status: Implemented in v1 runtime
 Depends on: `building_specifications.md`, `run_bootstrap_session_init.md`, `factory_economy.md`
 
@@ -48,7 +48,7 @@ The player has selected a structure from the build menu and is placing it.
 Build mode behavior:
 - A **ghost preview** follows the cursor/finger showing the selected structure at the current grid cell.
 - The ghost is tinted **green** if placement is valid, **red** if invalid (occupied, restricted, blocks path, unaffordable).
-- The ghost shows the structure's port layout at the current rotation.
+- The ghost shows structure-facing cues and conveyor transfer direction cues at the current rotation.
 - After placing one structure, build mode **exits back to inspect mode**. The player must re-select from the build menu to place another.
 - Exception: **drag-draw** (see §4) for conveyors and walls allows placing multiple structures in one gesture without exiting build mode.
 
@@ -83,7 +83,7 @@ The build menu is a persistent overlay panel (already implemented as `BuildMenuP
 - Entries are visually distinguished by affordability state:
   - **Affordable**: normal appearance, selectable.
   - **Unaffordable**: dimmed/greyed, still selectable (enters build mode with red ghost so player can plan layout, but placement is blocked).
-- Affordability is checked against the **HQ storage buffer** (or global computed inventory in T0 fallback).
+- Affordability is checked against physical stock sources (HQ/storage/buffers surfaced through the aggregate economy view). Global computed inventory is display-only and not a transport/production source.
 
 ### 2.3 Selection Behavior
 
@@ -100,7 +100,7 @@ The build menu is a persistent overlay panel (already implemented as `BuildMenuP
 
 Buildings support 4-way rotation: **0° (north), 90° (east), 180° (south), 270° (west)**.
 
-Rotation determines port orientation. A smelter with an input port on its west face and output port on its east face, when rotated 90°, has input on north and output on south.
+Rotation determines entity facing and default conveyor I/O. Production/storage buildings keep their recipe/filter behavior, but runtime ingress/egress is side-agnostic.
 
 ### 3.2 Controls
 
@@ -118,29 +118,36 @@ Rotation determines port orientation. A smelter with an input port on its west f
 
 ### 3.4 Rotation for Conveyors
 
-Conveyors have a single input direction and single output direction. For single-tap placement, rotation sets the conveyor's flow direction:
-- 0° = south → north
-- 90° = west → east
-- 180° = north → south
-- 270° = east → west
+Conveyors have explicit input and output directions. For single-tap placement, rotation sets default conveyor I/O:
+- output = facing direction
+- input = opposite of output
 
-During drag-draw (§4), direction is inferred from the drag vector and rotation is ignored.
+During drag-draw (§4), output direction is inferred from the drag vector and input is set to the opposite direction.
 
 ### 3.5 Structures Where Rotation Matters
 
 | Structure | Ports | Rotation effect |
 |-----------|-------|-----------------|
-| Miner | 1 output | Controls which side ore exits |
-| Smelter | 1 input, 1 output | Controls input/output faces |
-| Assembler | 2 inputs, 1 output | Controls which faces accept which inputs |
-| Ammo Module | 2 inputs, 1 output | Controls input/output faces (per `building_specifications.md`: West + North inputs) |
-| Conveyor | 1 input, 1 output | Controls flow direction |
+| Miner | Side-agnostic output | Visual/facing only; output routing can occur on any side |
+| Smelter | Side-agnostic input/output | Visual/facing only; runtime I/O is not side-locked |
+| Assembler | Side-agnostic input/output | Visual/facing only; runtime I/O is not side-locked |
+| Ammo Module | Side-agnostic input/output | Visual/facing only; runtime I/O is not side-locked |
+| Conveyor | 1 input, 1 output | Sets default I/O on placement; can be reconfigured in inspect mode |
 | Splitter | 1 input, 2 outputs | Controls split direction |
 | Merger | 2 inputs, 1 output | Controls merge direction |
 | Storage | 4 ports (all faces) | Rotation has no visible effect |
 | Wall | No ports | Rotation has no visible effect |
 | Turret Mount | No ports (ammo from wall network) | Rotation has no visible effect |
 | Power Plant | No ports | Rotation has no visible effect |
+
+### 3.6 Conveyor I/O Configuration (Inspect Mode)
+
+When a conveyor is selected in inspect/interact mode:
+- Show `Input` and `Output` direction selectors (N/E/S/W).
+- Show transfer preview labels (`Input From`, `Output To`) in the inspector.
+- Applying the selection issues `configureConveyorIO(entityID:inputDirection:outputDirection)`.
+- Validation: input and output cannot be the same side.
+- This allows re-routing existing belts without rebuilding them.
 
 ---
 
@@ -158,7 +165,7 @@ Drag-draw activates when:
 
 1. **Drag starts**: First conveyor is placed at the starting cell.
 2. **Drag continues**: As the finger/cursor crosses into new grid cells, a structure is placed in each cell along the path.
-3. **Direction (conveyors only)**: Each conveyor's direction is set automatically from the movement vector between consecutive cells. Only cardinal directions (N/S/E/W) are supported — diagonal movement snaps to the dominant axis. Walls have no direction — they simply fill cells.
+3. **Direction (conveyors only)**: Each conveyor's default output is set from the movement vector between consecutive cells; input defaults to the opposite side. Only cardinal directions (N/S/E/W) are supported — diagonal movement snaps to the dominant axis. Walls have no direction — they simply fill cells.
 4. **Validation**: Each cell is validated individually. If a cell is invalid (occupied, restricted, unaffordable), it is skipped and the chain continues from the last valid cell.
 5. **Drag ends**: Build mode exits. All placed conveyors are final.
 
@@ -264,6 +271,7 @@ When the player attempts to confirm a placement that fails validation:
 |---------|---------|-------------|
 | `placeStructure` | `BuildRequest(structure, position, rotation)` | **Existing** — add `rotation` field |
 | `removeStructure` | `entityID: EntityID` | **New** — demolish with partial refund |
+| `configureConveyorIO` | `entityID, inputDirection, outputDirection` | **New** — reconfigure a placed conveyor's transfer sides |
 
 ### 7.2 Updated Types
 
@@ -300,8 +308,9 @@ enum Rotation: Int, Codable {
 
 | Current Code | PRD Target | Action |
 |--------------|------------|--------|
-| `BuildRequest` has no rotation | Add `rotation: Rotation` field | Extend struct |
-| No `removeStructure` command | Add `CommandPayload.removeStructure` | Extend enum |
+| `BuildRequest` has no rotation | Add `rotation: Rotation` field | Implemented |
+| No `removeStructure` command | Add `CommandPayload.removeStructure` | Implemented |
+| No conveyor reconfiguration command | Add `CommandPayload.configureConveyorIO` | Implemented |
 | No demolish validation | Add pathfinding check for removal | Extend `PlacementValidator` |
 | No interaction mode state | Add `InteractionMode` enum (inspect/build) | Add to UI state |
 | Build menu selection doesn't exit on place | Exit build mode after single placement | Change UI behavior |
@@ -319,7 +328,7 @@ enum Rotation: Int, Codable {
 - Add `Rotation` enum.
 - Add `rotation` field to `BuildRequest` and entity storage.
 - Wire R key and rotate button in UI.
-- Update ghost preview to show rotated port layout.
+- Update ghost preview to show rotated facing/transfer cues.
 - Update `CommandSystem` to store rotation on placed entities.
 
 ### Phase 2: Interaction Mode State (blocks T0)
@@ -386,3 +395,4 @@ enum Rotation: Int, Codable {
 - 2026-02-16: Resolved all open questions. Conveyor free-removal is intentional. Rotation resets on mode exit. Drag-draw extended to walls. Touch disambiguation rules canonicalized.
 - 2026-02-16: Cross-PRD alignment: Fixed Ammo Module port count from 1 input to 2 inputs (per building_specifications.md).
 - 2026-02-16: Implementation status updated to reflect shipped v1 runtime parity across macOS, iOS, iPadOS, and CLI gameplay root.
+- 2026-02-17: Updated interaction model for conveyor I/O reconfiguration and side-agnostic building I/O; removed global-inventory fallback language from affordability/flow notes.

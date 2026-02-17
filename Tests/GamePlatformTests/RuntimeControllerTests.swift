@@ -121,7 +121,8 @@ final class RuntimeControllerTests: XCTestCase {
 
     func testPlaceStructurePathStopsWhenResourcesExhausted() {
         var world = makeCommandHelperWorld()
-        world.economy.inventories["wall_kit"] = 2
+        world.economy.storageSharedPoolByEntity[1, default: [:]]["wall_kit"] = 2
+        world.rebuildAggregatedInventory()
         let runtime = GameRuntimeController(initialWorld: world)
 
         runtime.placeStructurePath(
@@ -142,8 +143,9 @@ final class RuntimeControllerTests: XCTestCase {
     func testPlaceStructurePathSkipsInvalidCellsAndKeepsValidPlacements() {
         var world = makeCommandHelperWorld()
         for cost in StructureType.wall.buildCosts {
-            world.economy.inventories[cost.itemID] = 20
+            world.economy.storageSharedPoolByEntity[1, default: [:]][cost.itemID] = 20
         }
+        world.rebuildAggregatedInventory()
         let runtime = GameRuntimeController(initialWorld: world)
 
         runtime.placeStructurePath(
@@ -179,11 +181,11 @@ final class RuntimeControllerTests: XCTestCase {
         let hqID = entities.spawnStructure(.hq, at: GridPosition(x: 1, y: 1), health: 2, maxHealth: 2)
         let enemyID = entities.spawnEnemy(at: GridPosition(x: 0, y: 0), health: 10)
 
-        return WorldState(
+        var world = WorldState(
             tick: 0,
             board: board,
             entities: entities,
-            economy: EconomyState(inventories: ["wall_kit": 1]),
+            economy: EconomyState(storageSharedPoolByEntity: [hqID: ["wall_kit": 1]]),
             threat: ThreatState(
                 waveIndex: 0,
                 nextWaveTick: 9_999,
@@ -221,6 +223,8 @@ final class RuntimeControllerTests: XCTestCase {
                 spawnYMax: 2
             )
         )
+        world.rebuildAggregatedInventory()
+        return world
     }
 
     private func makeCommandHelperWorld() -> WorldState {
@@ -237,17 +241,17 @@ final class RuntimeControllerTests: XCTestCase {
         )
 
         var entities = EntityStore()
-        _ = entities.spawnStructure(.hq, at: GridPosition(x: 0, y: 0))
+        let hqID = entities.spawnStructure(.hq, at: GridPosition(x: 0, y: 0))
         _ = entities.spawnStructure(.assembler, at: GridPosition(x: 2, y: 2))
         _ = entities.spawnStructure(.wall, at: GridPosition(x: 4, y: 4))
 
-        return WorldState(
+        var world = WorldState(
             tick: 0,
             board: board,
             entities: entities,
-            economy: EconomyState(inventories: ["plate_iron": 20]),
+            economy: EconomyState(storageSharedPoolByEntity: [hqID: ["plate_iron": 20]]),
             threat: ThreatState(),
-            run: RunState(phase: .playing, hqEntityID: 1),
+            run: RunState(phase: .playing, hqEntityID: hqID),
             combat: CombatState(
                 basePosition: GridPosition(x: 0, y: 0),
                 spawnEdgeX: 7,
@@ -255,5 +259,7 @@ final class RuntimeControllerTests: XCTestCase {
                 spawnYMax: 2
             )
         )
+        world.rebuildAggregatedInventory()
+        return world
     }
 }

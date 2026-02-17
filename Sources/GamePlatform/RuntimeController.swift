@@ -174,6 +174,20 @@ public final class GameRuntimeController: ObservableObject {
         enqueue(payload: .placeConveyor(position: position, direction: direction))
     }
 
+    public func configureConveyorIO(
+        entityID: EntityID,
+        inputDirection: CardinalDirection,
+        outputDirection: CardinalDirection
+    ) {
+        enqueue(
+            payload: .configureConveyorIO(
+                entityID: entityID,
+                inputDirection: inputDirection,
+                outputDirection: outputDirection
+            )
+        )
+    }
+
     public func placeStructurePath(
         _ structure: StructureType,
         along points: [GridPosition],

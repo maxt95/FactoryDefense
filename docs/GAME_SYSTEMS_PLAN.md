@@ -74,7 +74,7 @@ Goal: align runtime logistics with `docs/prd/building_specifications.md`.
 - [x] Add splitter and merger runtime behavior.
 - [x] Add storage as shared-pool logistics hub with multi-port behavior.
 - [x] Add recipe pinning and building rotation command support.
-- [x] Update combat ammo draw order (local turret buffer first, logical pool fallback).
+- [x] Update combat ammo sourcing to wall-network/shared-pool only (no global inventory fallback).
 
 Exit criteria:
 - Item movement is visible and physically constrained by conveyor network design.
@@ -119,7 +119,7 @@ Exit criteria:
 ### Workstream C - Factory Economy and Logistics
 - [~] Starter production loop and power scaling exist.
 - [~] Recipe-timed, per-structure production model exists; output buffering/local-input consumption are wired, and miner extraction now binds to adjacent ore patches with finite depletion.
-- [x] Conveyor-routed runtime is PRD-aligned for directed transfer, backpressure, splitter/merger behavior, storage shared pools, and port/filter validation.
+- [x] Conveyor-routed runtime is PRD-aligned for directed transfer, backpressure, splitter/merger behavior, storage shared pools, configurable conveyor I/O, and building side-agnostic intake/output with item filtering.
 
 ### Workstream D - Combat, Waves, AI
 - [x] Grace period + trickle + compressed wave cadence with deterministic queue draining and wave lifecycle events.

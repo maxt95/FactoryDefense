@@ -12,7 +12,13 @@ final class TurretBehaviorTests: XCTestCase {
         let world = WorldState(
             tick: 0,
             entities: entities,
-            economy: EconomyState(inventories: ["ammo_light": 1, "ammo_heavy": 1, "ammo_plasma": 1]),
+            economy: EconomyState(
+                structureInputBuffers: [
+                    mk1ID: ["ammo_light": 1],
+                    mk2ID: ["ammo_heavy": 1],
+                    plasmaID: ["ammo_plasma": 1]
+                ]
+            ),
             threat: ThreatState(),
             run: RunState(),
             combat: CombatState(
@@ -35,9 +41,9 @@ final class TurretBehaviorTests: XCTestCase {
         let engine = SimulationEngine(worldState: world, systems: [CombatSystem()])
         let events = engine.step()
 
-        XCTAssertEqual(engine.worldState.economy.inventories["ammo_light", default: 0], 0)
-        XCTAssertEqual(engine.worldState.economy.inventories["ammo_heavy", default: 0], 0)
-        XCTAssertEqual(engine.worldState.economy.inventories["ammo_plasma", default: 0], 0)
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[mk1ID]?["ammo_light", default: 0] ?? 0, 0)
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[mk2ID]?["ammo_heavy", default: 0] ?? 0, 0)
+        XCTAssertEqual(engine.worldState.economy.structureInputBuffers[plasmaID]?["ammo_plasma", default: 0] ?? 0, 0)
 
         let ammoSpentItems = Set(events.compactMap { event in
             event.kind == .ammoSpent ? event.itemID : nil
@@ -63,13 +69,13 @@ final class TurretBehaviorTests: XCTestCase {
 
     private func shotsFired(turretDefID: String, ammoItemID: String, ticks: Int) -> Int {
         var entities = EntityStore()
-        _ = entities.spawnStructure(.turretMount, at: GridPosition(x: 0, y: 0), turretDefID: turretDefID)
+        let turretID = entities.spawnStructure(.turretMount, at: GridPosition(x: 0, y: 0), turretDefID: turretDefID)
         let enemyID = entities.spawnEnemy(at: GridPosition(x: 3, y: 0), health: 10_000)
 
         let world = WorldState(
             tick: 0,
             entities: entities,
-            economy: EconomyState(inventories: [ammoItemID: 100]),
+            economy: EconomyState(structureInputBuffers: [turretID: [ammoItemID: 100]]),
             threat: ThreatState(),
             run: RunState(),
             combat: CombatState(

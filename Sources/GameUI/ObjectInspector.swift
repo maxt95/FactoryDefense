@@ -140,15 +140,20 @@ public struct ObjectInspectorBuilder: Sendable {
             sections.append(ObjectInspectorSection(title: "Buffers", rows: bufferEntries))
         }
 
-        if structureType == .conveyor,
-           let payload = world.economy.conveyorPayloadByEntity[entity.id] {
+        if structureType == .conveyor {
+            let io = world.economy.conveyorIOByEntity[entity.id] ?? ConveyorIOConfig.default(for: entity.rotation)
+            var transportRows: [ObjectInspectorRow] = [
+                ObjectInspectorRow(label: "Input From", value: io.inputDirection.rawValue.capitalized),
+                ObjectInspectorRow(label: "Output To", value: io.outputDirection.rawValue.capitalized)
+            ]
+            if let payload = world.economy.conveyorPayloadByEntity[entity.id] {
+                transportRows.append(ObjectInspectorRow(label: "Item", value: humanizedLabel(payload.itemID)))
+                transportRows.append(ObjectInspectorRow(label: "Progress Ticks", value: "\(payload.progressTicks)"))
+            }
             sections.append(
                 ObjectInspectorSection(
                     title: "Transport",
-                    rows: [
-                        ObjectInspectorRow(label: "Item", value: humanizedLabel(payload.itemID)),
-                        ObjectInspectorRow(label: "Progress Ticks", value: "\(payload.progressTicks)")
-                    ]
+                    rows: transportRows
                 )
             )
         }

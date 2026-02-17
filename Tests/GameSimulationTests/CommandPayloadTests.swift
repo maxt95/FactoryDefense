@@ -13,6 +13,7 @@ final class CommandPayloadTests: XCTestCase {
             ),
             .removeStructure(entityID: 99),
             .placeConveyor(position: GridPosition(x: 7, y: 3), direction: .south),
+            .configureConveyorIO(entityID: 7, inputDirection: .north, outputDirection: .east),
             .rotateBuilding(entityID: 42),
             .pinRecipe(entityID: 5, recipeID: "smelt_iron"),
             .extract,
@@ -46,6 +47,10 @@ final class CommandPayloadTests: XCTestCase {
 
         XCTAssertNotEqual(placeNorth.sortToken, placeEast.sortToken)
         XCTAssertEqual(CommandPayload.removeStructure(entityID: 7).sortToken, "remove:7")
+        XCTAssertEqual(
+            CommandPayload.configureConveyorIO(entityID: 7, inputDirection: .north, outputDirection: .east).sortToken,
+            "conveyorIO:7:north:east"
+        )
         XCTAssertEqual(CommandPayload.rotateBuilding(entityID: 7).sortToken, "rotate:7")
         XCTAssertEqual(CommandPayload.pinRecipe(entityID: 7, recipeID: "a").sortToken, "pin:7:a")
     }

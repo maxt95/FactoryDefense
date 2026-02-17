@@ -219,6 +219,13 @@ public struct CommandSystem: SimulationSystem {
                     emitEvent: context.emit
                 )
                 update(state: &state, context: translatedContext)
+            case .configureConveyorIO(let entityID, let inputDirection, let outputDirection):
+                guard inputDirection != outputDirection else { continue }
+                guard let entity = state.entities.entity(id: entityID), entity.structureType == .conveyor else { continue }
+                state.economy.conveyorIOByEntity[entityID] = ConveyorIOConfig(
+                    inputDirection: inputDirection,
+                    outputDirection: outputDirection
+                )
             case .rotateBuilding(let entityID):
                 state.entities.rotateStructure(entityID)
             case .pinRecipe(let entityID, let recipeID):
@@ -232,6 +239,8 @@ public struct CommandSystem: SimulationSystem {
                 state.threat.nextWaveTick = state.tick
             }
         }
+
+        state.rebuildAggregatedInventory()
     }
 
     private func bindMiner(_ minerID: EntityID, toPatchID patchID: Int, state: inout WorldState) {
@@ -294,7 +303,6 @@ public struct CommandSystem: SimulationSystem {
 
     private func consumeConstructionCosts(_ costs: [ItemStack], state: inout WorldState) -> Bool {
         guard !costs.isEmpty else { return true }
-        guard state.economy.canAfford(costs) else { return false }
         let refs = constructionPoolOrder(state: state)
         var poolTotals: [ItemID: Int] = [:]
         for ref in refs {
@@ -302,13 +310,7 @@ public struct CommandSystem: SimulationSystem {
                 poolTotals[itemID, default: 0] += quantity
             }
         }
-
-        let useLegacyGlobalOnly = costs.contains { cost in
-            state.economy.inventories[cost.itemID, default: 0] != poolTotals[cost.itemID, default: 0]
-        }
-        if useLegacyGlobalOnly {
-            return state.economy.consume(costs: costs)
-        }
+        guard costs.allSatisfy({ poolTotals[$0.itemID, default: 0] >= $0.quantity }) else { return false }
 
         for cost in costs {
             var remaining = cost.quantity
@@ -418,6 +420,7 @@ public struct CommandSystem: SimulationSystem {
         state.economy.structureOutputBuffers.removeValue(forKey: structureID)
         state.economy.storageSharedPoolByEntity.removeValue(forKey: structureID)
         state.economy.conveyorPayloadByEntity.removeValue(forKey: structureID)
+        state.economy.conveyorIOByEntity.removeValue(forKey: structureID)
         state.economy.splitterOutputToggleByEntity.removeValue(forKey: structureID)
         state.economy.mergerInputToggleByEntity.removeValue(forKey: structureID)
         state.combat.lastFireTickByTurret.removeValue(forKey: structureID)
@@ -633,7 +636,7 @@ public struct EconomySystem: SimulationSystem {
         structureID: EntityID,
         state: WorldState
     ) -> RecipeDef? {
-        let inventory = combinedInventory(for: structureID, state: state)
+        let inventory = localInputInventory(for: structureID, state: state)
         if let pinnedRecipeID = state.economy.pinnedRecipeByStructure[structureID],
            let pinnedRecipe = recipesByID[pinnedRecipeID],
            pinnedRecipe.inputs.allSatisfy({ inventory[$0.itemID, default: 0] >= $0.quantity }),
@@ -649,20 +652,14 @@ public struct EconomySystem: SimulationSystem {
         return nil
     }
 
-    private func combinedInventory(for structureID: EntityID, state: WorldState) -> [ItemID: Int] {
-        var combined = state.economy.inventories
-        for (itemID, quantity) in state.economy.structureInputBuffers[structureID, default: [:]] where quantity > 0 {
-            combined[itemID, default: 0] += quantity
-        }
-        return combined
+    private func localInputInventory(for structureID: EntityID, state: WorldState) -> [ItemID: Int] {
+        state.economy.structureInputBuffers[structureID, default: [:]]
     }
 
     private func canAffordRecipeInputs(_ inputs: [ItemStack], structureID: EntityID, state: WorldState) -> Bool {
         let localBuffer = state.economy.structureInputBuffers[structureID, default: [:]]
         for input in inputs {
-            let local = localBuffer[input.itemID, default: 0]
-            let global = state.economy.inventories[input.itemID, default: 0]
-            if local + global < input.quantity {
+            if localBuffer[input.itemID, default: 0] < input.quantity {
                 return false
             }
         }
@@ -681,19 +678,13 @@ public struct EconomySystem: SimulationSystem {
 
         var localBuffer = state.economy.structureInputBuffers[structureID, default: [:]]
         for input in inputs {
-            var remaining = input.quantity
             let localAvailable = localBuffer[input.itemID, default: 0]
-            if localAvailable > 0 {
-                let localConsumption = min(localAvailable, remaining)
-                localBuffer[input.itemID] = localAvailable - localConsumption
-                if localBuffer[input.itemID] == 0 {
-                    localBuffer.removeValue(forKey: input.itemID)
-                }
-                remaining -= localConsumption
-            }
-
-            if remaining > 0 {
-                _ = state.economy.consume(itemID: input.itemID, quantity: remaining)
+            guard localAvailable >= input.quantity else { return false }
+            let updated = localAvailable - input.quantity
+            if updated > 0 {
+                localBuffer[input.itemID] = updated
+            } else {
+                localBuffer.removeValue(forKey: input.itemID)
             }
         }
 
@@ -789,6 +780,9 @@ public struct EconomySystem: SimulationSystem {
             if !isBeltNode(structureType) {
                 state.economy.conveyorPayloadByEntity.removeValue(forKey: structureID)
             }
+            if structureType != .conveyor {
+                state.economy.conveyorIOByEntity.removeValue(forKey: structureID)
+            }
             if structureType != .splitter {
                 state.economy.splitterOutputToggleByEntity.removeValue(forKey: structureID)
             }
@@ -807,6 +801,9 @@ public struct EconomySystem: SimulationSystem {
         state.economy.conveyorPayloadByEntity = state.economy.conveyorPayloadByEntity.filter {
             guard let type = structureTypesByID[$0.key] else { return false }
             return isBeltNode(type)
+        }
+        state.economy.conveyorIOByEntity = state.economy.conveyorIOByEntity.filter {
+            structureTypesByID[$0.key] == .conveyor
         }
         state.economy.splitterOutputToggleByEntity = state.economy.splitterOutputToggleByEntity.filter {
             structureTypesByID[$0.key] == .splitter
@@ -993,9 +990,9 @@ public struct EconomySystem: SimulationSystem {
             guard let structureType = structure.structureType else { continue }
             guard outputBufferCapacity(for: structureType) > 0 else { continue }
             guard !(state.economy.structureOutputBuffers[structure.id, default: [:]].isEmpty) else { continue }
-            for outputPort in resolvedOutputPorts(for: structure, includeBidirectional: false) {
-                let targetPosition = structure.position.translated(by: outputPort.direction)
-                guard let itemID = popFirstOutputItem(structureID: structure.id, matching: outputPort.filter, state: &state) else {
+            for outputDirection in buildingTransferDirections(for: structureType) {
+                let targetPosition = structure.position.translated(by: outputDirection)
+                guard let itemID = popFirstOutputItem(structureID: structure.id, state: &state) else {
                     continue
                 }
 
@@ -1060,9 +1057,9 @@ public struct EconomySystem: SimulationSystem {
             .filter { $0.structureType == .storage || $0.structureType == .hq }
             .sorted(by: { $0.id < $1.id })
         for storage in storages {
-            for outputPort in resolvedOutputPorts(for: storage, includeBidirectional: true) {
-                let targetPosition = storage.position.translated(by: outputPort.direction)
-                guard let itemID = popFirstStoragePoolItem(storageID: storage.id, matching: outputPort.filter, state: &state) else {
+            for outputDirection in CardinalDirection.allCases {
+                let targetPosition = storage.position.translated(by: outputDirection)
+                guard let itemID = popFirstStoragePoolItem(storageID: storage.id, state: &state) else {
                     continue
                 }
 
@@ -1100,11 +1097,15 @@ public struct EconomySystem: SimulationSystem {
     }
 
     private func transferTargets(for node: Entity, structureType: StructureType, state: WorldState) -> [GridPosition] {
-        let facing = node.rotation.direction
         switch structureType {
-        case .conveyor, .merger:
+        case .conveyor:
+            let io = resolvedConveyorIO(for: node, state: state)
+            return [node.position.translated(by: io.outputDirection)]
+        case .merger:
+            let facing = node.rotation.direction
             return [node.position.translated(by: facing)]
         case .splitter:
+            let facing = node.rotation.direction
             let toggle = state.economy.splitterOutputToggleByEntity[node.id, default: 0]
             let first = toggle % 2 == 0 ? facing.left : facing.right
             let second = first == facing.left ? facing.right : facing.left
@@ -1127,7 +1128,11 @@ public struct EconomySystem: SimulationSystem {
         guard let targetNode = nodesByID[targetStructureID], let targetType = targetNode.structureType else { return false }
         guard isBeltNode(targetType) else { return false }
 
-        if targetType == .merger {
+        if targetType == .conveyor {
+            let io = resolvedConveyorIO(for: targetNode, state: state)
+            let inputPosition = targetNode.position.translated(by: io.inputDirection)
+            guard sourcePosition == inputPosition else { return false }
+        } else if targetType == .merger {
             let facing = targetNode.rotation.direction
             let leftInput = targetNode.position.translated(by: facing.left)
             let rightInput = targetNode.position.translated(by: facing.right)
@@ -1143,6 +1148,22 @@ public struct EconomySystem: SimulationSystem {
 
         state.economy.conveyorPayloadByEntity[targetStructureID] = ConveyorPayload(itemID: itemID, progressTicks: 0)
         return true
+    }
+
+    private func resolvedConveyorIO(for node: Entity, state: WorldState) -> ConveyorIOConfig {
+        if let configured = state.economy.conveyorIOByEntity[node.id] {
+            return configured
+        }
+        return ConveyorIOConfig.default(for: node.rotation)
+    }
+
+    private func buildingTransferDirections(for structureType: StructureType) -> [CardinalDirection] {
+        switch structureType {
+        case .miner, .smelter, .assembler, .ammoModule, .storage, .hq:
+            return CardinalDirection.allCases
+        default:
+            return []
+        }
     }
 
     private func isBeltNode(_ structureType: StructureType) -> Bool {
@@ -1454,51 +1475,10 @@ public struct EconomySystem: SimulationSystem {
         sourcePosition: GridPosition?,
         state: WorldState
     ) -> Bool {
-        let inputPorts = resolvedInputPorts(for: structure)
-        if !inputPorts.isEmpty {
-            let sideMatchedPorts = inputPorts.filter { port in
-                guard let sourcePosition else { return true }
-                return sourcePosition == structure.position.translated(by: port.direction)
-            }
-            guard !sideMatchedPorts.isEmpty else { return false }
-            return sideMatchedPorts.contains(where: { itemMatchesFilter(itemID: itemID, filter: $0.filter) })
-        }
-
-        return acceptsInputFallback(itemID: itemID, structureType: structure.structureType, structure: structure, sourcePosition: sourcePosition, state: state)
-    }
-
-    private func acceptsInputFallback(
-        itemID: ItemID,
-        structureType: StructureType?,
-        structure: Entity,
-        sourcePosition: GridPosition?,
-        state: WorldState
-    ) -> Bool {
-        guard let structureType else { return false }
-        guard acceptsInputByStructureType(itemID: itemID, structureType: structureType) else { return false }
-        guard acceptsPortInputFallback(structureType: structureType, structure: structure, sourcePosition: sourcePosition, state: state) else { return false }
-        return true
-    }
-
-    private func acceptsPortInputFallback(
-        structureType: StructureType,
-        structure: Entity,
-        sourcePosition: GridPosition?,
-        state: WorldState
-    ) -> Bool {
-        guard let sourcePosition else { return true }
-        let west = structure.position.translated(by: .west)
-        let north = structure.position.translated(by: .north)
-        switch structureType {
-        case .smelter:
-            return sourcePosition == west
-        case .assembler, .ammoModule:
-            return sourcePosition == west || sourcePosition == north
-        case .turretMount:
-            return false
-        default:
-            return true
-        }
+        _ = sourcePosition
+        _ = state
+        guard let structureType = structure.structureType else { return false }
+        return acceptsInputByStructureType(itemID: itemID, structureType: structureType)
     }
 
     private func storagePoolCapacity(for structureType: StructureType, structure: Entity) -> Int {
@@ -1583,6 +1563,7 @@ public struct EconomySystem: SimulationSystem {
         state.economy.structureOutputBuffers = state.economy.structureOutputBuffers.filter { validStructureIDs.contains($0.key) }
         state.economy.storageSharedPoolByEntity = state.economy.storageSharedPoolByEntity.filter { validStructureIDs.contains($0.key) }
         state.economy.conveyorPayloadByEntity = state.economy.conveyorPayloadByEntity.filter { validStructureIDs.contains($0.key) }
+        state.economy.conveyorIOByEntity = state.economy.conveyorIOByEntity.filter { validStructureIDs.contains($0.key) }
         state.economy.splitterOutputToggleByEntity = state.economy.splitterOutputToggleByEntity.filter { validStructureIDs.contains($0.key) }
         state.economy.mergerInputToggleByEntity = state.economy.mergerInputToggleByEntity.filter { validStructureIDs.contains($0.key) }
     }
@@ -2517,7 +2498,7 @@ public struct CombatSystem: SimulationSystem {
             return true
         }
 
-        return state.economy.consume(itemID: itemID, quantity: 1)
+        return false
     }
 
     private func resolveTurretDef(for turret: Entity) -> TurretDef? {

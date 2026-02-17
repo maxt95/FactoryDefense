@@ -14,6 +14,7 @@ public enum InputGesture: Sendable {
     case pinch(scale: Float)
     case placeStructure(type: StructureType, position: GridPosition)
     case placeConveyor(position: GridPosition, direction: CardinalDirection)
+    case configureConveyorIO(entityID: EntityID, inputDirection: CardinalDirection, outputDirection: CardinalDirection)
     case rotateBuilding(entityID: EntityID)
     case rotateBuildSelection
     case removeStructure(entityID: EntityID)
@@ -67,6 +68,16 @@ public struct DefaultInputMapper: InputMapper {
                 tick: tick,
                 actor: actor,
                 payload: .placeConveyor(position: position, direction: direction)
+            )
+        case .configureConveyorIO(let entityID, let inputDirection, let outputDirection):
+            return PlayerCommand(
+                tick: tick,
+                actor: actor,
+                payload: .configureConveyorIO(
+                    entityID: entityID,
+                    inputDirection: inputDirection,
+                    outputDirection: outputDirection
+                )
             )
         case .rotateBuilding(let entityID):
             return PlayerCommand(

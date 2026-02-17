@@ -7,14 +7,17 @@ final class AutoProductionReserveTests: XCTestCase {
         _ = entities.spawnStructure(.powerPlant, at: GridPosition(x: 0, y: 0))
         _ = entities.spawnStructure(.assembler, at: GridPosition(x: 1, y: 0))
         _ = entities.spawnStructure(.ammoModule, at: GridPosition(x: 2, y: 0))
+        let storageID = entities.spawnStructure(.storage, at: GridPosition(x: 3, y: 0))
 
         let world = WorldState(
             tick: 0,
             entities: entities,
             economy: EconomyState(
-                inventories: EconomySystem.defaultMinimumConstructionStock.merging(
-                    ["plate_steel": 10, "gear": 10, "circuit": 10, "ammo_light": 20]
-                ) { _, new in new }
+                storageSharedPoolByEntity: [
+                    storageID: EconomySystem.defaultMinimumConstructionStock.merging(
+                        ["plate_steel": 10, "gear": 10, "circuit": 10, "ammo_light": 20]
+                    ) { _, new in new }
+                ]
             ),
             threat: ThreatState(),
             run: RunState()

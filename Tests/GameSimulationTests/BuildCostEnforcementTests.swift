@@ -4,7 +4,10 @@ import XCTest
 final class BuildCostEnforcementTests: XCTestCase {
     func testPlacementRejectedWhenResourcesAreInsufficient() {
         var world = WorldState.bootstrap()
-        world.economy.inventories = [:]
+        if let hqID = world.run.hqEntityID {
+            world.economy.storageSharedPoolByEntity[hqID] = [:]
+        }
+        world.rebuildAggregatedInventory()
 
         let engine = SimulationEngine(worldState: world, systems: [CommandSystem()])
         engine.enqueue(
@@ -26,7 +29,10 @@ final class BuildCostEnforcementTests: XCTestCase {
 
     func testPlacementConsumesExactBuildCostOnce() {
         var world = WorldState.bootstrap()
-        world.economy.inventories = ["wall_kit": 1, "turret_core": 1, "plate_steel": 2]
+        if let hqID = world.run.hqEntityID {
+            world.economy.storageSharedPoolByEntity[hqID] = ["wall_kit": 1, "turret_core": 1, "plate_steel": 2]
+        }
+        world.rebuildAggregatedInventory()
 
         let engine = SimulationEngine(worldState: world, systems: [CommandSystem()])
         engine.enqueue(

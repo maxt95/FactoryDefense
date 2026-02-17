@@ -258,6 +258,8 @@ private struct FactoryDefensemacOSGameplayView: View {
     @State private var zoomGestureScale: CGFloat = 1
     @State private var renderDiagnostic: String?
     @State private var selectedTarget: SelectionTarget?
+    @State private var conveyorInputDirection: CardinalDirection = .west
+    @State private var conveyorOutputDirection: CardinalDirection = .east
     @State private var didReportRunSummary = false
 
     let enableDebugViews: Bool
@@ -413,6 +415,7 @@ private struct FactoryDefensemacOSGameplayView: View {
             .onChange(of: runtime.world.tick) { _, _ in
                 onboarding.update(from: runtime.world)
                 validateSelection()
+                syncSelectedConveyorEditor()
             }
             .onChange(of: runtime.latestEvents) { _, events in
                 placementFeedback.consume(events: events)
@@ -431,6 +434,9 @@ private struct FactoryDefensemacOSGameplayView: View {
                 case .interact:
                     runtime.clearPlacementPreview()
                 }
+            }
+            .onChange(of: selectedTarget) { _, _ in
+                syncSelectedConveyorEditor()
             }
             .onChange(of: proxy.size) { _, _ in
                 enforceCameraConstraints(viewport: proxy.size)
@@ -517,6 +523,37 @@ private struct FactoryDefensemacOSGameplayView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(selectedDemolishableEntityID == nil)
+
+                if interaction.mode == .interact, let selectedConveyorEntityID {
+                    Divider()
+                        .frame(height: 20)
+                    Text("Conveyor I/O")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("Input", selection: $conveyorInputDirection) {
+                        ForEach(CardinalDirection.allCases, id: \.self) { direction in
+                            Text(direction.rawValue.capitalized).tag(direction)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 100)
+                    Picker("Output", selection: $conveyorOutputDirection) {
+                        ForEach(CardinalDirection.allCases, id: \.self) { direction in
+                            Text(direction.rawValue.capitalized).tag(direction)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 100)
+                    Button("Apply") {
+                        runtime.configureConveyorIO(
+                            entityID: selectedConveyorEntityID,
+                            inputDirection: conveyorInputDirection,
+                            outputDirection: conveyorOutputDirection
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(conveyorInputDirection == conveyorOutputDirection)
+                }
 
                 Spacer(minLength: 8)
             }
@@ -788,6 +825,23 @@ private struct FactoryDefensemacOSGameplayView: View {
             return nil
         }
         return entityID
+    }
+
+    private var selectedConveyorEntityID: EntityID? {
+        guard case .entity(let entityID)? = selectedTarget,
+              runtime.world.entities.entity(id: entityID)?.structureType == .conveyor else {
+            return nil
+        }
+        return entityID
+    }
+
+    private func syncSelectedConveyorEditor() {
+        guard let selectedConveyorEntityID,
+              let conveyor = runtime.world.entities.entity(id: selectedConveyorEntityID) else { return }
+        let io = runtime.world.economy.conveyorIOByEntity[selectedConveyorEntityID]
+            ?? ConveyorIOConfig.default(for: conveyor.rotation)
+        conveyorInputDirection = io.inputDirection
+        conveyorOutputDirection = io.outputDirection
     }
 
     private func requestDemolishSelected() {
