@@ -23,6 +23,7 @@ private struct WhiteboxUniforms {
     var entityCount: UInt32
     var turretOverlayCount: UInt32
     var pathSegmentCount: UInt32
+    var wallFlowSegmentCount: UInt32
     var debugModeRaw: UInt32
     var highlightedX: Int32
     var highlightedY: Int32
@@ -33,6 +34,7 @@ private struct WhiteboxUniforms {
     var cameraPanX: Float
     var cameraPanY: Float
     var cameraZoom: Float
+    var animationTick: Float
     var _padding0: UInt32
 }
 
@@ -64,10 +66,22 @@ private struct WhiteboxPathSegmentShader {
     var toY: Int32
 }
 
+private struct WhiteboxWallFlowSegmentShader {
+    var fromX: Int32
+    var fromY: Int32
+    var toX: Int32
+    var toY: Int32
+    var intensity: Float
+    var ammoTypeRaw: UInt32
+    var phaseOffset: Float
+    var _pad0: UInt32 = 0
+}
+
 private struct DebugOverlayPayload {
     var debugModeRaw: UInt32
     var turretOverlays: [WhiteboxTurretOverlayShader]
     var pathSegments: [WhiteboxPathSegmentShader]
+    var wallFlowSegments: [WhiteboxWallFlowSegmentShader]
 }
 
 public final class WhiteboxRenderer {
@@ -106,6 +120,7 @@ public final class WhiteboxRenderer {
             entityCount: 0,
             turretOverlayCount: UInt32(debugOverlays.turretOverlays.count),
             pathSegmentCount: UInt32(debugOverlays.pathSegments.count),
+            wallFlowSegmentCount: UInt32(debugOverlays.wallFlowSegments.count),
             debugModeRaw: debugOverlays.debugModeRaw,
             highlightedX: Int32(context.highlightedCell?.x ?? -1),
             highlightedY: Int32(context.highlightedCell?.y ?? -1),
@@ -116,6 +131,7 @@ public final class WhiteboxRenderer {
             cameraPanX: context.cameraState.pan.x,
             cameraPanY: context.cameraState.pan.y,
             cameraZoom: context.cameraState.zoom,
+            animationTick: Float(context.worldState.tick),
             _padding0: 0
         )
 
@@ -126,6 +142,7 @@ public final class WhiteboxRenderer {
         let entityBuffer: MTLBuffer? = nil
         let turretOverlayBuffer = makeTurretOverlayBuffer(context.device, overlays: debugOverlays.turretOverlays)
         let pathSegmentBuffer = makePathSegmentBuffer(context.device, segments: debugOverlays.pathSegments)
+        let wallFlowSegmentBuffer = makeWallFlowSegmentBuffer(context.device, segments: debugOverlays.wallFlowSegments)
         let highlightedPathBuffer = makePointBuffer(
             context.device,
             points: context.highlightedPath.map { WhiteboxPoint(x: Int32($0.x), y: Int32($0.y)) }
@@ -144,6 +161,7 @@ public final class WhiteboxRenderer {
         encoder.setBuffer(turretOverlayBuffer, offset: 0, index: 6)
         encoder.setBuffer(pathSegmentBuffer, offset: 0, index: 7)
         encoder.setBuffer(highlightedPathBuffer, offset: 0, index: 8)
+        encoder.setBuffer(wallFlowSegmentBuffer, offset: 0, index: 9)
 
         let threadsPerThreadgroup = MTLSize(width: 8, height: 8, depth: 1)
         let threadgroups = MTLSize(
@@ -221,6 +239,15 @@ public final class WhiteboxRenderer {
         )
     }
 
+    private func makeWallFlowSegmentBuffer(_ device: MTLDevice, segments: [WhiteboxWallFlowSegmentShader]) -> MTLBuffer? {
+        guard !segments.isEmpty else { return nil }
+        var payload = segments
+        return device.makeBuffer(
+            bytes: &payload,
+            length: MemoryLayout<WhiteboxWallFlowSegmentShader>.stride * payload.count
+        )
+    }
+
     private func highlightedStructureTypeRaw(_ structure: StructureType?) -> UInt32 {
         guard let structure else { return 0 }
         return WhiteboxStructureTypeID(structureType: structure).rawValue
@@ -230,6 +257,7 @@ public final class WhiteboxRenderer {
         let modeRaw = debugModeRaw(context.debugMode)
         let includeTurretRanges = modeRaw == 1 || modeRaw == 3
         let includeEnemyPaths = modeRaw == 2 || modeRaw == 3
+        let includeWallAmmoFlow = modeRaw == 3 || modeRaw == 4
 
         let turretOverlays = includeTurretRanges
             ? buildTurretOverlays(world: context.worldState, maxCount: 256)
@@ -237,11 +265,15 @@ public final class WhiteboxRenderer {
         let pathSegments = includeEnemyPaths
             ? buildEnemyPathSegments(world: context.worldState, maxSegmentCount: 2048)
             : []
+        let wallFlowSegments = includeWallAmmoFlow
+            ? buildWallFlowSegments(world: context.worldState, maxSegmentCount: 4096)
+            : []
 
         return DebugOverlayPayload(
             debugModeRaw: modeRaw,
             turretOverlays: turretOverlays,
-            pathSegments: pathSegments
+            pathSegments: pathSegments,
+            wallFlowSegments: wallFlowSegments
         )
     }
 
@@ -253,6 +285,91 @@ public final class WhiteboxRenderer {
             return 2
         case .tactical:
             return 3
+        case .wallAmmoFlow:
+            return 4
+        default:
+            return 0
+        }
+    }
+
+    private func buildWallFlowSegments(world: WorldState, maxSegmentCount: Int) -> [WhiteboxWallFlowSegmentShader] {
+        guard maxSegmentCount > 0 else { return [] }
+        guard !world.combat.wallNetworks.isEmpty else { return [] }
+
+        var wallByID: [EntityID: Entity] = [:]
+        for wall in world.entities.structures(of: .wall) {
+            wallByID[wall.id] = wall
+        }
+
+        var segments: [WhiteboxWallFlowSegmentShader] = []
+        segments.reserveCapacity(min(maxSegmentCount, 1024))
+
+        let neighborOffsets: [(x: Int, y: Int)] = [(1, 0), (0, 1)]
+        for networkID in world.combat.wallNetworks.keys.sorted() {
+            guard let network = world.combat.wallNetworks[networkID] else { continue }
+            guard network.capacity > 0 else { continue }
+
+            let totalAmmo = network.ammoPoolByItemID.values.reduce(0, +)
+            guard totalAmmo > 0 else { continue }
+
+            let fillRatio = Float(min(1.0, Double(totalAmmo) / Double(network.capacity)))
+            let intensity = 0.25 + (0.75 * fillRatio)
+            let ammoTypeRaw = dominantAmmoTypeRaw(in: network.ammoPoolByItemID)
+            let wallIDs = network.wallEntityIDs.sorted()
+            let wallIDsByPosition: [GridPosition: EntityID] = Dictionary(
+                uniqueKeysWithValues: wallIDs.compactMap { wallID in
+                    guard let wall = wallByID[wallID] else { return nil }
+                    return (GridPosition(x: wall.position.x, y: wall.position.y, z: 0), wallID)
+                }
+            )
+
+            for wallID in wallIDs {
+                guard let wall = wallByID[wallID] else { continue }
+                let position = GridPosition(x: wall.position.x, y: wall.position.y, z: 0)
+
+                for offset in neighborOffsets {
+                    guard segments.count < maxSegmentCount else { return segments }
+                    let neighbor = position.translated(byX: offset.x, byY: offset.y)
+                    guard wallIDsByPosition[neighbor] != nil else { continue }
+
+                    let seed = (networkID &* 131) &+ (position.x &* 17) &+ (position.y &* 29) &+ (offset.x &* 7) &+ (offset.y &* 11)
+                    let phaseOffset = Float(abs(seed % 1000)) / 1000.0
+
+                    segments.append(
+                        WhiteboxWallFlowSegmentShader(
+                            fromX: Int32(position.x),
+                            fromY: Int32(position.y),
+                            toX: Int32(neighbor.x),
+                            toY: Int32(neighbor.y),
+                            intensity: intensity,
+                            ammoTypeRaw: ammoTypeRaw,
+                            phaseOffset: phaseOffset
+                        )
+                    )
+                }
+            }
+        }
+
+        return segments
+    }
+
+    private func dominantAmmoTypeRaw(in ammoPoolByItemID: [String: Int]) -> UInt32 {
+        let dominantItemID = ammoPoolByItemID
+            .filter { $0.value > 0 }
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key < rhs.key
+            }
+            .first?
+            .key
+
+        switch dominantItemID {
+        case "ammo_heavy":
+            return 2
+        case "ammo_plasma":
+            return 3
+        case "ammo_light":
+            return 1
         default:
             return 0
         }

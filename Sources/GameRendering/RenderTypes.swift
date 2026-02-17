@@ -20,6 +20,7 @@ public enum DebugVisualizationMode: String, Codable, CaseIterable, Sendable {
     case wireframe
     case turretRanges
     case enemyPaths
+    case wallAmmoFlow
     case tactical
 }
 

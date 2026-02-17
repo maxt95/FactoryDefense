@@ -22,6 +22,7 @@ struct WhiteboxUniforms {
     uint entityCount;
     uint turretOverlayCount;
     uint pathSegmentCount;
+    uint wallFlowSegmentCount;
     uint debugModeRaw;
     int highlightedX;
     int highlightedY;
@@ -32,6 +33,7 @@ struct WhiteboxUniforms {
     float cameraPanX;
     float cameraPanY;
     float cameraZoom;
+    float animationTick;
     uint _padding0;
 };
 
@@ -79,6 +81,17 @@ struct WhiteboxPathSegment {
     int fromY;
     int toX;
     int toY;
+};
+
+struct WhiteboxWallFlowSegment {
+    int fromX;
+    int fromY;
+    int toX;
+    int toY;
+    float intensity;
+    uint ammoTypeRaw;
+    float phaseOffset;
+    uint _pad0;
 };
 
 inline bool in_bounds(int2 cell, constant WhiteboxUniforms& uniforms) {
@@ -210,6 +223,15 @@ inline float distance_to_segment(float2 p, float2 a, float2 b) {
     return length(p - closest);
 }
 
+inline float3 wall_flow_color(uint ammoTypeRaw) {
+    switch (ammoTypeRaw) {
+        case 2u: return float3(0.95, 0.54, 0.18); // heavy
+        case 3u: return float3(0.72, 0.36, 0.95); // plasma
+        case 1u: return float3(0.96, 0.84, 0.24); // light
+        default: return float3(0.85, 0.85, 0.70); // mixed/unknown
+    }
+}
+
 kernel void whitebox_board(
     texture2d<float, access::write> output [[texture(0)]],
     constant WhiteboxUniforms& uniforms [[buffer(0)]],
@@ -221,6 +243,7 @@ kernel void whitebox_board(
     device const WhiteboxTurretOverlay* turretOverlays [[buffer(6)]],
     device const WhiteboxPathSegment* pathSegments [[buffer(7)]],
     device const WhiteboxPoint* highlightedPath [[buffer(8)]],
+    device const WhiteboxWallFlowSegment* wallFlowSegments [[buffer(9)]],
     uint2 gid [[thread_position_in_grid]]
 ) {
     if (gid.x >= uniforms.viewportPixelWidth || gid.y >= uniforms.viewportPixelHeight) {
@@ -446,6 +469,7 @@ kernel void whitebox_board(
 
     const bool showTurretRanges = uniforms.debugModeRaw == 1u || uniforms.debugModeRaw == 3u;
     const bool showEnemyPaths = uniforms.debugModeRaw == 2u || uniforms.debugModeRaw == 3u;
+    const bool showWallAmmoFlow = uniforms.debugModeRaw == 3u || uniforms.debugModeRaw == 4u;
     if (showTurretRanges) {
         const float ringThickness = max(1.0, tileWidth * 0.045);
         for (uint i = 0; i < uniforms.turretOverlayCount; ++i) {
@@ -468,6 +492,39 @@ kernel void whitebox_board(
             if (distance_to_segment(pixel, a, b) <= pathThickness) {
                 color = mix(color, float3(0.96, 0.22, 0.74), 0.82);
             }
+        }
+    }
+
+    if (showWallAmmoFlow) {
+        const float tickTime = uniforms.animationTick * 0.035;
+        const float pathThickness = max(1.0, tileWidth * 0.11);
+        const float pulseLength = 0.22;
+        const float pulseFade = 0.18;
+        const float repeatCount = 2.8;
+
+        for (uint i = 0; i < uniforms.wallFlowSegmentCount; ++i) {
+            const WhiteboxWallFlowSegment segment = wallFlowSegments[i];
+            const float2 a = cell_to_screen(int2(segment.fromX, segment.fromY), origin, tileWidth, tileHeight);
+            const float2 b = cell_to_screen(int2(segment.toX, segment.toY), origin, tileWidth, tileHeight);
+            const float distance = distance_to_segment(pixel, a, b);
+            if (distance > pathThickness) {
+                continue;
+            }
+
+            const float2 ab = b - a;
+            const float segmentLength = max(length(ab), 1e-3);
+            const float2 direction = ab / segmentLength;
+            const float projected = clamp(dot(pixel - a, direction), 0.0, segmentLength);
+            const float t = projected / segmentLength;
+
+            const float cycle = fract(t * repeatCount - tickTime + segment.phaseOffset);
+            const float head = smoothstep(0.0, pulseFade, cycle);
+            const float tail = 1.0 - smoothstep(pulseLength, pulseLength + pulseFade, cycle);
+            const float pulse = clamp(head * tail, 0.0, 1.0);
+
+            const float laneMask = 1.0 - smoothstep(pathThickness * 0.55, pathThickness, distance);
+            const float glow = (0.18 + pulse * 0.82) * laneMask * clamp(segment.intensity, 0.0, 1.0);
+            color = mix(color, wall_flow_color(segment.ammoTypeRaw), glow);
         }
     }
 
