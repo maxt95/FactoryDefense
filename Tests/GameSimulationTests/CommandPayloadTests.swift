@@ -16,7 +16,6 @@ final class CommandPayloadTests: XCTestCase {
             .configureConveyorIO(entityID: 7, inputDirection: .north, outputDirection: .east),
             .rotateBuilding(entityID: 42),
             .pinRecipe(entityID: 5, recipeID: "smelt_iron"),
-            .extract,
             .triggerWave
         ]
 

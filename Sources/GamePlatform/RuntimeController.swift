@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import GameContent
 import GameSimulation
 
 @MainActor
@@ -120,7 +121,10 @@ public final class GameRuntimeController: ObservableObject {
             return
         }
 
-        let affordabilityResult: PlacementResult = world.economy.canAfford(structure.buildCosts) ? .ok : .insufficientResources
+        let affordabilityResult: PlacementResult = Self.canAfford(
+            costs: structure.buildCosts,
+            from: world.aggregatedPhysicalInventory()
+        ) ? .ok : .insufficientResources
         placementResult = affordabilityResult
         placementPreviewCache = PlacementPreviewCache(
             key: cacheKey,
@@ -202,6 +206,7 @@ public final class GameRuntimeController: ObservableObject {
         guard !points.isEmpty else { return }
 
         var simulatedWorld = world
+        var simulatedInventory = simulatedWorld.aggregatedPhysicalInventory()
         var placedAny = false
 
         for position in points {
@@ -224,7 +229,7 @@ public final class GameRuntimeController: ObservableObject {
                 continue
             }
 
-            guard simulatedWorld.economy.canAfford(structure.buildCosts) else {
+            guard Self.canAfford(costs: structure.buildCosts, from: simulatedInventory) else {
                 placementResult = .insufficientResources
                 break
             }
@@ -252,7 +257,7 @@ public final class GameRuntimeController: ObservableObject {
                 rotation: rotation,
                 boundPatchID: targetPatchID
             )
-            _ = simulatedWorld.economy.consume(costs: structure.buildCosts)
+            Self.consume(costs: structure.buildCosts, from: &simulatedInventory)
             placedAny = true
         }
 
@@ -302,6 +307,22 @@ public final class GameRuntimeController: ObservableObject {
             byX: footprint.width - 1,
             byY: footprint.height - 1
         )
+    }
+
+    private static func canAfford(costs: [ItemStack], from inventory: [ItemID: Int]) -> Bool {
+        costs.allSatisfy { inventory[$0.itemID, default: 0] >= $0.quantity }
+    }
+
+    private static func consume(costs: [ItemStack], from inventory: inout [ItemID: Int]) {
+        for cost in costs where cost.quantity > 0 {
+            let current = inventory[cost.itemID, default: 0]
+            let updated = max(0, current - cost.quantity)
+            if updated == 0 {
+                inventory.removeValue(forKey: cost.itemID)
+            } else {
+                inventory[cost.itemID] = updated
+            }
+        }
     }
 
     public func snapshot() -> WorldSnapshot {

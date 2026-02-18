@@ -215,7 +215,7 @@ Per the living PRD: "Endless survival escalation in v1; extraction/meta conversi
 
 There is **no win state** at T0. The run is endless — you survive until the HQ falls. The implicit goal is "how long can you last."
 
-Extraction (`RunState.phase = .extracted`) exists as a placeholder for future milestone-based voluntary exit, but is **out of scope for T0**. The extract command and UI button should be removed or hidden until the extraction economy is designed.
+Extraction is **out of scope for T0** and currently removed from runtime command/state surfaces. It can be reintroduced later once extraction economy design is ready.
 
 ### 6.3 End-of-Run Summary
 
@@ -306,7 +306,7 @@ The implicit message to the player: "Here's your base and some supplies. The clo
 | Ring 0 ore patches | Deterministic difficulty-scaled Ring 0 generation | **Done (v1 slice+)** | Add full ore lifecycle: reveal rings + renewal spawning (miner adjacency/binding + depletion runtime now in code) |
 | Starter structures | HQ-only at tick 0 | **Done** | — |
 | Difficulty timing | Grace/trickle/gap timing from `difficulty.json` | **Done** | Shift wave composition from formula runtime to authored `waves.json` consumption |
-| Run state | Phase + seed + HQ-linked game-over flow | **Done** | Keep extraction deferred until extraction economy is designed |
+| Run state | Phase + seed + HQ-linked game-over flow | **Done** | Extraction remains deferred and removed from runtime surfaces until designed |
 | Restricted geometry | 2×2 HQ footprint restricted cells | **Done** | — |
 | Lifecycle events | `runStarted`, `gracePeriodEnded`, `gameOver` | **Done** | Add summary-screen event consumption in app/UI layer |
 | Extraction UI/command | Hidden/removed for T0 | **Done** | — |
@@ -367,3 +367,4 @@ The implicit message to the player: "Here's your base and some supplies. The clo
 - 2026-02-16: Rebalanced `hq.json` starting resources across all difficulties; added processed starter components (`plate_copper`, `plate_steel`, `gear`, `circuit`, `turret_core`) and increased wall/ammo opening budgets.
 - 2026-02-18: Completed raid-subsystem cleanup pass in code: removed unused legacy raid config/state/event fields and bumped snapshot schema version for explicit migration.
 - 2026-02-18: Completed HQ-storage cleanup pass in code: removed non-HQ inventory fallback paths in runtime logic and switched reserve checks to live physical stock aggregation.
+- 2026-02-18: Removed remaining extraction compatibility surfaces from runtime (`extract` command and `extracted` phase/event) and removed legacy `waves.json` array-shape loader fallback.

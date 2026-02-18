@@ -13,7 +13,7 @@ public struct ContentLoader {
         let recipes: [RecipeDef] = try decode("recipes.json", in: directory)
         let turrets: [TurretDef] = try decode("turrets.json", in: directory)
         let enemies: [EnemyDef] = try decode("enemies.json", in: directory)
-        let waveContent: WaveContentDef = try decodeWaves(in: directory)
+        let waveContent: WaveContentDef = try decode("waves.json", in: directory)
         let techNodes: [TechNodeDef] = try decode("tech_nodes.json", in: directory)
         let board: BoardDef = try decode("board.json", in: directory)
         let hq: HQDef = try decode("hq.json", in: directory)
@@ -48,20 +48,4 @@ public struct ContentLoader {
         }
     }
 
-    private func decodeWaves(in directory: URL) throws -> WaveContentDef {
-        let url = directory.appendingPathComponent("waves.json")
-        guard FileManager.default.fileExists(atPath: url.path()) else {
-            throw LoaderError.missingFile("waves.json")
-        }
-
-        let data = try Data(contentsOf: url)
-        do {
-            if let handAuthored = try? JSONDecoder().decode([WaveDef].self, from: data) {
-                return WaveContentDef(handAuthoredWaves: handAuthored)
-            }
-            return try JSONDecoder().decode(WaveContentDef.self, from: data)
-        } catch {
-            throw LoaderError.decodeFailure(file: "waves.json", error: error)
-        }
-    }
 }

@@ -138,7 +138,7 @@ Exit criteria:
 
 ### Workstream G - Content, Balance, Feel
 - [x] Core content files and validators exist.
-- [x] Runtime systems consume JSON as authoritative behavior source for enemies/waves/difficulty with legacy-wave compatibility fallback.
+- [x] Runtime systems consume JSON as authoritative behavior source for enemies/waves/difficulty via canonical structured content schemas.
 - [ ] Balance automation and ammo headroom analytics.
 
 ### Workstream H - Quality and Tooling

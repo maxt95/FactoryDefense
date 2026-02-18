@@ -486,7 +486,7 @@ New fields: `baseDamage`, `behaviorModifier`, `wallDamageMultiplier` (optional),
 Behavior modifiers (v1): `none`, `structureSeeker`, `wallBreaker`, `auraBuffer`.
 Post-v1 reserved modifier: `rangedAttacker` (`artillery_bug`).
 
-### 12.3 Extend: `waves.json` (with legacy compatibility)
+### 12.3 Extend: `waves.json` (canonical structured format)
 
 Preferred structured format:
 
@@ -501,9 +501,8 @@ Preferred structured format:
 }
 ```
 
-Runtime compatibility path:
-- Loader accepts both structured `WaveContentDef` and legacy array `[WaveDef]`.
-- Current bootstrap content remains valid in legacy array format while migration is in progress.
+Runtime loading path:
+- Loader accepts structured `WaveContentDef` only.
 
 ### 12.4 New: `difficulty.json`
 

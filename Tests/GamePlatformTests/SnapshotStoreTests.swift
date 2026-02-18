@@ -112,8 +112,8 @@ final class SnapshotStoreTests: XCTestCase {
         try legacyPayload.data(using: .utf8)?.write(to: legacyURL, options: [.atomic])
 
         XCTAssertThrowsError(try store.load(name: "legacy")) { error in
-            guard case SnapshotStoreError.unsupportedSchema = error else {
-                XCTFail("Expected unsupported schema error, got \(error)")
+            guard case DecodingError.keyNotFound(let key, _) = error, key.stringValue == "schemaVersion" else {
+                XCTFail("Expected missing schemaVersion decode error, got \(error)")
                 return
             }
         }

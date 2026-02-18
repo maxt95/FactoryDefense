@@ -15,7 +15,6 @@ public enum RunPhase: String, Codable, Sendable {
     case gracePeriod
     case playing
     case gameOver
-    case extracted
 }
 
 public struct PlayerID: Codable, Hashable, Sendable, Comparable {
@@ -272,7 +271,6 @@ public enum CommandPayload: Codable, Hashable, Sendable {
     case configureConveyorIO(entityID: EntityID, inputDirection: CardinalDirection, outputDirection: CardinalDirection)
     case rotateBuilding(entityID: EntityID)
     case pinRecipe(entityID: EntityID, recipeID: String)
-    case extract
     case triggerWave
 
     private enum CodingKeys: String, CodingKey {
@@ -293,7 +291,6 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         case configureConveyorIO
         case rotateBuilding
         case pinRecipe
-        case extract
         case triggerWave
     }
 
@@ -323,8 +320,6 @@ public enum CommandPayload: Codable, Hashable, Sendable {
                 entityID: try container.decode(EntityID.self, forKey: .entityID),
                 recipeID: try container.decode(String.self, forKey: .recipeID)
             )
-        case .extract:
-            self = .extract
         case .triggerWave:
             self = .triggerWave
         }
@@ -355,8 +350,6 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             try container.encode(Kind.pinRecipe, forKey: .kind)
             try container.encode(entityID, forKey: .entityID)
             try container.encode(recipeID, forKey: .recipeID)
-        case .extract:
-            try container.encode(Kind.extract, forKey: .kind)
         case .triggerWave:
             try container.encode(Kind.triggerWave, forKey: .kind)
         }
@@ -377,8 +370,6 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             return "rotate:\(entityID)"
         case .pinRecipe(let entityID, let recipeID):
             return "pin:\(entityID):\(recipeID)"
-        case .extract:
-            return "extract"
         case .triggerWave:
             return "triggerWave"
         }
@@ -420,7 +411,6 @@ public enum EventKind: String, Codable, Sendable {
     case ammoSpent
     case notEnoughAmmo
     case milestoneReached
-    case extracted
     case placementRejected
     case patchExhausted
     case minerIdled
@@ -754,44 +744,6 @@ public struct EconomyState: Codable, Hashable, Sendable {
         self.telemetry = telemetry
     }
 
-    @discardableResult
-    public mutating func consume(itemID: ItemID, quantity: Int) -> Bool {
-        guard quantity > 0 else { return true }
-        let current = inventories[itemID, default: 0]
-        guard current >= quantity else { return false }
-        inventories[itemID] = current - quantity
-        telemetry.recordConsumption(itemID: itemID, quantity: quantity)
-        return true
-    }
-
-    public mutating func add(itemID: ItemID, quantity: Int) {
-        guard quantity > 0 else { return }
-        inventories[itemID, default: 0] += quantity
-        telemetry.recordProduction(itemID: itemID, quantity: quantity)
-    }
-
-    public func canAfford(_ costs: [ItemStack]) -> Bool {
-        costs.allSatisfy { inventories[$0.itemID, default: 0] >= $0.quantity }
-    }
-
-    @discardableResult
-    public mutating func consume(costs: [ItemStack]) -> Bool {
-        guard canAfford(costs) else { return false }
-        for cost in costs {
-            _ = consume(itemID: cost.itemID, quantity: cost.quantity)
-        }
-        return true
-    }
-
-    public mutating func addFractional(itemID: ItemID, quantity: Double) {
-        guard quantity > 0 else { return }
-        let total = fractionalProductionRemainders[itemID, default: 0] + quantity
-        let whole = Int(total.rounded(.down))
-        if whole > 0 {
-            add(itemID: itemID, quantity: whole)
-        }
-        fractionalProductionRemainders[itemID] = total - Double(whole)
-    }
 }
 
 public struct ThreatState: Codable, Hashable, Sendable {
@@ -894,17 +846,6 @@ public struct RunState: Codable, Hashable, Sendable {
             if newValue {
                 phase = .gameOver
             } else if phase == .gameOver {
-                phase = .playing
-            }
-        }
-    }
-
-    public var extracted: Bool {
-        get { phase == .extracted }
-        set {
-            if newValue {
-                phase = .extracted
-            } else if phase == .extracted {
                 phase = .playing
             }
         }

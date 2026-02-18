@@ -1,71 +1,86 @@
-[
-  {
-    "index": 1,
-    "spawnBudget": 12,
-    "composition": [
-      { "enemyID": "swarmling", "count": 6, "delayTicks": 0 },
-      { "enemyID": "drone_scout", "count": 2, "delayTicks": 20 }
-    ]
-  },
-  {
-    "index": 2,
-    "spawnBudget": 18,
-    "composition": [
-      { "enemyID": "swarmling", "count": 8, "delayTicks": 0 },
-      { "enemyID": "drone_scout", "count": 4, "delayTicks": 25 }
-    ]
-  },
-  {
-    "index": 3,
-    "spawnBudget": 22,
-    "composition": [
-      { "enemyID": "drone_scout", "count": 6, "delayTicks": 0 },
-      { "enemyID": "raider", "count": 1, "delayTicks": 50 }
-    ]
-  },
-  {
-    "index": 4,
-    "spawnBudget": 26,
-    "composition": [
-      { "enemyID": "drone_scout", "count": 6, "delayTicks": 0 },
-      { "enemyID": "raider", "count": 2, "delayTicks": 40 }
-    ]
-  },
-  {
-    "index": 5,
-    "spawnBudget": 32,
-    "composition": [
-      { "enemyID": "swarmling", "count": 10, "delayTicks": 0 },
-      { "enemyID": "raider", "count": 2, "delayTicks": 35 },
-      { "enemyID": "breacher", "count": 1, "delayTicks": 70 }
-    ]
-  },
-  {
-    "index": 6,
-    "spawnBudget": 38,
-    "composition": [
-      { "enemyID": "drone_scout", "count": 8, "delayTicks": 0 },
-      { "enemyID": "raider", "count": 2, "delayTicks": 40 },
-      { "enemyID": "breacher", "count": 1, "delayTicks": 75 }
-    ]
-  },
-  {
-    "index": 7,
-    "spawnBudget": 43,
-    "composition": [
-      { "enemyID": "swarmling", "count": 12, "delayTicks": 0 },
-      { "enemyID": "raider", "count": 3, "delayTicks": 35 },
-      { "enemyID": "breacher", "count": 2, "delayTicks": 65 }
-    ]
-  },
-  {
-    "index": 8,
-    "spawnBudget": 68,
-    "composition": [
-      { "enemyID": "drone_scout", "count": 10, "delayTicks": 0 },
-      { "enemyID": "raider", "count": 3, "delayTicks": 40 },
-      { "enemyID": "breacher", "count": 2, "delayTicks": 70 },
-      { "enemyID": "overseer", "count": 1, "delayTicks": 120 }
-    ]
+{
+  "handAuthoredWaves": [
+    {
+      "index": 1,
+      "spawnBudget": 12,
+      "composition": [
+        { "enemyID": "swarmling", "count": 6, "delayTicks": 0 },
+        { "enemyID": "drone_scout", "count": 2, "delayTicks": 20 }
+      ]
+    },
+    {
+      "index": 2,
+      "spawnBudget": 18,
+      "composition": [
+        { "enemyID": "swarmling", "count": 8, "delayTicks": 0 },
+        { "enemyID": "drone_scout", "count": 4, "delayTicks": 25 }
+      ]
+    },
+    {
+      "index": 3,
+      "spawnBudget": 22,
+      "composition": [
+        { "enemyID": "drone_scout", "count": 6, "delayTicks": 0 },
+        { "enemyID": "raider", "count": 1, "delayTicks": 50 }
+      ]
+    },
+    {
+      "index": 4,
+      "spawnBudget": 26,
+      "composition": [
+        { "enemyID": "drone_scout", "count": 6, "delayTicks": 0 },
+        { "enemyID": "raider", "count": 2, "delayTicks": 40 }
+      ]
+    },
+    {
+      "index": 5,
+      "spawnBudget": 32,
+      "composition": [
+        { "enemyID": "swarmling", "count": 10, "delayTicks": 0 },
+        { "enemyID": "raider", "count": 2, "delayTicks": 35 },
+        { "enemyID": "breacher", "count": 1, "delayTicks": 70 }
+      ]
+    },
+    {
+      "index": 6,
+      "spawnBudget": 38,
+      "composition": [
+        { "enemyID": "drone_scout", "count": 8, "delayTicks": 0 },
+        { "enemyID": "raider", "count": 2, "delayTicks": 40 },
+        { "enemyID": "breacher", "count": 1, "delayTicks": 75 }
+      ]
+    },
+    {
+      "index": 7,
+      "spawnBudget": 43,
+      "composition": [
+        { "enemyID": "swarmling", "count": 12, "delayTicks": 0 },
+        { "enemyID": "raider", "count": 3, "delayTicks": 35 },
+        { "enemyID": "breacher", "count": 2, "delayTicks": 65 }
+      ]
+    },
+    {
+      "index": 8,
+      "spawnBudget": 68,
+      "composition": [
+        { "enemyID": "drone_scout", "count": 10, "delayTicks": 0 },
+        { "enemyID": "raider", "count": 3, "delayTicks": 40 },
+        { "enemyID": "breacher", "count": 2, "delayTicks": 70 },
+        { "enemyID": "overseer", "count": 1, "delayTicks": 120 }
+      ]
+    }
+  ],
+  "proceduralConfig": {
+    "budgetFormula": {
+      "base": 10,
+      "linear": 4,
+      "quadratic": 0.5
+    },
+    "swarmlingReserveRatio": 0.3,
+    "difficultyMultipliers": {
+      "easy": 0.85,
+      "normal": 1.0,
+      "hard": 1.15
+    }
   }
-]
+}

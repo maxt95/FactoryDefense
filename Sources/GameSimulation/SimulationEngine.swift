@@ -1,7 +1,7 @@
 import Foundation
 
 public struct WorldSnapshot: Codable, Hashable, Sendable {
-    public static let currentSchemaVersion = 3
+    public static let currentSchemaVersion = 4
 
     public var schemaVersion: Int
     public var world: WorldState
@@ -81,7 +81,7 @@ public final class SimulationEngine {
     @discardableResult
     public func step() -> [SimEvent] {
         let previousState = worldState
-        if worldState.run.phase == .gameOver || worldState.run.phase == .extracted {
+        if worldState.run.phase == .gameOver {
             worldState.tick += 1
             interpolationBridge.record(previous: previousState, current: worldState)
             return []

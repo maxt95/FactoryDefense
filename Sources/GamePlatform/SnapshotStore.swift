@@ -43,8 +43,6 @@ public final class FileSnapshotStore: SnapshotStore {
             return try decoder.decode(WorldSnapshot.self, from: data)
         } catch let DecodingError.dataCorrupted(context) where context.debugDescription.contains("Unsupported snapshot schema version") {
             throw SnapshotStoreError.unsupportedSchema
-        } catch let DecodingError.keyNotFound(key, _) where key.stringValue == "schemaVersion" {
-            throw SnapshotStoreError.unsupportedSchema
         } catch {
             throw error
         }

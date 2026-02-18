@@ -207,9 +207,6 @@ public struct CommandSystem: SimulationSystem {
                 if state.entities.entity(id: entityID)?.category == .structure {
                     state.economy.pinnedRecipeByStructure[entityID] = recipeID
                 }
-            case .extract:
-                // Extraction is deferred for v1; command retained for snapshot compatibility.
-                continue
             case .triggerWave:
                 state.threat.nextWaveTick = state.tick
             }
