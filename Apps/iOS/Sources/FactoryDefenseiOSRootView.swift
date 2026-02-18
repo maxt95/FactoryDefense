@@ -143,7 +143,19 @@ private struct FactoryDefenseiOSGameplayView: View {
                 )
 
                 if interaction.mode == .interact {
-                    if let inspector = selectedEntityInspectorModel() {
+                    if let quickEditID = interaction.quickEditTarget,
+                       let entity = runtime.world.entities.entity(id: quickEditID),
+                       entity.structureType == .conveyor {
+                        let widgetPos = quickEditWidgetPosition(for: entity, viewport: proxy.size)
+                        ConveyorQuickEditWidget(
+                            entityID: quickEditID,
+                            onRotateCW: { rotateConveyor(entityID: quickEditID, clockwise: true) },
+                            onRotateCCW: { rotateConveyor(entityID: quickEditID, clockwise: false) },
+                            onReverse: { reverseSingleConveyor(entityID: quickEditID) },
+                            onDismiss: { interaction.quickEditTarget = nil }
+                        )
+                        .position(widgetPos)
+                    } else if let inspector = selectedEntityInspectorModel() {
                         ObjectInspectorPopup(
                             model: inspector,
                             onClose: { selectedTarget = nil }
@@ -199,7 +211,7 @@ private struct FactoryDefenseiOSGameplayView: View {
                 case .build:
                     selectedTarget = nil
                     refreshPlacementPreview(viewport: proxy.size)
-                case .interact:
+                case .interact, .editBelts, .planBelt:
                     runtime.clearPlacementPreview()
                 }
             }
@@ -421,19 +433,32 @@ private struct FactoryDefenseiOSGameplayView: View {
         guard let position = pickGrid(at: location, viewport: viewport) else {
             runtime.clearPlacementPreview()
             selectedTarget = nil
+            interaction.quickEditTarget = nil
             return
         }
 
         switch interaction.mode {
         case .interact:
             runtime.clearPlacementPreview()
+            // Check if tapped on a conveyor to show quick edit widget
             if let tappedEntity = runtime.world.entities.selectableEntity(at: position) {
+                if tappedEntity.structureType == .conveyor {
+                    if interaction.quickEditTarget == tappedEntity.id {
+                        interaction.quickEditTarget = nil
+                    } else {
+                        interaction.quickEditTarget = tappedEntity.id
+                        selectedTarget = nil
+                    }
+                    return
+                }
+                interaction.quickEditTarget = nil
                 if selectedTarget == .entity(tappedEntity.id) {
                     selectedTarget = nil
                 } else {
                     selectedTarget = .entity(tappedEntity.id)
                 }
             } else if let patch = orePatch(at: position) {
+                interaction.quickEditTarget = nil
                 if selectedTarget == .orePatch(patch.id) {
                     selectedTarget = nil
                 } else {
@@ -441,9 +466,11 @@ private struct FactoryDefenseiOSGameplayView: View {
                 }
             } else {
                 selectedTarget = nil
+                interaction.quickEditTarget = nil
             }
         case .build:
             selectedTarget = nil
+            interaction.quickEditTarget = nil
             if dragDrawPlanner.supportsDragDraw(for: selectedStructure) {
                 runtime.previewPlacement(structure: selectedStructure, at: position)
                 return
@@ -451,6 +478,14 @@ private struct FactoryDefenseiOSGameplayView: View {
             runtime.placeStructure(selectedStructure, at: position)
             if interaction.completePlacementIfSuccessful(runtime.placementResult) {
                 runtime.clearPlacementPreview()
+            }
+        case .editBelts:
+            break
+        case .planBelt:
+            if interaction.beltPlanner.startPin == nil {
+                interaction.beltPlanner.setStart(position)
+            } else {
+                interaction.beltPlanner.setEnd(position)
             }
         }
     }
@@ -474,10 +509,25 @@ private struct FactoryDefenseiOSGameplayView: View {
                 interaction.beginDragDraw(at: start)
             }
             if let current = pickGrid(at: value.location, viewport: viewport) {
-                interaction.updateDragDraw(at: current)
+                if selectedStructure == .conveyor {
+                    interaction.accumulateConveyorDragCell(current)
+                } else {
+                    interaction.updateDragDraw(at: current)
+                }
                 runtime.previewPlacement(structure: selectedStructure, at: current)
             } else {
                 runtime.clearPlacementPreview()
+            }
+            return
+        }
+
+        if interaction.mode == .editBelts {
+            if !interaction.flowBrush.isActive,
+               let start = pickGrid(at: value.startLocation, viewport: viewport) {
+                interaction.flowBrush.beginStroke(at: start)
+            }
+            if let current = pickGrid(at: value.location, viewport: viewport) {
+                interaction.flowBrush.extendStroke(to: current)
             }
             return
         }
@@ -493,19 +543,49 @@ private struct FactoryDefenseiOSGameplayView: View {
     private func handleDragEnded(_ value: DragGesture.Value, viewport: CGSize) {
         defer { dragTranslation = .zero }
 
+        // Handle flow brush stroke completion
+        if interaction.mode == .editBelts, interaction.flowBrush.isActive {
+            if let current = pickGrid(at: value.location, viewport: viewport) {
+                interaction.flowBrush.extendStroke(to: current)
+            }
+            let changes = interaction.flowBrush.finishStroke()
+            applyFlowBrushChanges(changes)
+            return
+        }
+
         guard interaction.isBuildMode, dragDrawPlanner.supportsDragDraw(for: selectedStructure) else {
             interaction.cancelDragDraw()
             return
         }
 
         if let current = pickGrid(at: value.location, viewport: viewport) {
-            interaction.updateDragDraw(at: current)
+            if selectedStructure == .conveyor {
+                interaction.accumulateConveyorDragCell(current)
+            } else {
+                interaction.updateDragDraw(at: current)
+            }
         }
-        let path = interaction.finishDragDraw(using: dragDrawPlanner)
-        guard !path.isEmpty else { return }
 
         selectedTarget = nil
-        runtime.placeStructurePath(selectedStructure, along: path)
+
+        if selectedStructure == .conveyor {
+            let cells = interaction.finishConveyorDragDraw(using: dragDrawPlanner)
+            guard !cells.isEmpty else { return }
+            runtime.placeConveyorPath(cells.map {
+                ConveyorPlacementCell(
+                    position: $0.position,
+                    inputDirection: $0.inputDirection,
+                    outputDirection: $0.outputDirection,
+                    isCorner: $0.isCorner
+                )
+            })
+        } else {
+            let path = interaction.finishDragDraw(using: dragDrawPlanner)
+            guard !path.isEmpty else { return }
+            runtime.placeStructurePath(selectedStructure, along: path)
+        }
+
+        // Stay in build mode after conveyor/wall drag-draw
         refreshPlacementPreview(viewport: viewport)
     }
 
@@ -616,6 +696,53 @@ private struct FactoryDefenseiOSGameplayView: View {
 
     private func orePatch(at position: GridPosition) -> OrePatch? {
         runtime.world.orePatches.first(where: { $0.position.x == position.x && $0.position.y == position.y })
+    }
+
+    private func rotateConveyor(entityID: EntityID, clockwise: Bool) {
+        guard let entity = runtime.world.entities.entity(id: entityID) else { return }
+        let io = runtime.world.economy.conveyorIOByEntity[entityID]
+            ?? ConveyorIOConfig.default(for: entity.rotation)
+        let newOutput = clockwise ? io.outputDirection.right : io.outputDirection.left
+        runtime.configureConveyorIO(
+            entityID: entityID,
+            inputDirection: newOutput.opposite,
+            outputDirection: newOutput
+        )
+    }
+
+    private func reverseSingleConveyor(entityID: EntityID) {
+        guard let entity = runtime.world.entities.entity(id: entityID) else { return }
+        let io = runtime.world.economy.conveyorIOByEntity[entityID]
+            ?? ConveyorIOConfig.default(for: entity.rotation)
+        runtime.configureConveyorIO(
+            entityID: entityID,
+            inputDirection: io.outputDirection,
+            outputDirection: io.inputDirection
+        )
+    }
+
+    private func applyFlowBrushChanges(_ changes: [FlowBrushChange]) {
+        for change in changes {
+            guard let entity = runtime.world.entities.selectableEntity(at: change.position),
+                  entity.structureType == .conveyor else { continue }
+            runtime.configureConveyorIO(
+                entityID: entity.id,
+                inputDirection: change.newInput,
+                outputDirection: change.newOutput
+            )
+        }
+    }
+
+    private func quickEditWidgetPosition(for entity: Entity, viewport: CGSize) -> CGPoint {
+        let anchor = picker.screenPosition(
+            for: entity.position,
+            viewport: viewport,
+            camera: cameraState,
+            board: runtime.world.board
+        )
+        let tileHeight = CGFloat(max(0.001, cameraState.zoom)) * 22
+        let lift = tileHeight * 2.5
+        return CGPoint(x: anchor.x, y: max(50, anchor.y - lift))
     }
 
     private func validateSelection() {

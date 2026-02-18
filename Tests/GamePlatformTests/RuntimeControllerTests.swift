@@ -164,6 +164,205 @@ final class RuntimeControllerTests: XCTestCase {
         XCTAssertNotNil(runtime.world.entities.entity(id: 1)) // HQ still present
     }
 
+    // MARK: - Conveyor Endpoint Snapping
+
+    func testFirstCellSnapsInputToExistingConveyorAbove() {
+        // Existing conveyor at (25,24) outputs south toward (25,25).
+        // Drag path from (25,25) east to (27,25).
+        // First cell (25,25) should snap input from west → north to connect.
+        var world = makeConveyorSnappingWorld()
+        let conveyorID = world.entities.spawnStructure(.conveyor, at: GridPosition(x: 25, y: 24), rotation: .south)
+        world.economy.conveyorIOByEntity[conveyorID] = ConveyorIOConfig(
+            inputDirection: .north,
+            outputDirection: .south
+        )
+        world.rebuildAggregatedInventory()
+        let runtime = GameRuntimeController(initialWorld: world)
+
+        runtime.placeConveyorPath([
+            ConveyorPlacementCell(position: GridPosition(x: 25, y: 25), inputDirection: .west, outputDirection: .east),
+            ConveyorPlacementCell(position: GridPosition(x: 26, y: 25), inputDirection: .west, outputDirection: .east),
+            ConveyorPlacementCell(position: GridPosition(x: 27, y: 25), inputDirection: .west, outputDirection: .east),
+        ])
+        _ = runtime.advanceTick()
+
+        // Find the conveyor placed at (25,25) — its I/O should be snapped
+        if let entity = runtime.world.entities.selectableEntity(at: GridPosition(x: 25, y: 25)) {
+            let io = runtime.world.economy.conveyorIOByEntity[entity.id]
+                ?? ConveyorIOConfig.default(for: entity.rotation)
+            XCTAssertEqual(io.inputDirection, .north, "First cell input should snap to face the existing conveyor above")
+            XCTAssertEqual(io.outputDirection, .east, "First cell output should still face east along the path")
+        } else {
+            XCTFail("Expected conveyor at (25,25)")
+        }
+    }
+
+    func testLastCellSnapsOutputToExistingConveyorBelow() {
+        // Existing conveyor at (27,26) expects input from north (input=north, output=south).
+        // Drag path from (25,25) east to (27,25).
+        // Last cell (27,25) should snap output from east → south to feed it.
+        var world = makeConveyorSnappingWorld()
+        let conveyorID = world.entities.spawnStructure(.conveyor, at: GridPosition(x: 27, y: 26), rotation: .south)
+        world.economy.conveyorIOByEntity[conveyorID] = ConveyorIOConfig(
+            inputDirection: .north,
+            outputDirection: .south
+        )
+        world.rebuildAggregatedInventory()
+        let runtime = GameRuntimeController(initialWorld: world)
+
+        runtime.placeConveyorPath([
+            ConveyorPlacementCell(position: GridPosition(x: 25, y: 25), inputDirection: .west, outputDirection: .east),
+            ConveyorPlacementCell(position: GridPosition(x: 26, y: 25), inputDirection: .west, outputDirection: .east),
+            ConveyorPlacementCell(position: GridPosition(x: 27, y: 25), inputDirection: .west, outputDirection: .east),
+        ])
+        _ = runtime.advanceTick()
+
+        if let entity = runtime.world.entities.selectableEntity(at: GridPosition(x: 27, y: 25)) {
+            let io = runtime.world.economy.conveyorIOByEntity[entity.id]
+                ?? ConveyorIOConfig.default(for: entity.rotation)
+            XCTAssertEqual(io.outputDirection, .south, "Last cell output should snap to face the existing conveyor below")
+            XCTAssertEqual(io.inputDirection, .west, "Last cell input should still face west along the path")
+        } else {
+            XCTFail("Expected conveyor at (27,25)")
+        }
+    }
+
+    func testEndpointDoesNotSnapWhenAlreadyConnected() {
+        // Existing conveyor at (24,25) outputs east toward (25,25).
+        // Drag path from (25,25) east to (27,25).
+        // First cell (25,25) already has input=west which connects. No snap needed.
+        var world = makeConveyorSnappingWorld()
+        _ = world.entities.spawnStructure(.conveyor, at: GridPosition(x: 24, y: 25), rotation: .east)
+        // Default I/O for east rotation: input=west, output=east — outputs east toward (25,25)
+        world.rebuildAggregatedInventory()
+        let runtime = GameRuntimeController(initialWorld: world)
+
+        runtime.placeConveyorPath([
+            ConveyorPlacementCell(position: GridPosition(x: 25, y: 25), inputDirection: .west, outputDirection: .east),
+            ConveyorPlacementCell(position: GridPosition(x: 26, y: 25), inputDirection: .west, outputDirection: .east),
+            ConveyorPlacementCell(position: GridPosition(x: 27, y: 25), inputDirection: .west, outputDirection: .east),
+        ])
+        _ = runtime.advanceTick()
+
+        if let entity = runtime.world.entities.selectableEntity(at: GridPosition(x: 25, y: 25)) {
+            let io = runtime.world.economy.conveyorIOByEntity[entity.id]
+                ?? ConveyorIOConfig.default(for: entity.rotation)
+            // Should stay as default — no corner created
+            XCTAssertEqual(io.inputDirection, .west, "Input should remain west (already connected)")
+            XCTAssertEqual(io.outputDirection, .east)
+        } else {
+            XCTFail("Expected conveyor at (25,25)")
+        }
+    }
+
+    func testFirstCellSnapsToAdjacentBuilding() {
+        // Miner at (24,25) outputs in all directions including east toward (25,25).
+        // Drag path from (25,25) going south to (25,27).
+        // First cell (25,25) has default input=north. Miner is to the west.
+        // Should snap input to west to receive from the miner.
+        var world = makeConveyorSnappingWorld()
+        _ = world.entities.spawnStructure(.miner, at: GridPosition(x: 24, y: 25))
+        world.rebuildAggregatedInventory()
+        let runtime = GameRuntimeController(initialWorld: world)
+
+        runtime.placeConveyorPath([
+            ConveyorPlacementCell(position: GridPosition(x: 25, y: 25), inputDirection: .north, outputDirection: .south),
+            ConveyorPlacementCell(position: GridPosition(x: 25, y: 26), inputDirection: .north, outputDirection: .south),
+            ConveyorPlacementCell(position: GridPosition(x: 25, y: 27), inputDirection: .north, outputDirection: .south),
+        ])
+        _ = runtime.advanceTick()
+
+        if let entity = runtime.world.entities.selectableEntity(at: GridPosition(x: 25, y: 25)) {
+            let io = runtime.world.economy.conveyorIOByEntity[entity.id]
+                ?? ConveyorIOConfig.default(for: entity.rotation)
+            XCTAssertEqual(io.inputDirection, .west, "First cell input should snap to face the miner to the west")
+            XCTAssertEqual(io.outputDirection, .south, "Output should still face south along the path")
+        } else {
+            XCTFail("Expected conveyor at (25,25)")
+        }
+    }
+
+    func testCornerConveyorIOIsCorrectAfterPlacement() {
+        // Drag east 3 tiles then north 2 tiles — corner at (27,25).
+        // The corner should have input=west, output=north (NOT south/east from sort reordering).
+        let world = makeConveyorSnappingWorld()
+        let runtime = GameRuntimeController(initialWorld: world)
+
+        runtime.placeConveyorPath([
+            ConveyorPlacementCell(position: GridPosition(x: 25, y: 25), inputDirection: .west, outputDirection: .east),
+            ConveyorPlacementCell(position: GridPosition(x: 26, y: 25), inputDirection: .west, outputDirection: .east),
+            ConveyorPlacementCell(position: GridPosition(x: 27, y: 25), inputDirection: .west, outputDirection: .north, isCorner: true),
+            ConveyorPlacementCell(position: GridPosition(x: 27, y: 24), inputDirection: .south, outputDirection: .north),
+            ConveyorPlacementCell(position: GridPosition(x: 27, y: 23), inputDirection: .south, outputDirection: .north),
+        ])
+        _ = runtime.advanceTick()
+
+        // Verify the corner cell specifically
+        if let corner = runtime.world.entities.selectableEntity(at: GridPosition(x: 27, y: 25)) {
+            let io = runtime.world.economy.conveyorIOByEntity[corner.id]
+                ?? ConveyorIOConfig.default(for: corner.rotation)
+            XCTAssertEqual(io.inputDirection, .west, "Corner input should face the feeder to the west")
+            XCTAssertEqual(io.outputDirection, .north, "Corner output should face the receiver to the north")
+        } else {
+            XCTFail("Expected conveyor at corner (27,25)")
+        }
+
+        // Verify a straight cell after the corner
+        if let straight = runtime.world.entities.selectableEntity(at: GridPosition(x: 27, y: 24)) {
+            let io = runtime.world.economy.conveyorIOByEntity[straight.id]
+                ?? ConveyorIOConfig.default(for: straight.rotation)
+            XCTAssertEqual(io.inputDirection, .south, "Post-corner cell input should face south")
+            XCTAssertEqual(io.outputDirection, .north, "Post-corner cell output should face north")
+        } else {
+            XCTFail("Expected conveyor at (27,24)")
+        }
+
+        // Verify first straight cell
+        if let first = runtime.world.entities.selectableEntity(at: GridPosition(x: 25, y: 25)) {
+            let io = runtime.world.economy.conveyorIOByEntity[first.id]
+                ?? ConveyorIOConfig.default(for: first.rotation)
+            XCTAssertEqual(io.inputDirection, .west, "First cell input should face west")
+            XCTAssertEqual(io.outputDirection, .east, "First cell output should face east")
+        } else {
+            XCTFail("Expected conveyor at (25,25)")
+        }
+    }
+
+    private func makeConveyorSnappingWorld() -> WorldState {
+        // Large board so placement positions don't trigger expansion
+        let board = BoardState(
+            width: 50,
+            height: 50,
+            basePosition: GridPosition(x: 0, y: 0),
+            spawnEdgeX: 49,
+            spawnYMin: 0,
+            spawnYMax: 2,
+            blockedCells: [],
+            restrictedCells: [],
+            ramps: []
+        )
+
+        var entities = EntityStore()
+        let hqID = entities.spawnStructure(.hq, at: GridPosition(x: 1, y: 1))
+
+        var world = WorldState(
+            tick: 0,
+            board: board,
+            entities: entities,
+            economy: EconomyState(storageSharedPoolByEntity: [hqID: ["plate_iron": 50]]),
+            threat: ThreatState(),
+            run: RunState(phase: .playing, hqEntityID: hqID),
+            combat: CombatState(
+                basePosition: GridPosition(x: 0, y: 0),
+                spawnEdgeX: 49,
+                spawnYMin: 0,
+                spawnYMax: 2
+            )
+        )
+        world.rebuildAggregatedInventory()
+        return world
+    }
+
     private func makeImmediateGameOverWorld() -> WorldState {
         let board = BoardState(
             width: 8,

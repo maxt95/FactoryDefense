@@ -177,7 +177,7 @@ public struct CommandSystem: SimulationSystem {
                 if removalIDs.contains(where: { state.entities.entity(id: $0)?.structureType == .wall }) || structureType == .wall {
                     state.combat.wallNetworksDirty = true
                 }
-            case .placeConveyor(let position, let direction):
+            case .placeConveyor(let position, let direction, let ioInput, let ioOutput):
                 let request = BuildRequest(
                     structure: .conveyor,
                     position: position,
@@ -193,7 +193,19 @@ public struct CommandSystem: SimulationSystem {
                     commands: [translated],
                     emitEvent: context.emit
                 )
+                let preSpawnNextID = state.entities.nextEntityID
                 update(state: &state, context: translatedContext)
+                // Atomically configure I/O if provided — avoids entity ID
+                // prediction issues caused by command sort reordering.
+                if let input = ioInput, let output = ioOutput, input != output {
+                    let spawnedID = preSpawnNextID
+                    if let entity = state.entities.entity(id: spawnedID), entity.structureType == .conveyor {
+                        state.economy.conveyorIOByEntity[spawnedID] = ConveyorIOConfig(
+                            inputDirection: input,
+                            outputDirection: output
+                        )
+                    }
+                }
             case .configureConveyorIO(let entityID, let inputDirection, let outputDirection):
                 guard inputDirection != outputDirection else { continue }
                 guard let entity = state.entities.entity(id: entityID), entity.structureType == .conveyor else { continue }

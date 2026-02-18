@@ -392,7 +392,7 @@ private struct FactoryDefenseGameplayView: View {
                     if let highlighted = runtime.highlightedCell {
                         runtime.previewPlacement(structure: selectedStructure, at: highlighted)
                     }
-                case .interact:
+                case .interact, .editBelts, .planBelt:
                     runtime.clearPlacementPreview()
                 }
             }

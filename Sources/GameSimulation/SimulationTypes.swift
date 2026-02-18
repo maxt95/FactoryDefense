@@ -267,7 +267,7 @@ public struct BuildRequest: Codable, Hashable, Sendable {
 public enum CommandPayload: Codable, Hashable, Sendable {
     case placeStructure(BuildRequest)
     case removeStructure(entityID: EntityID)
-    case placeConveyor(position: GridPosition, direction: CardinalDirection)
+    case placeConveyor(position: GridPosition, direction: CardinalDirection, inputDirection: CardinalDirection? = nil, outputDirection: CardinalDirection? = nil)
     case configureConveyorIO(entityID: EntityID, inputDirection: CardinalDirection, outputDirection: CardinalDirection)
     case rotateBuilding(entityID: EntityID)
     case pinRecipe(entityID: EntityID, recipeID: String)
@@ -305,7 +305,9 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         case .placeConveyor:
             self = .placeConveyor(
                 position: try container.decode(GridPosition.self, forKey: .position),
-                direction: try container.decode(CardinalDirection.self, forKey: .direction)
+                direction: try container.decode(CardinalDirection.self, forKey: .direction),
+                inputDirection: try container.decodeIfPresent(CardinalDirection.self, forKey: .inputDirection),
+                outputDirection: try container.decodeIfPresent(CardinalDirection.self, forKey: .outputDirection)
             )
         case .configureConveyorIO:
             self = .configureConveyorIO(
@@ -334,10 +336,12 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         case .removeStructure(let entityID):
             try container.encode(Kind.removeStructure, forKey: .kind)
             try container.encode(entityID, forKey: .entityID)
-        case .placeConveyor(let position, let direction):
+        case .placeConveyor(let position, let direction, let ioInput, let ioOutput):
             try container.encode(Kind.placeConveyor, forKey: .kind)
             try container.encode(position, forKey: .position)
             try container.encode(direction, forKey: .direction)
+            try container.encodeIfPresent(ioInput, forKey: .inputDirection)
+            try container.encodeIfPresent(ioOutput, forKey: .outputDirection)
         case .configureConveyorIO(let entityID, let inputDirection, let outputDirection):
             try container.encode(Kind.configureConveyorIO, forKey: .kind)
             try container.encode(entityID, forKey: .entityID)
@@ -362,7 +366,7 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             return "place:\(build.structure.rawValue):\(build.position.x):\(build.position.y):\(build.position.z):\(build.rotation.rawValue):\(patchToken)"
         case .removeStructure(let entityID):
             return "remove:\(entityID)"
-        case .placeConveyor(let position, let direction):
+        case .placeConveyor(let position, let direction, _, _):
             return "conveyor:\(position.x):\(position.y):\(position.z):\(direction.rawValue)"
         case .configureConveyorIO(let entityID, let inputDirection, let outputDirection):
             return "conveyorIO:\(entityID):\(inputDirection.rawValue):\(outputDirection.rawValue)"

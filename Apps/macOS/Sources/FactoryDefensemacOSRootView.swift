@@ -261,6 +261,7 @@ private struct FactoryDefensemacOSGameplayView: View {
     @State private var conveyorInputDirection: CardinalDirection = .west
     @State private var conveyorOutputDirection: CardinalDirection = .east
     @State private var didReportRunSummary = false
+    @State private var hoveredGridPosition: GridPosition?
 
     let enableDebugViews: Bool
     let onRunEnded: (RunSummarySnapshot) -> Void
@@ -280,6 +281,7 @@ private struct FactoryDefensemacOSGameplayView: View {
     private let objectInspectorBuilder = ObjectInspectorBuilder()
     private let orePatchInspectorBuilder = OrePatchInspectorBuilder()
     private let dragDrawPlanner = GameplayDragDrawPlanner()
+    private let snapResolver = ConveyorSnapResolver()
 
     private var selectedStructure: StructureType {
         interaction.selectedStructure(from: buildMenu)
@@ -314,7 +316,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                         handleTap(at: location, viewport: viewport)
                     },
                     onPointerMove: { location, viewport in
-                        previewPlacement(at: location, viewport: viewport)
+                        handlePointerMove(at: location, viewport: viewport)
                     },
                     onScrollZoom: { delta, location, viewport in
                         let scale: Float = delta < 0 ? 0.92 : 1.08
@@ -322,6 +324,9 @@ private struct FactoryDefensemacOSGameplayView: View {
                     },
                     onKeyboardPan: { dx, dy, viewport in
                         handleKeyboardPan(deltaX: dx, deltaY: dy, viewport: viewport)
+                    },
+                    onKeyAction: { action, viewport in
+                        handleKeyAction(action, viewport: viewport)
                     }
                 )
                 .ignoresSafeArea()
@@ -430,7 +435,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                 case .build:
                     selectedTarget = nil
                     refreshPlacementPreview(viewport: proxy.size)
-                case .interact:
+                case .interact, .editBelts, .planBelt:
                     runtime.clearPlacementPreview()
                 }
             }
@@ -686,19 +691,196 @@ private struct FactoryDefensemacOSGameplayView: View {
             if interaction.completePlacementIfSuccessful(runtime.placementResult) {
                 runtime.clearPlacementPreview()
             }
+        case .editBelts:
+            // Tap in edit-belts mode: no action (drag to flow-brush, F to reverse)
+            break
+        case .planBelt:
+            if interaction.beltPlanner.startPin == nil {
+                interaction.beltPlanner.setStart(position)
+            } else {
+                interaction.beltPlanner.setEnd(position)
+            }
         }
     }
 
-    private func previewPlacement(at location: CGPoint, viewport: CGSize) {
+    private var hoveredConveyorEntityID: EntityID? {
+        guard let pos = hoveredGridPosition,
+              let entity = runtime.world.entities.selectableEntity(at: pos),
+              entity.structureType == .conveyor else {
+            return nil
+        }
+        return entity.id
+    }
+
+    private func handlePointerMove(at location: CGPoint, viewport: CGSize) {
+        hoveredGridPosition = pickGrid(at: location, viewport: viewport)
         guard interaction.isBuildMode else {
             runtime.clearPlacementPreview()
             return
         }
-        guard let position = pickGrid(at: location, viewport: viewport) else {
+        guard let position = hoveredGridPosition else {
             runtime.clearPlacementPreview()
             return
         }
         runtime.previewPlacement(structure: selectedStructure, at: position)
+    }
+
+    private func handleKeyAction(_ action: KeyAction, viewport: CGSize) {
+        switch action {
+        case .rotateCW:
+            if interaction.mode == .build, interaction.isDragDrawActive {
+                // During drag: cycle corner preference (future enhancement)
+                return
+            }
+            if let entityID = hoveredConveyorEntityID {
+                rotateConveyor(entityID: entityID, clockwise: true)
+            }
+
+        case .rotateCCW:
+            if let entityID = hoveredConveyorEntityID {
+                rotateConveyor(entityID: entityID, clockwise: false)
+            }
+
+        case .reverse:
+            if interaction.mode == .editBelts, let entityID = hoveredConveyorEntityID {
+                reverseConveyorRun(startingFrom: entityID)
+            } else if let entityID = hoveredConveyorEntityID {
+                reverseSingleConveyor(entityID: entityID)
+            }
+
+        case .toggleEditBelts:
+            if interaction.mode == .editBelts {
+                interaction.exitEditBeltsMode()
+            } else {
+                interaction.enterEditBeltsMode()
+            }
+
+        case .togglePlanBelt:
+            if interaction.mode == .planBelt {
+                interaction.exitPlanBeltMode()
+            } else {
+                interaction.enterPlanBeltMode()
+            }
+
+        case .confirm:
+            if interaction.mode == .planBelt {
+                let cells = interaction.beltPlanner.confirm()
+                guard !cells.isEmpty else { return }
+                runtime.placeConveyorPath(cells.map {
+                    ConveyorPlacementCell(
+                        position: $0.position,
+                        inputDirection: $0.inputDirection,
+                        outputDirection: $0.outputDirection,
+                        isCorner: $0.isCorner
+                    )
+                })
+            }
+
+        case .cancel:
+            switch interaction.mode {
+            case .build:
+                if interaction.isDragDrawActive {
+                    interaction.cancelDragDraw()
+                } else {
+                    interaction.exitBuildMode()
+                }
+            case .editBelts:
+                if interaction.flowBrush.isActive {
+                    interaction.flowBrush.cancelStroke()
+                } else {
+                    interaction.exitEditBeltsMode()
+                }
+            case .planBelt:
+                interaction.exitPlanBeltMode()
+            case .interact:
+                break
+            }
+        }
+    }
+
+    private func rotateConveyor(entityID: EntityID, clockwise: Bool) {
+        guard let entity = runtime.world.entities.entity(id: entityID) else { return }
+        let io = runtime.world.economy.conveyorIOByEntity[entityID]
+            ?? ConveyorIOConfig.default(for: entity.rotation)
+        let newOutput = clockwise ? io.outputDirection.right : io.outputDirection.left
+        runtime.configureConveyorIO(
+            entityID: entityID,
+            inputDirection: newOutput.opposite,
+            outputDirection: newOutput
+        )
+    }
+
+    private func reverseSingleConveyor(entityID: EntityID) {
+        guard let entity = runtime.world.entities.entity(id: entityID) else { return }
+        let io = runtime.world.economy.conveyorIOByEntity[entityID]
+            ?? ConveyorIOConfig.default(for: entity.rotation)
+        runtime.configureConveyorIO(
+            entityID: entityID,
+            inputDirection: io.outputDirection,
+            outputDirection: io.inputDirection
+        )
+    }
+
+    private func reverseConveyorRun(startingFrom entityID: EntityID) {
+        let changes = computeRunReversal(startingFrom: entityID)
+        for change in changes {
+            runtime.configureConveyorIO(
+                entityID: change.entityID,
+                inputDirection: change.newInput,
+                outputDirection: change.newOutput
+            )
+        }
+    }
+
+    private struct RunReversalChange {
+        var entityID: EntityID
+        var newInput: CardinalDirection
+        var newOutput: CardinalDirection
+    }
+
+    private func computeRunReversal(startingFrom entityID: EntityID) -> [RunReversalChange] {
+        let entities = runtime.world.entities
+        let conveyorIO = runtime.world.economy.conveyorIOByEntity
+        var visited = Set<EntityID>()
+        var queue = [entityID]
+        var changes: [RunReversalChange] = []
+
+        while !queue.isEmpty {
+            let current = queue.removeFirst()
+            guard !visited.contains(current) else { continue }
+            visited.insert(current)
+
+            guard let entity = entities.entity(id: current),
+                  entity.structureType == .conveyor else { continue }
+
+            let io = conveyorIO[current] ?? ConveyorIOConfig.default(for: entity.rotation)
+            changes.append(RunReversalChange(
+                entityID: current,
+                newInput: io.outputDirection,
+                newOutput: io.inputDirection
+            ))
+
+            // Follow connections in both directions
+            let outputPos = entity.position.translated(by: io.outputDirection)
+            let inputPos = entity.position.translated(by: io.inputDirection)
+
+            for neighborPos in [outputPos, inputPos] {
+                guard let neighbor = entities.selectableEntity(at: neighborPos),
+                      neighbor.structureType == .conveyor,
+                      !visited.contains(neighbor.id) else { continue }
+
+                // Verify it's actually connected
+                let neighborIO = conveyorIO[neighbor.id]
+                    ?? ConveyorIOConfig.default(for: neighbor.rotation)
+                let neighborOutputPos = neighbor.position.translated(by: neighborIO.outputDirection)
+                let neighborInputPos = neighbor.position.translated(by: neighborIO.inputDirection)
+
+                if neighborOutputPos == entity.position || neighborInputPos == entity.position {
+                    queue.append(neighbor.id)
+                }
+            }
+        }
+        return changes
     }
 
     private func handleDragChanged(_ value: DragGesture.Value, viewport: CGSize) {
@@ -708,10 +890,25 @@ private struct FactoryDefensemacOSGameplayView: View {
                 interaction.beginDragDraw(at: start)
             }
             if let current = pickGrid(at: value.location, viewport: viewport) {
-                interaction.updateDragDraw(at: current)
+                if selectedStructure == .conveyor {
+                    interaction.accumulateConveyorDragCell(current)
+                } else {
+                    interaction.updateDragDraw(at: current)
+                }
                 runtime.previewPlacement(structure: selectedStructure, at: current)
             } else {
                 runtime.clearPlacementPreview()
+            }
+            return
+        }
+
+        if interaction.mode == .editBelts {
+            if !interaction.flowBrush.isActive,
+               let start = pickGrid(at: value.startLocation, viewport: viewport) {
+                interaction.flowBrush.beginStroke(at: start)
+            }
+            if let current = pickGrid(at: value.location, viewport: viewport) {
+                interaction.flowBrush.extendStroke(to: current)
             }
             return
         }
@@ -721,11 +918,21 @@ private struct FactoryDefensemacOSGameplayView: View {
         cameraState.panBy(deltaX: -Float(deltaX), deltaY: -Float(deltaY))
         enforceCameraConstraints(viewport: viewport)
         dragTranslation = value.translation
-        previewPlacement(at: value.location, viewport: viewport)
+        handlePointerMove(at: value.location, viewport: viewport)
     }
 
     private func handleDragEnded(_ value: DragGesture.Value, viewport: CGSize) {
         defer { dragTranslation = .zero }
+
+        // Handle flow brush stroke completion in edit-belts mode
+        if interaction.mode == .editBelts, interaction.flowBrush.isActive {
+            if let current = pickGrid(at: value.location, viewport: viewport) {
+                interaction.flowBrush.extendStroke(to: current)
+            }
+            let changes = interaction.flowBrush.finishStroke()
+            applyFlowBrushChanges(changes)
+            return
+        }
 
         guard interaction.isBuildMode, dragDrawPlanner.supportsDragDraw(for: selectedStructure) else {
             interaction.cancelDragDraw()
@@ -733,14 +940,46 @@ private struct FactoryDefensemacOSGameplayView: View {
         }
 
         if let current = pickGrid(at: value.location, viewport: viewport) {
-            interaction.updateDragDraw(at: current)
+            if selectedStructure == .conveyor {
+                interaction.accumulateConveyorDragCell(current)
+            } else {
+                interaction.updateDragDraw(at: current)
+            }
         }
-        let path = interaction.finishDragDraw(using: dragDrawPlanner)
-        guard !path.isEmpty else { return }
 
         selectedTarget = nil
-        runtime.placeStructurePath(selectedStructure, along: path)
+
+        if selectedStructure == .conveyor {
+            let cells = interaction.finishConveyorDragDraw(using: dragDrawPlanner)
+            guard !cells.isEmpty else { return }
+            runtime.placeConveyorPath(cells.map {
+                ConveyorPlacementCell(
+                    position: $0.position,
+                    inputDirection: $0.inputDirection,
+                    outputDirection: $0.outputDirection,
+                    isCorner: $0.isCorner
+                )
+            })
+        } else {
+            let path = interaction.finishDragDraw(using: dragDrawPlanner)
+            guard !path.isEmpty else { return }
+            runtime.placeStructurePath(selectedStructure, along: path)
+        }
+
+        // Stay in build mode after conveyor/wall drag-draw
         refreshPlacementPreview(viewport: viewport)
+    }
+
+    private func applyFlowBrushChanges(_ changes: [FlowBrushChange]) {
+        for change in changes {
+            guard let entity = runtime.world.entities.selectableEntity(at: change.position),
+                  entity.structureType == .conveyor else { continue }
+            runtime.configureConveyorIO(
+                entityID: entity.id,
+                inputDirection: change.newInput,
+                outputDirection: change.newOutput
+            )
+        }
     }
 
     private func refreshPlacementPreview(viewport: CGSize) {
@@ -912,6 +1151,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
     var onPointerMove: (CGPoint, CGSize) -> Void
     var onScrollZoom: (CGFloat, CGPoint, CGSize) -> Void
     var onKeyboardPan: (Float, Float, CGSize) -> Void
+    var onKeyAction: (KeyAction, CGSize) -> Void
 
     func makeNSView(context: Context) -> MTKView {
         let view = ScrollableMTKView(frame: .zero)
@@ -919,6 +1159,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
         view.onPointerMove = onPointerMove
         view.onScrollZoom = onScrollZoom
         view.onKeyboardPan = onKeyboardPan
+        view.onKeyAction = onKeyAction
         if let renderer = context.coordinator.renderer {
             renderer.debugMode = debugMode
             renderer.attach(to: view)
@@ -934,6 +1175,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
             interactiveView.onPointerMove = onPointerMove
             interactiveView.onScrollZoom = onScrollZoom
             interactiveView.onKeyboardPan = onKeyboardPan
+            interactiveView.onKeyAction = onKeyAction
             interactiveView.window?.makeFirstResponder(interactiveView)
         }
         renderer.worldState = world
@@ -958,11 +1200,23 @@ private struct MetalSurfaceView: NSViewRepresentable {
     }
 }
 
+/// Key action events emitted by ScrollableMTKView for game-specific shortcuts.
+enum KeyAction {
+    case rotateCW          // R
+    case rotateCCW         // Shift+R
+    case reverse           // F
+    case toggleEditBelts   // E
+    case togglePlanBelt    // P
+    case confirm           // Enter/Return
+    case cancel            // Escape
+}
+
 private final class ScrollableMTKView: MTKView {
     var onTap: ((CGPoint, CGSize) -> Void)?
     var onPointerMove: ((CGPoint, CGSize) -> Void)?
     var onScrollZoom: ((CGFloat, CGPoint, CGSize) -> Void)?
     var onKeyboardPan: ((Float, Float, CGSize) -> Void)?
+    var onKeyAction: ((KeyAction, CGSize) -> Void)?
     private var trackingArea: NSTrackingArea?
 
     override var acceptsFirstResponder: Bool {
@@ -1017,6 +1271,22 @@ private final class ScrollableMTKView: MTKView {
             onKeyboardPan?(0, -1, bounds.size)
         case 1, 125: // S, Down
             onKeyboardPan?(0, 1, bounds.size)
+        case 15: // R
+            if event.modifierFlags.contains(.shift) {
+                onKeyAction?(.rotateCCW, bounds.size)
+            } else {
+                onKeyAction?(.rotateCW, bounds.size)
+            }
+        case 3: // F
+            onKeyAction?(.reverse, bounds.size)
+        case 14: // E
+            onKeyAction?(.toggleEditBelts, bounds.size)
+        case 35: // P
+            onKeyAction?(.togglePlanBelt, bounds.size)
+        case 36: // Return/Enter
+            onKeyAction?(.confirm, bounds.size)
+        case 53: // Escape
+            onKeyAction?(.cancel, bounds.size)
         default:
             super.keyDown(with: event)
         }

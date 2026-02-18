@@ -197,6 +197,57 @@ public final class GameRuntimeController: ObservableObject {
         )
     }
 
+    /// Places conveyors along a smart path with per-cell I/O directions.
+    /// Emits placeConveyor for each cell, plus configureConveyorIO for non-default I/O.
+    /// Endpoints are auto-snapped to connect with adjacent existing infrastructure.
+    public func placeConveyorPath(_ cells: [ConveyorPlacementCell]) {
+        guard !cells.isEmpty else { return }
+
+        var adjustedCells = cells
+        snapPathEndpoints(&adjustedCells, in: world)
+
+        var simulatedWorld = world
+        var simulatedInventory = simulatedWorld.aggregatedPhysicalInventory()
+
+        for cell in adjustedCells {
+            let structure = StructureType.conveyor
+            let anchorPosition = placementAnchor(for: structure, requestedPosition: cell.position)
+            let coveredCells = structure.coveredCells(anchor: anchorPosition)
+            guard let expansionInsets = simulatedWorld.board.plannedExpansion(for: coveredCells) else {
+                continue
+            }
+
+            let placementAnchor = anchorPosition.translated(byX: expansionInsets.left, byY: expansionInsets.top)
+            var previewState = simulatedWorld
+            previewState.applyBoardExpansion(expansionInsets)
+            let result = placementValidator.canPlace(structure, at: placementAnchor, in: previewState)
+            guard result == .ok else { continue }
+
+            guard Self.canAfford(costs: structure.buildCosts, from: simulatedInventory) else {
+                placementResult = .insufficientResources
+                break
+            }
+
+            // Place the conveyor with I/O bundled atomically — avoids entity ID
+            // prediction failures caused by command sort reordering.
+            enqueue(payload: .placeConveyor(
+                position: cell.position,
+                direction: cell.outputDirection,
+                inputDirection: cell.inputDirection,
+                outputDirection: cell.outputDirection
+            ))
+
+            simulatedWorld.applyBoardExpansion(expansionInsets)
+            let placedPosition = GridPosition(
+                x: placementAnchor.x,
+                y: placementAnchor.y,
+                z: simulatedWorld.board.elevation(at: placementAnchor)
+            )
+            simulatedWorld.entities.spawnStructure(structure, at: placedPosition, rotation: .north)
+            Self.consume(costs: structure.buildCosts, from: &simulatedInventory)
+        }
+    }
+
     public func placeStructurePath(
         _ structure: StructureType,
         along points: [GridPosition],
@@ -362,10 +413,201 @@ public final class GameRuntimeController: ObservableObject {
     }
 }
 
+// MARK: - Conveyor Endpoint Snapping
+
+extension GameRuntimeController {
+    /// Adjusts the first and last cells of a conveyor path to connect with
+    /// adjacent existing infrastructure (conveyors, buildings, splitters, mergers).
+    func snapPathEndpoints(_ cells: inout [ConveyorPlacementCell], in world: WorldState) {
+        guard !cells.isEmpty else { return }
+
+        let pathPositions = Set(cells.map(\.position))
+
+        // Snap first cell's input to an adjacent feeder (if the default doesn't already connect)
+        snapFirstCellInput(&cells, pathPositions: pathPositions, world: world)
+
+        // Snap last cell's output to an adjacent receiver (if the default doesn't already connect)
+        snapLastCellOutput(&cells, pathPositions: pathPositions, world: world)
+    }
+
+    private func snapFirstCellInput(
+        _ cells: inout [ConveyorPlacementCell],
+        pathPositions: Set<GridPosition>,
+        world: WorldState
+    ) {
+        let firstCell = cells[0]
+
+        // Check if the current input direction already connects to a feeding neighbor
+        if neighborFeedsToward(
+            cellPosition: firstCell.position,
+            fromDirection: firstCell.inputDirection,
+            pathPositions: pathPositions,
+            world: world
+        ) {
+            return // Already connected
+        }
+
+        // Look for a neighbor that feeds toward us from a different direction
+        for direction in CardinalDirection.allCases {
+            if direction == firstCell.inputDirection { continue } // Already checked
+            if direction == firstCell.outputDirection { continue } // Can't receive from output side
+
+            if neighborFeedsToward(
+                cellPosition: firstCell.position,
+                fromDirection: direction,
+                pathPositions: pathPositions,
+                world: world
+            ) {
+                cells[0].inputDirection = direction
+                cells[0].isCorner = cells[0].inputDirection != cells[0].outputDirection.opposite
+                return
+            }
+        }
+    }
+
+    private func snapLastCellOutput(
+        _ cells: inout [ConveyorPlacementCell],
+        pathPositions: Set<GridPosition>,
+        world: WorldState
+    ) {
+        let lastIdx = cells.count - 1
+        let lastCell = cells[lastIdx]
+
+        // Check if the current output direction already connects to a receiving neighbor
+        if neighborAcceptsFrom(
+            cellPosition: lastCell.position,
+            towardDirection: lastCell.outputDirection,
+            pathPositions: pathPositions,
+            world: world
+        ) {
+            return // Already connected
+        }
+
+        // Look for a neighbor that accepts items from us in a different direction
+        for direction in CardinalDirection.allCases {
+            if direction == lastCell.outputDirection { continue } // Already checked
+            if direction == lastCell.inputDirection { continue } // Can't output toward input side
+
+            if neighborAcceptsFrom(
+                cellPosition: lastCell.position,
+                towardDirection: direction,
+                pathPositions: pathPositions,
+                world: world
+            ) {
+                cells[lastIdx].outputDirection = direction
+                cells[lastIdx].isCorner = cells[lastIdx].inputDirection != cells[lastIdx].outputDirection.opposite
+                return
+            }
+        }
+    }
+
+    /// Checks if there's a neighbor at `cellPosition.translated(by: fromDirection)` that
+    /// outputs toward `cellPosition` (i.e., could feed items into a conveyor here).
+    private func neighborFeedsToward(
+        cellPosition: GridPosition,
+        fromDirection: CardinalDirection,
+        pathPositions: Set<GridPosition>,
+        world: WorldState
+    ) -> Bool {
+        let neighborPos = cellPosition.translated(by: fromDirection)
+        guard !pathPositions.contains(neighborPos) else { return false }
+        guard let neighbor = world.entities.selectableEntity(at: neighborPos),
+              let structType = neighbor.structureType else { return false }
+
+        // The neighbor is in `fromDirection` from us. For it to feed us,
+        // it must output in the opposite direction (toward us).
+        let dirFromNeighborToUs = fromDirection.opposite
+
+        switch structType {
+        case .conveyor:
+            let io = world.economy.conveyorIOByEntity[neighbor.id]
+                ?? ConveyorIOConfig.default(for: neighbor.rotation)
+            return io.outputDirection == dirFromNeighborToUs
+
+        case .splitter:
+            // Splitter outputs go to facing.left and facing.right
+            let facing = neighbor.rotation.direction
+            return dirFromNeighborToUs == facing.left || dirFromNeighborToUs == facing.right
+
+        case .merger:
+            // Merger output goes forward (facing direction)
+            return dirFromNeighborToUs == neighbor.rotation.direction
+
+        case .miner, .smelter, .assembler, .ammoModule, .storage, .hq, .powerPlant:
+            // Buildings output in all directions
+            return true
+
+        default:
+            return false
+        }
+    }
+
+    /// Checks if there's a neighbor at `cellPosition.translated(by: towardDirection)` that
+    /// accepts items from `cellPosition` (i.e., has an input port facing us).
+    private func neighborAcceptsFrom(
+        cellPosition: GridPosition,
+        towardDirection: CardinalDirection,
+        pathPositions: Set<GridPosition>,
+        world: WorldState
+    ) -> Bool {
+        let neighborPos = cellPosition.translated(by: towardDirection)
+        guard !pathPositions.contains(neighborPos) else { return false }
+        guard let neighbor = world.entities.selectableEntity(at: neighborPos),
+              let structType = neighbor.structureType else { return false }
+
+        // The neighbor is in `towardDirection` from us. For it to accept from us,
+        // it must have an input facing toward us (i.e., facing towardDirection.opposite).
+        let dirFromNeighborToUs = towardDirection.opposite
+
+        switch structType {
+        case .conveyor:
+            let io = world.economy.conveyorIOByEntity[neighbor.id]
+                ?? ConveyorIOConfig.default(for: neighbor.rotation)
+            return io.inputDirection == dirFromNeighborToUs
+
+        case .splitter:
+            // Splitter input is from behind (facing.opposite)
+            return dirFromNeighborToUs == neighbor.rotation.direction.opposite
+
+        case .merger:
+            // Merger inputs come from facing.left and facing.right
+            let facing = neighbor.rotation.direction
+            return dirFromNeighborToUs == facing.left || dirFromNeighborToUs == facing.right
+
+        case .miner, .smelter, .assembler, .ammoModule, .storage, .hq, .powerPlant:
+            // Buildings accept from all directions
+            return true
+
+        default:
+            return false
+        }
+    }
+}
+
 private struct SummaryCounters {
     var enemiesDestroyed: Int = 0
     var structuresBuilt: Int = 0
     var ammoSpent: Int = 0
+}
+
+/// Lightweight cell data for conveyor path placement, usable without GameUI dependency.
+public struct ConveyorPlacementCell: Sendable {
+    public var position: GridPosition
+    public var inputDirection: CardinalDirection
+    public var outputDirection: CardinalDirection
+    public var isCorner: Bool
+
+    public init(
+        position: GridPosition,
+        inputDirection: CardinalDirection,
+        outputDirection: CardinalDirection,
+        isCorner: Bool = false
+    ) {
+        self.position = position
+        self.inputDirection = inputDirection
+        self.outputDirection = outputDirection
+        self.isCorner = isCorner
+    }
 }
 
 private struct PlacementPreviewCache {
