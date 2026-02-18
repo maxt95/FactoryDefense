@@ -202,7 +202,6 @@ final class RuntimeControllerTests: XCTestCase {
                 trickleMinCount: 1,
                 trickleMaxCount: 1,
                 nextTrickleTick: 9_999,
-                raidCooldownUntilTick: 0,
                 milestoneEvery: 5,
                 lastMilestoneWave: 0
             ),

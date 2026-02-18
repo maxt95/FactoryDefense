@@ -19,7 +19,6 @@ final class AmmoConsumptionTests: XCTestCase {
                 waveDurationTicks: 200,
                 waveEndsAtTick: 200,
                 isWaveActive: true,
-                raidCooldownUntilTick: 999,
                 milestoneEvery: 5,
                 lastMilestoneWave: 0
             ),

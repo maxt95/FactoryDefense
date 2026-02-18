@@ -352,13 +352,10 @@ public struct CommandSystem: SimulationSystem {
 
     private func addToHQStorage(itemID: ItemID, quantity: Int, state: inout WorldState) {
         guard quantity > 0 else { return }
-        if let hqID = state.run.hqEntityID {
-            var pool = state.economy.storageSharedPoolByEntity[hqID, default: [:]]
-            pool[itemID, default: 0] += quantity
-            state.economy.storageSharedPoolByEntity[hqID] = pool
-        } else {
-            state.economy.add(itemID: itemID, quantity: quantity)
-        }
+        guard let hqID = state.run.hqEntityID else { return }
+        var pool = state.economy.storageSharedPoolByEntity[hqID, default: [:]]
+        pool[itemID, default: 0] += quantity
+        state.economy.storageSharedPoolByEntity[hqID] = pool
     }
 
     private func unbindPatchIfNeeded(for structure: Entity, state: inout WorldState) {
@@ -593,16 +590,17 @@ public struct EconomySystem: SimulationSystem {
         state: WorldState
     ) -> RecipeDef? {
         let inventory = localInputInventory(for: structureID, state: state)
+        let reserveInventory = state.aggregatedPhysicalInventory()
         if let pinnedRecipeID = state.economy.pinnedRecipeByStructure[structureID],
            let pinnedRecipe = recipesByID[pinnedRecipeID],
            pinnedRecipe.inputs.allSatisfy({ inventory[$0.itemID, default: 0] >= $0.quantity }),
-           canRunRecipeWithoutBreachingConstructionStock(recipe: pinnedRecipe, inventory: state.economy.inventories) {
+           canRunRecipeWithoutBreachingConstructionStock(recipe: pinnedRecipe, inventory: reserveInventory) {
             return pinnedRecipe
         }
         for recipeID in prioritizedRecipeIDs {
             guard let recipe = recipesByID[recipeID] else { continue }
             guard recipe.inputs.allSatisfy({ inventory[$0.itemID, default: 0] >= $0.quantity }) else { continue }
-            guard canRunRecipeWithoutBreachingConstructionStock(recipe: recipe, inventory: state.economy.inventories) else { continue }
+            guard canRunRecipeWithoutBreachingConstructionStock(recipe: recipe, inventory: reserveInventory) else { continue }
             return recipe
         }
         return nil
@@ -675,7 +673,7 @@ public struct EconomySystem: SimulationSystem {
         let capacity = outputBufferCapacity(for: structureType)
         guard capacity > 0 else {
             for output in outputs {
-                state.economy.add(itemID: output.itemID, quantity: output.quantity)
+                addToHQSharedPool(itemID: output.itemID, quantity: output.quantity, state: &state)
             }
             return
         }
@@ -704,6 +702,14 @@ public struct EconomySystem: SimulationSystem {
         }
 
         return true
+    }
+
+    private func addToHQSharedPool(itemID: ItemID, quantity: Int, state: inout WorldState) {
+        guard quantity > 0 else { return }
+        guard let hqID = state.run.hqEntityID else { return }
+        var pool = state.economy.storageSharedPoolByEntity[hqID, default: [:]]
+        pool[itemID, default: 0] += quantity
+        state.economy.storageSharedPoolByEntity[hqID] = pool
     }
 
     private func syncLogisticsRuntime(structures: [Entity], state: inout WorldState) {
@@ -1630,10 +1636,6 @@ public struct EconomySystem: SimulationSystem {
 }
 
 public struct WaveSystem: SimulationSystem {
-    public var raidRollModulus: UInt64
-    public var raidRollTrigger: UInt64
-    public var raidCooldownTicks: UInt64
-    public var enableRaids: Bool
     private let enemyDefsByID: [EnemyID: EnemyDef]
     private let handAuthoredByIndex: [Int: WaveDef]
     private let proceduralConfig: ProceduralWaveConfigDef
@@ -1647,18 +1649,10 @@ public struct WaveSystem: SimulationSystem {
     }
 
     public init(
-        raidRollModulus: UInt64 = 97,
-        raidRollTrigger: UInt64 = 3,
-        raidCooldownTicks: UInt64 = 220,
-        enableRaids: Bool = true,
         enemyDefinitions: [EnemyDef] = WaveSystem.defaultEnemyDefinitions,
         waveContent: WaveContentDef = WaveSystem.defaultWaveContent,
         maxConcurrentEnemies: Int = 500
     ) {
-        self.raidRollModulus = raidRollModulus
-        self.raidRollTrigger = raidRollTrigger
-        self.raidCooldownTicks = raidCooldownTicks
-        self.enableRaids = enableRaids
         self.enemyDefsByID = Dictionary(uniqueKeysWithValues: enemyDefinitions.map { ($0.id, $0) })
         self.handAuthoredByIndex = Dictionary(uniqueKeysWithValues: waveContent.handAuthoredWaves.map { ($0.index, $0) })
         self.proceduralConfig = waveContent.proceduralConfig

@@ -9,7 +9,7 @@ final class GoldenReplayTests: XCTestCase {
             systems: [
                 CommandSystem(),
                 EconomySystem(),
-                WaveSystem(enableRaids: false),
+                WaveSystem(),
                 EnemyMovementSystem(),
                 CombatSystem(turretRange: 12, projectileDamage: 18),
                 ProjectileSystem()
@@ -62,7 +62,7 @@ final class GoldenReplayTests: XCTestCase {
         let digest = SHA256.hash(data: data)
         let fingerprint = digest.map { String(format: "%02x", $0) }.joined()
 
-        let expected = "165c8e7678943717acd1d38bc2f9ac5647eb7df12e41723777250fb11416c9fa"
+        let expected = "2b68d7745467fb6c4d8b823f0e173b38b59f6c84a29f1139ec5b81ca19c3184e"
         XCTAssertEqual(fingerprint, expected)
     }
 }

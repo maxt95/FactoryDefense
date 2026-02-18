@@ -1,7 +1,7 @@
 import Foundation
 
 public struct WorldSnapshot: Codable, Hashable, Sendable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public var schemaVersion: Int
     public var world: WorldState

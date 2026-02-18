@@ -73,7 +73,6 @@ final class SnapshotStoreTests: XCTestCase {
               "trickleMinCount": 1,
               "trickleMaxCount": 1,
               "nextTrickleTick": 0,
-              "raidCooldownUntilTick": 0,
               "milestoneEvery": 5,
               "lastMilestoneWave": 0,
               "pendingSpawns": [],

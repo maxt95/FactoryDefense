@@ -263,7 +263,6 @@ final class WaveCombatIntegrationTests: XCTestCase {
             waveDurationTicks: 180,
             waveEndsAtTick: nil,
             isWaveActive: false,
-            raidCooldownUntilTick: 999_999,
             milestoneEvery: 5,
             lastMilestoneWave: 0
         )
@@ -271,7 +270,7 @@ final class WaveCombatIntegrationTests: XCTestCase {
         let engine = SimulationEngine(
             worldState: world,
             systems: [
-                WaveSystem(enableRaids: false),
+                WaveSystem(),
                 EnemyMovementSystem(),
                 CombatSystem(turretRange: 200, projectileDamage: 30),
                 ProjectileSystem()

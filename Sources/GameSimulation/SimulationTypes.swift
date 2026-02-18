@@ -410,7 +410,6 @@ public enum EventKind: String, Codable, Sendable {
     case waveStarted
     case waveCleared
     case waveEnded
-    case raidTriggered
     case enemySpawned
     case enemyMoved
     case structureDamaged
@@ -755,142 +754,6 @@ public struct EconomyState: Codable, Hashable, Sendable {
         self.telemetry = telemetry
     }
 
-    public init(
-        inventories: [ItemID: Int],
-        activeRecipeByStructure: [EntityID: String],
-        pinnedRecipeByStructure: [EntityID: String],
-        productionProgressByStructure: [EntityID: Double],
-        fractionalProductionRemainders: [ItemID: Double],
-        structureInputBuffers: [EntityID: [ItemID: Int]],
-        structureOutputBuffers: [EntityID: [ItemID: Int]],
-        storageSharedPoolByEntity: [EntityID: [ItemID: Int]],
-        conveyorPayloadByEntity: [EntityID: ConveyorPayload],
-        splitterOutputToggleByEntity: [EntityID: Int],
-        mergerInputToggleByEntity: [EntityID: Int],
-        powerAvailable: Int,
-        powerDemand: Int,
-        currency: Int,
-        telemetry: EconomyTelemetry
-    ) {
-        self.init(
-            inventories: inventories,
-            activeRecipeByStructure: activeRecipeByStructure,
-            pinnedRecipeByStructure: pinnedRecipeByStructure,
-            productionProgressByStructure: productionProgressByStructure,
-            fractionalProductionRemainders: fractionalProductionRemainders,
-            structureInputBuffers: structureInputBuffers,
-            structureOutputBuffers: structureOutputBuffers,
-            storageSharedPoolByEntity: storageSharedPoolByEntity,
-            conveyorPayloadByEntity: conveyorPayloadByEntity,
-            conveyorIOByEntity: [:],
-            splitterOutputToggleByEntity: splitterOutputToggleByEntity,
-            mergerInputToggleByEntity: mergerInputToggleByEntity,
-            powerAvailable: powerAvailable,
-            powerDemand: powerDemand,
-            currency: currency,
-            telemetry: telemetry
-        )
-    }
-
-    public init(
-        inventories: [ItemID: Int],
-        activeRecipeByStructure: [EntityID: String],
-        pinnedRecipeByStructure: [EntityID: String],
-        productionProgressByStructure: [EntityID: Double],
-        fractionalProductionRemainders: [ItemID: Double],
-        structureInputBuffers: [EntityID: [ItemID: Int]],
-        structureOutputBuffers: [EntityID: [ItemID: Int]],
-        conveyorPayloadByEntity: [EntityID: ConveyorPayload],
-        powerAvailable: Int,
-        powerDemand: Int,
-        currency: Int,
-        telemetry: EconomyTelemetry
-    ) {
-        self.init(
-            inventories: inventories,
-            activeRecipeByStructure: activeRecipeByStructure,
-            pinnedRecipeByStructure: pinnedRecipeByStructure,
-            productionProgressByStructure: productionProgressByStructure,
-            fractionalProductionRemainders: fractionalProductionRemainders,
-            structureInputBuffers: structureInputBuffers,
-            structureOutputBuffers: structureOutputBuffers,
-            storageSharedPoolByEntity: [:],
-            conveyorPayloadByEntity: conveyorPayloadByEntity,
-            powerAvailable: powerAvailable,
-            powerDemand: powerDemand,
-            currency: currency,
-            telemetry: telemetry
-        )
-    }
-
-    public init(
-        inventories: [ItemID: Int],
-        activeRecipeByStructure: [EntityID: String],
-        pinnedRecipeByStructure: [EntityID: String],
-        productionProgressByStructure: [EntityID: Double],
-        fractionalProductionRemainders: [ItemID: Double],
-        structureInputBuffers: [EntityID: [ItemID: Int]],
-        structureOutputBuffers: [EntityID: [ItemID: Int]],
-        storageSharedPoolByEntity: [EntityID: [ItemID: Int]],
-        conveyorPayloadByEntity: [EntityID: ConveyorPayload],
-        powerAvailable: Int,
-        powerDemand: Int,
-        currency: Int,
-        telemetry: EconomyTelemetry
-    ) {
-        self.init(
-            inventories: inventories,
-            activeRecipeByStructure: activeRecipeByStructure,
-            pinnedRecipeByStructure: pinnedRecipeByStructure,
-            productionProgressByStructure: productionProgressByStructure,
-            fractionalProductionRemainders: fractionalProductionRemainders,
-            structureInputBuffers: structureInputBuffers,
-            structureOutputBuffers: structureOutputBuffers,
-            storageSharedPoolByEntity: storageSharedPoolByEntity,
-            conveyorPayloadByEntity: conveyorPayloadByEntity,
-            splitterOutputToggleByEntity: [:],
-            mergerInputToggleByEntity: [:],
-            powerAvailable: powerAvailable,
-            powerDemand: powerDemand,
-            currency: currency,
-            telemetry: telemetry
-        )
-    }
-
-    public init(
-        inventories: [ItemID: Int],
-        activeRecipeByStructure: [EntityID: String],
-        productionProgressByStructure: [EntityID: Double],
-        fractionalProductionRemainders: [ItemID: Double],
-        structureInputBuffers: [EntityID: [ItemID: Int]],
-        structureOutputBuffers: [EntityID: [ItemID: Int]],
-        conveyorPayloadByEntity: [EntityID: ConveyorPayload],
-        splitterOutputToggleByEntity: [EntityID: Int] = [:],
-        mergerInputToggleByEntity: [EntityID: Int] = [:],
-        powerAvailable: Int,
-        powerDemand: Int,
-        currency: Int,
-        telemetry: EconomyTelemetry
-    ) {
-        self.init(
-            inventories: inventories,
-            activeRecipeByStructure: activeRecipeByStructure,
-            pinnedRecipeByStructure: [:],
-            productionProgressByStructure: productionProgressByStructure,
-            fractionalProductionRemainders: fractionalProductionRemainders,
-            structureInputBuffers: structureInputBuffers,
-            structureOutputBuffers: structureOutputBuffers,
-            storageSharedPoolByEntity: [:],
-            conveyorPayloadByEntity: conveyorPayloadByEntity,
-            splitterOutputToggleByEntity: splitterOutputToggleByEntity,
-            mergerInputToggleByEntity: mergerInputToggleByEntity,
-            powerAvailable: powerAvailable,
-            powerDemand: powerDemand,
-            currency: currency,
-            telemetry: telemetry
-        )
-    }
-
     @discardableResult
     public mutating func consume(itemID: ItemID, quantity: Int) -> Bool {
         guard quantity > 0 else { return true }
@@ -947,7 +810,6 @@ public struct ThreatState: Codable, Hashable, Sendable {
     public var trickleMinCount: Int
     public var trickleMaxCount: Int
     public var nextTrickleTick: UInt64
-    public var raidCooldownUntilTick: UInt64
     public var milestoneEvery: Int
     public var lastMilestoneWave: Int
     public var pendingSpawns: [PendingEnemySpawn]
@@ -970,7 +832,6 @@ public struct ThreatState: Codable, Hashable, Sendable {
         trickleMinCount: Int = 1,
         trickleMaxCount: Int = 2,
         nextTrickleTick: UInt64 = 0,
-        raidCooldownUntilTick: UInt64 = 0,
         milestoneEvery: Int = 5,
         lastMilestoneWave: Int = 0,
         pendingSpawns: [PendingEnemySpawn] = [],
@@ -992,7 +853,6 @@ public struct ThreatState: Codable, Hashable, Sendable {
         self.trickleMinCount = max(1, trickleMinCount)
         self.trickleMaxCount = max(self.trickleMinCount, trickleMaxCount)
         self.nextTrickleTick = nextTrickleTick
-        self.raidCooldownUntilTick = raidCooldownUntilTick
         self.milestoneEvery = milestoneEvery
         self.lastMilestoneWave = lastMilestoneWave
         self.pendingSpawns = pendingSpawns
@@ -1175,7 +1035,6 @@ public struct WorldState: Codable, Hashable, Sendable {
                 trickleMinCount: max(1, difficultyValues.trickleSize.first ?? 1),
                 trickleMaxCount: max(1, difficultyValues.trickleSize.dropFirst().first ?? 1),
                 nextTrickleTick: graceTicks,
-                raidCooldownUntilTick: 0,
                 milestoneEvery: 5,
                 lastMilestoneWave: 0,
                 pendingSpawns: [],
@@ -1209,6 +1068,10 @@ public struct WorldState: Codable, Hashable, Sendable {
     }
 
     public mutating func rebuildAggregatedInventory() {
+        economy.inventories = aggregatedPhysicalInventory()
+    }
+
+    public func aggregatedPhysicalInventory() -> [ItemID: Int] {
         let hasPhysicalStores =
             !economy.structureInputBuffers.isEmpty
             || !economy.structureOutputBuffers.isEmpty
@@ -1216,8 +1079,7 @@ public struct WorldState: Codable, Hashable, Sendable {
             || !economy.conveyorPayloadByEntity.isEmpty
             || !combat.wallNetworks.isEmpty
         guard hasPhysicalStores else {
-            economy.inventories = [:]
-            return
+            return [:]
         }
 
         var aggregate: [ItemID: Int] = [:]
@@ -1244,7 +1106,7 @@ public struct WorldState: Codable, Hashable, Sendable {
             absorb(network.ammoPoolByItemID)
         }
 
-        economy.inventories = aggregate
+        return aggregate
     }
 }
 

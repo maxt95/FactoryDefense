@@ -60,7 +60,7 @@ final class BootstrapInventoryTests: XCTestCase {
     func testNoEnemiesSpawnDuringGracePeriod() {
         let engine = SimulationEngine(
             worldState: .bootstrap(difficulty: .hard, seed: 11),
-            systems: [WaveSystem(enableRaids: false)]
+            systems: [WaveSystem()]
         )
         let events = engine.run(ticks: 600)
 

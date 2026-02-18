@@ -23,14 +23,13 @@ engine.enqueue(
 
 let events = engine.run(ticks: 800)
 let waveEvents = events.filter { $0.kind == .waveStarted }.count
-let raidEvents = events.filter { $0.kind == .raidTriggered }.count
 let ammoSpent = events.filter { $0.kind == .ammoSpent }.reduce(0) { $0 + ($1.value ?? 0) }
 let spawnedEnemies = events.filter { $0.kind == .enemySpawned }.count
 let destroyedEnemies = events.filter { $0.kind == .enemyDestroyed }.count
 let baseHits = events.filter { $0.kind == .enemyReachedBase }.count
 
 print("FactoryDefensePrototype finished")
-print("tick=\(engine.worldState.tick) waveEvents=\(waveEvents) raidEvents=\(raidEvents) ammoSpent=\(ammoSpent)")
+print("tick=\(engine.worldState.tick) waveEvents=\(waveEvents) ammoSpent=\(ammoSpent)")
 print("enemiesSpawned=\(spawnedEnemies) enemiesDestroyed=\(destroyedEnemies) baseHits=\(baseHits)")
 print("baseIntegrity=\(engine.worldState.hqHealth) currency=\(engine.worldState.economy.currency)")
 

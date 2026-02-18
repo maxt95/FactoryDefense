@@ -302,7 +302,7 @@ The implicit message to the player: "Here's your base and some supplies. The clo
 | Area | PRD Target | Current Status | Next Action |
 |------|------------|----------------|-------------|
 | Bootstrap signature | `bootstrap(difficulty:seed:)` | **Done** | — |
-| HQ entity | 2×2 HQ structure (500 HP) | **Done** | Move full HQ storage semantics to logistics model (remove temporary inventory mirroring) |
+| HQ entity | 2×2 HQ structure (500 HP) | **Done** | HQ storage is simulation truth; aggregate inventory is HUD/analytics-only projection |
 | Ring 0 ore patches | Deterministic difficulty-scaled Ring 0 generation | **Done (v1 slice+)** | Add full ore lifecycle: reveal rings + renewal spawning (miner adjacency/binding + depletion runtime now in code) |
 | Starter structures | HQ-only at tick 0 | **Done** | — |
 | Difficulty timing | Grace/trickle/gap timing from `difficulty.json` | **Done** | Shift wave composition from formula runtime to authored `waves.json` consumption |
@@ -311,7 +311,7 @@ The implicit message to the player: "Here's your base and some supplies. The clo
 | Lifecycle events | `runStarted`, `gracePeriodEnded`, `gameOver` | **Done** | Add summary-screen event consumption in app/UI layer |
 | Extraction UI/command | Hidden/removed for T0 | **Done** | — |
 | End-of-run summary | Summary view after game-over | **Done** | Keep polish/balance iteration in normal UI backlog |
-| Raid subsystem cleanup | No separate raid subsystem in v1 | **Partial** (spawning removed, legacy fields remain for compatibility) | Remove/rename remaining legacy raid fields when safe for replay/snapshot migration |
+| Raid subsystem cleanup | No separate raid subsystem in v1 | **Done** | Removed legacy raid fields/events and bumped snapshot schema to keep migration explicit |
 
 ---
 
@@ -365,3 +365,5 @@ The implicit message to the player: "Here's your base and some supplies. The clo
 - 2026-02-16: Implementation reconciliation update: bootstrap now uses `difficulty:seed`, HQ entity + phase-based run state are live, `hq.json`/`difficulty.json` are loaded, extraction UI/command removed for T0, and deterministic Ring 0 patch generation landed.
 - 2026-02-16: Decision lock pass: map orientation fixed (factory-west/spawn-east), grace-period skip disabled in v1, and current `hq.json` starting resources kept as the T0 baseline.
 - 2026-02-16: Rebalanced `hq.json` starting resources across all difficulties; added processed starter components (`plate_copper`, `plate_steel`, `gear`, `circuit`, `turret_core`) and increased wall/ammo opening budgets.
+- 2026-02-18: Completed raid-subsystem cleanup pass in code: removed unused legacy raid config/state/event fields and bumped snapshot schema version for explicit migration.
+- 2026-02-18: Completed HQ-storage cleanup pass in code: removed non-HQ inventory fallback paths in runtime logic and switched reserve checks to live physical stock aggregation.
