@@ -23,6 +23,33 @@ final class EntitySelectionTests: XCTestCase {
         XCTAssertEqual(selected?.category, .structure)
     }
 
+    func testSelectableEntityPrioritizesTurretMountOverWallOnSameCell() {
+        var store = EntityStore()
+        let wallID = store.spawnStructure(.wall, at: GridPosition(x: 6, y: 6))
+        let turretID = store.spawnStructure(
+            .turretMount,
+            at: GridPosition(x: 6, y: 6),
+            hostWallID: wallID
+        )
+
+        let selected = store.selectableEntity(at: GridPosition(x: 6, y: 6))
+
+        XCTAssertEqual(selected?.id, turretID)
+        XCTAssertEqual(selected?.structureType, .turretMount)
+    }
+
+    func testSelectableEntitiesReturnsPriorityOrderedStackForSameCell() {
+        var store = EntityStore()
+        let wallID = store.spawnStructure(.wall, at: GridPosition(x: 8, y: 8))
+        let turretID = store.spawnStructure(.turretMount, at: GridPosition(x: 8, y: 8), hostWallID: wallID)
+        let enemyID = store.spawnEnemy(at: GridPosition(x: 8, y: 8), health: 20)
+        let projectileID = store.spawnProjectile(at: GridPosition(x: 8, y: 8))
+
+        let selected = store.selectableEntities(at: GridPosition(x: 8, y: 8)).map(\.id)
+
+        XCTAssertEqual(selected, [turretID, wallID, enemyID, projectileID])
+    }
+
     func testSelectableEntityFallsBackToEnemyThenProjectile() {
         var store = EntityStore()
         let enemyID = store.spawnEnemy(at: GridPosition(x: 5, y: 2), health: 30)

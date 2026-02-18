@@ -26,4 +26,17 @@ final class WhiteboxMeshCatalogTests: XCTestCase {
             XCTAssertGreaterThan(mesh?.indexCount ?? 0, 0, "Mesh has no indices for \(meshID)")
         }
     }
+
+    func testMountedTurretVisualSitsAboveWallSilhouette() {
+        guard let wallMesh = WhiteboxAssetCatalog.makeMesh(for: .wall),
+              let turretMesh = WhiteboxAssetCatalog.makeMesh(for: .turretMount) else {
+            return XCTFail("Expected wall and turret meshes")
+        }
+
+        let wallTopY = wallMesh.vertices.map(\.py).max() ?? 0
+        let turretTopY = (turretMesh.vertices.map(\.py).max() ?? 0)
+            + WhiteboxMeshRenderer.structureVerticalOffset(for: WhiteboxStructureTypeID.turretMount.rawValue)
+
+        XCTAssertGreaterThan(turretTopY, wallTopY + 0.05)
+    }
 }

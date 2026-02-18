@@ -29,33 +29,52 @@ public struct EntityStore: Codable, Hashable, Sendable {
         all.filter { $0.category == .projectile }
     }
 
-    public func selectableEntity(at position: GridPosition) -> Entity? {
+    public func selectableEntities(at position: GridPosition) -> [Entity] {
         let gridX = position.x
         let gridY = position.y
 
-        for entity in all where entity.category == .structure {
-            guard let structureType = entity.structureType else { continue }
-            let occupiesCell = structureType.coveredCells(anchor: entity.position).contains(where: { covered in
+        let matchingStructures = all.filter { entity in
+            guard entity.category == .structure, let structureType = entity.structureType else { return false }
+            return structureType.coveredCells(anchor: entity.position).contains(where: { covered in
                 covered.x == gridX && covered.y == gridY
             })
-            if occupiesCell {
-                return entity
+        }
+        .sorted { lhs, rhs in
+            let lhsPriority = structureSelectionPriority(lhs.structureType)
+            let rhsPriority = structureSelectionPriority(rhs.structureType)
+            if lhsPriority != rhsPriority {
+                return lhsPriority < rhsPriority
             }
+            return lhs.id < rhs.id
         }
 
-        for entity in all where entity.category == .enemy {
-            if entity.position.x == gridX && entity.position.y == gridY {
-                return entity
-            }
+        let matchingEnemies = all.filter { entity in
+            entity.category == .enemy && entity.position.x == gridX && entity.position.y == gridY
         }
+        .sorted { $0.id < $1.id }
 
-        for entity in all where entity.category == .projectile {
-            if entity.position.x == gridX && entity.position.y == gridY {
-                return entity
-            }
+        let matchingProjectiles = all.filter { entity in
+            entity.category == .projectile && entity.position.x == gridX && entity.position.y == gridY
         }
+        .sorted { $0.id < $1.id }
 
-        return nil
+        return matchingStructures + matchingEnemies + matchingProjectiles
+    }
+
+    public func selectableEntity(at position: GridPosition) -> Entity? {
+        selectableEntities(at: position).first
+    }
+
+    private func structureSelectionPriority(_ structureType: StructureType?) -> Int {
+        guard let structureType else { return 2 }
+        switch structureType {
+        case .turretMount:
+            return 0
+        case .wall:
+            return 1
+        default:
+            return 2
+        }
     }
 
     @discardableResult
