@@ -41,6 +41,16 @@ public final class WhiteboxMeshRenderer {
         self.instanceBufferCapacities = Array(repeating: 0, count: inFlightInstanceBufferCount)
     }
 
+    // Mounted turrets share a wall tile, so lift their mesh above the wall silhouette.
+    static func structureVerticalOffset(for structureTypeRaw: UInt32) -> Float {
+        switch structureTypeRaw {
+        case WhiteboxStructureTypeID.turretMount.rawValue:
+            return 0.36
+        default:
+            return 0
+        }
+    }
+
     public func useProceduralMeshes() {
         meshProviderFactory = nil
         meshProvider = nil
@@ -269,11 +279,12 @@ public final class WhiteboxMeshRenderer {
                     at: GridPosition(x: Int(structure.anchorX), y: Int(structure.anchorY))
                 )
             )
+            let verticalOffset = Self.structureVerticalOffset(for: structure.typeRaw)
 
             let meshID = MeshID(structureTypeRaw: structure.typeRaw)
             let footprintScale = SIMD3<Float>(Float(width) * 0.92, 1.0, Float(depth) * 0.92)
             let model = simd_float4x4.translation(
-                SIMD3<Float>(centerX, baseElevation, centerZ)
+                SIMD3<Float>(centerX, baseElevation + verticalOffset, centerZ)
             ) * simd_float4x4.scale(footprintScale)
 
             grouped[meshID, default: []].append(

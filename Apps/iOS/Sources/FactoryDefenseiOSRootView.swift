@@ -160,14 +160,14 @@ private struct FactoryDefenseiOSGameplayView: View {
                             model: inspector,
                             onClose: { selectedTarget = nil }
                         )
-                        .frame(width: 300)
+                        .frame(width: inspectorPopupWidth)
                         .position(inspectorPosition(for: inspector, viewport: proxy.size))
                     } else if let inspector = selectedOrePatchInspectorModel() {
                         OrePatchInspectorPopup(
                             model: inspector,
                             onClose: { selectedTarget = nil }
                         )
-                        .frame(width: 300)
+                        .frame(width: inspectorPopupWidth)
                         .position(inspectorPosition(for: inspector, viewport: proxy.size))
                     }
                 }
@@ -440,7 +440,6 @@ private struct FactoryDefenseiOSGameplayView: View {
         switch interaction.mode {
         case .interact:
             runtime.clearPlacementPreview()
-            // Check if tapped on a conveyor to show quick edit widget
             if let tappedEntity = runtime.world.entities.selectableEntity(at: position) {
                 if tappedEntity.structureType == .conveyor {
                     if interaction.quickEditTarget == tappedEntity.id {
@@ -452,11 +451,7 @@ private struct FactoryDefenseiOSGameplayView: View {
                     return
                 }
                 interaction.quickEditTarget = nil
-                if selectedTarget == .entity(tappedEntity.id) {
-                    selectedTarget = nil
-                } else {
-                    selectedTarget = .entity(tappedEntity.id)
-                }
+                selectedTarget = selectionTarget(at: position)
             } else if let patch = orePatch(at: position) {
                 interaction.quickEditTarget = nil
                 if selectedTarget == .orePatch(patch.id) {
@@ -745,6 +740,28 @@ private struct FactoryDefenseiOSGameplayView: View {
         return CGPoint(x: anchor.x, y: max(50, anchor.y - lift))
     }
 
+    private func selectionTarget(at position: GridPosition) -> SelectionTarget? {
+        let tappedEntities = runtime.world.entities.selectableEntities(at: position)
+        if !tappedEntities.isEmpty {
+            let entityIDs = tappedEntities.map(\.id)
+            if case .entity(let selectedEntityID)? = selectedTarget,
+               let selectedIndex = entityIDs.firstIndex(of: selectedEntityID) {
+                if entityIDs.count == 1 {
+                    return nil
+                }
+                let nextIndex = (selectedIndex + 1) % entityIDs.count
+                return .entity(entityIDs[nextIndex])
+            }
+            return .entity(entityIDs[0])
+        }
+
+        guard let patch = orePatch(at: position) else { return nil }
+        if selectedTarget == .orePatch(patch.id) {
+            return nil
+        }
+        return .orePatch(patch.id)
+    }
+
     private func validateSelection() {
         guard let selectedTarget else { return }
         switch selectedTarget {
@@ -759,6 +776,42 @@ private struct FactoryDefenseiOSGameplayView: View {
         }
     }
 
+    private var inspectorPopupWidth: CGFloat { 300 }
+
+    private func estimatedInspectorHeight(for model: ObjectInspectorViewModel) -> CGFloat {
+        let rowCount = model.sections.reduce(0) { $0 + $1.rows.count }
+        let sectionCount = model.sections.count
+        return min(460, max(180, 74 + CGFloat(rowCount) * 22 + CGFloat(sectionCount) * 26))
+    }
+
+    private func estimatedInspectorHeight(for model: OrePatchInspectorViewModel) -> CGFloat {
+        let rowCount = model.sections.reduce(0) { $0 + $1.rows.count }
+        let sectionCount = model.sections.count
+        return min(340, max(160, 70 + CGFloat(rowCount) * 22 + CGFloat(sectionCount) * 24))
+    }
+
+    private func inspectorAnchorX(_ anchorX: CGFloat, popupWidth: CGFloat, viewport: CGSize) -> CGFloat {
+        let halfWidth = popupWidth * 0.5
+        let horizontalPadding: CGFloat = 10
+        return min(max(halfWidth + horizontalPadding, anchorX), viewport.width - (halfWidth + horizontalPadding))
+    }
+
+    private func inspectorAnchorY(
+        anchorY: CGFloat,
+        anchorHeightTiles: Int,
+        popupHeight: CGFloat,
+        viewport: CGSize
+    ) -> CGFloat {
+        let tileHeight = CGFloat(max(0.001, cameraState.zoom)) * 22
+        let objectTopY = anchorY - tileHeight * (CGFloat(max(1, anchorHeightTiles)) + 0.35)
+        let clearance = max(14, tileHeight * 0.7)
+        let halfHeight = popupHeight * 0.5
+        let unclampedY = objectTopY - clearance - halfHeight
+        let bottomPadding: CGFloat = 8
+        let maxY = viewport.height - halfHeight - bottomPadding
+        return min(unclampedY, maxY)
+    }
+
     private func inspectorPosition(for model: ObjectInspectorViewModel, viewport: CGSize) -> CGPoint {
         let anchor = picker.screenPosition(
             for: model.anchorPosition,
@@ -766,13 +819,17 @@ private struct FactoryDefenseiOSGameplayView: View {
             camera: cameraState,
             board: runtime.world.board
         )
-        let tileHeight = CGFloat(max(0.001, cameraState.zoom)) * 22
-        let lift = tileHeight * (CGFloat(model.anchorHeightTiles) + 1.4)
-        let halfWidth: CGFloat = 150
-        let xPadding: CGFloat = 10
-        let x = min(max(halfWidth + xPadding, anchor.x), viewport.width - (halfWidth + xPadding))
-        let y = max(70, anchor.y - lift)
-        return CGPoint(x: x, y: y)
+        let popupWidth = inspectorPopupWidth
+        let popupHeight = estimatedInspectorHeight(for: model)
+        return CGPoint(
+            x: inspectorAnchorX(anchor.x, popupWidth: popupWidth, viewport: viewport),
+            y: inspectorAnchorY(
+                anchorY: anchor.y,
+                anchorHeightTiles: model.anchorHeightTiles,
+                popupHeight: popupHeight,
+                viewport: viewport
+            )
+        )
     }
 
     private func inspectorPosition(for model: OrePatchInspectorViewModel, viewport: CGSize) -> CGPoint {
@@ -782,13 +839,17 @@ private struct FactoryDefenseiOSGameplayView: View {
             camera: cameraState,
             board: runtime.world.board
         )
-        let tileHeight = CGFloat(max(0.001, cameraState.zoom)) * 22
-        let lift = tileHeight * (CGFloat(model.anchorHeightTiles) + 1.4)
-        let halfWidth: CGFloat = 150
-        let xPadding: CGFloat = 10
-        let x = min(max(halfWidth + xPadding, anchor.x), viewport.width - (halfWidth + xPadding))
-        let y = max(70, anchor.y - lift)
-        return CGPoint(x: x, y: y)
+        let popupWidth = inspectorPopupWidth
+        let popupHeight = estimatedInspectorHeight(for: model)
+        return CGPoint(
+            x: inspectorAnchorX(anchor.x, popupWidth: popupWidth, viewport: viewport),
+            y: inspectorAnchorY(
+                anchorY: anchor.y,
+                anchorHeightTiles: model.anchorHeightTiles,
+                popupHeight: popupHeight,
+                viewport: viewport
+            )
+        )
     }
 }
 
