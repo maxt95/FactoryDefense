@@ -90,7 +90,9 @@ struct WhiteboxWallFlowSegment {
     int toY;
     float intensity;
     uint ammoTypeRaw;
+    uint networkID;
     float phaseOffset;
+    float phaseLength;
     uint _pad0;
 };
 
@@ -223,12 +225,13 @@ inline float distance_to_segment(float2 p, float2 a, float2 b) {
     return length(p - closest);
 }
 
-inline float3 wall_flow_color(uint ammoTypeRaw) {
+inline float3 wall_flow_color(uint ammoTypeRaw, uint networkID) {
+    const float networkJitter = 0.88 + 0.22 * fract(sin(float(networkID) * 12.9898) * 43758.5453);
     switch (ammoTypeRaw) {
-        case 2u: return float3(0.95, 0.54, 0.18); // heavy
-        case 3u: return float3(0.72, 0.36, 0.95); // plasma
-        case 1u: return float3(0.96, 0.84, 0.24); // light
-        default: return float3(0.85, 0.85, 0.70); // mixed/unknown
+        case 2u: return float3(0.95, 0.54, 0.18) * networkJitter; // heavy
+        case 3u: return float3(0.72, 0.36, 0.95) * networkJitter; // plasma
+        case 1u: return float3(0.96, 0.84, 0.24) * networkJitter; // light
+        default: return float3(0.85, 0.85, 0.70) * networkJitter; // mixed/unknown
     }
 }
 
@@ -496,11 +499,12 @@ kernel void whitebox_board(
     }
 
     if (showWallAmmoFlow) {
-        const float tickTime = uniforms.animationTick * 0.035;
+        // v1 wall ammo is a shared pool (no per-segment simulation delay), so the
+        // visual does one full loop per simulation tick.
+        const float tickTime = uniforms.animationTick;
         const float pathThickness = max(1.0, tileWidth * 0.11);
-        const float pulseLength = 0.22;
-        const float pulseFade = 0.18;
-        const float repeatCount = 2.8;
+        const float pulseLength = 0.16;
+        const float pulseFade = 0.12;
 
         for (uint i = 0; i < uniforms.wallFlowSegmentCount; ++i) {
             const WhiteboxWallFlowSegment segment = wallFlowSegments[i];
@@ -517,14 +521,15 @@ kernel void whitebox_board(
             const float projected = clamp(dot(pixel - a, direction), 0.0, segmentLength);
             const float t = projected / segmentLength;
 
-            const float cycle = fract(t * repeatCount - tickTime + segment.phaseOffset);
+            const float globalPhase = segment.phaseOffset + (t * max(1e-4, segment.phaseLength));
+            const float cycle = fract(globalPhase - tickTime);
             const float head = smoothstep(0.0, pulseFade, cycle);
             const float tail = 1.0 - smoothstep(pulseLength, pulseLength + pulseFade, cycle);
             const float pulse = clamp(head * tail, 0.0, 1.0);
 
             const float laneMask = 1.0 - smoothstep(pathThickness * 0.55, pathThickness, distance);
             const float glow = (0.18 + pulse * 0.82) * laneMask * clamp(segment.intensity, 0.0, 1.0);
-            color = mix(color, wall_flow_color(segment.ammoTypeRaw), glow);
+            color = mix(color, wall_flow_color(segment.ammoTypeRaw, segment.networkID), glow);
         }
     }
 

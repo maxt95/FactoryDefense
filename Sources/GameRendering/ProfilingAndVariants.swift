@@ -15,6 +15,9 @@ public struct ShaderVariantKey: Hashable, Sendable {
 
 public final class ShaderVariantLibrary {
     private var constantsCache: [ShaderVariantKey: MTLFunctionConstantValues] = [:]
+    private var cachedSkyPipeline: MTLRenderPipelineState?
+    private var skyPipelineColorFormat: MTLPixelFormat?
+    private var skyPipelineDepthFormat: MTLPixelFormat?
 
     public init() {}
 
@@ -27,6 +30,40 @@ public final class ShaderVariantLibrary {
         case .macCinematic:
             return ShaderVariantKey(enableNormalMap: true, enableEmission: true, enableFog: true)
         }
+    }
+
+    public func skyPipelineState(
+        device: MTLDevice,
+        colorPixelFormat: MTLPixelFormat,
+        depthPixelFormat: MTLPixelFormat
+    ) -> MTLRenderPipelineState? {
+        if let cached = cachedSkyPipeline,
+           skyPipelineColorFormat == colorPixelFormat,
+           skyPipelineDepthFormat == depthPixelFormat {
+            return cached
+        }
+
+        guard let library = try? device.makeDefaultLibrary(bundle: .module),
+              let vertexFunc = library.makeFunction(name: "sky_vertex"),
+              let fragmentFunc = library.makeFunction(name: "sky_fragment") else {
+            return nil
+        }
+
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.label = "SkyGradientPipeline"
+        descriptor.vertexFunction = vertexFunc
+        descriptor.fragmentFunction = fragmentFunc
+        descriptor.colorAttachments[0].pixelFormat = colorPixelFormat
+        descriptor.depthAttachmentPixelFormat = depthPixelFormat
+
+        guard let pipeline = try? device.makeRenderPipelineState(descriptor: descriptor) else {
+            return nil
+        }
+
+        cachedSkyPipeline = pipeline
+        skyPipelineColorFormat = colorPixelFormat
+        skyPipelineDepthFormat = depthPixelFormat
+        return pipeline
     }
 
     public func functionConstants(for key: ShaderVariantKey) -> MTLFunctionConstantValues {

@@ -88,6 +88,8 @@ public enum WhiteboxColors {
             return SIMD3<Float>(0.20, 0.80, 0.90)
         case .resourceNode:
             return SIMD3<Float>(0.70, 0.50, 0.10)
+        case .playerCharacter:
+            return SIMD3<Float>(0.10, 0.70, 0.95)
         }
     }
 }

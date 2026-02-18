@@ -73,7 +73,9 @@ private struct WhiteboxWallFlowSegmentShader {
     var toY: Int32
     var intensity: Float
     var ammoTypeRaw: UInt32
+    var networkID: UInt32
     var phaseOffset: Float
+    var phaseLength: Float
     var _pad0: UInt32 = 0
 }
 
@@ -89,6 +91,9 @@ public final class WhiteboxRenderer {
     private var pipelineState: MTLComputePipelineState?
     private var pipelineDeviceID: ObjectIdentifier?
     private var hasLoggedPipelineIssue = false
+    private var lastAnimationSampleTick: UInt64?
+    private var lastAnimationSampleTime: TimeInterval?
+    private let assumedSimulationTickDurationSeconds = 1.0 / 20.0
 
     public init() {}
 
@@ -131,7 +136,7 @@ public final class WhiteboxRenderer {
             cameraPanX: context.cameraState.pan.x,
             cameraPanY: context.cameraState.pan.y,
             cameraZoom: context.cameraState.zoom,
-            animationTick: Float(context.worldState.tick),
+            animationTick: interpolatedSimulationTick(currentTick: context.worldState.tick),
             _padding0: 0
         )
 
@@ -248,6 +253,29 @@ public final class WhiteboxRenderer {
         )
     }
 
+    private func interpolatedSimulationTick(currentTick: UInt64) -> Float {
+        let now = ProcessInfo.processInfo.systemUptime
+        if lastAnimationSampleTick == nil || lastAnimationSampleTime == nil {
+            lastAnimationSampleTick = currentTick
+            lastAnimationSampleTime = now
+            return Float(currentTick)
+        }
+
+        if lastAnimationSampleTick != currentTick {
+            lastAnimationSampleTick = currentTick
+            lastAnimationSampleTime = now
+            return Float(currentTick)
+        }
+
+        guard let sampleTime = lastAnimationSampleTime else {
+            return Float(currentTick)
+        }
+        let elapsed = max(0.0, now - sampleTime)
+        let clampedElapsed = min(assumedSimulationTickDurationSeconds, elapsed)
+        let fraction = clampedElapsed / assumedSimulationTickDurationSeconds
+        return Float(currentTick) + Float(fraction)
+    }
+
     private func highlightedStructureTypeRaw(_ structure: StructureType?) -> UInt32 {
         guard let structure else { return 0 }
         return WhiteboxStructureTypeID(structureType: structure).rawValue
@@ -297,14 +325,20 @@ public final class WhiteboxRenderer {
         guard !world.combat.wallNetworks.isEmpty else { return [] }
 
         var wallByID: [EntityID: Entity] = [:]
-        for wall in world.entities.structures(of: .wall) {
+        var structureByPosition: [GridPosition: Entity] = [:]
+        for structure in world.entities.all
+            .filter({ $0.category == .structure })
+            .sorted(by: { $0.id < $1.id }) {
+            let flat = GridPosition(x: structure.position.x, y: structure.position.y, z: 0)
+            structureByPosition[flat] = structure
+            guard structure.structureType == .wall else { continue }
+            let wall = structure
             wallByID[wall.id] = wall
         }
 
         var segments: [WhiteboxWallFlowSegmentShader] = []
         segments.reserveCapacity(min(maxSegmentCount, 1024))
 
-        let neighborOffsets: [(x: Int, y: Int)] = [(1, 0), (0, 1)]
         for networkID in world.combat.wallNetworks.keys.sorted() {
             guard let network = world.combat.wallNetworks[networkID] else { continue }
             guard network.capacity > 0 else { continue }
@@ -316,41 +350,247 @@ public final class WhiteboxRenderer {
             let intensity = 0.25 + (0.75 * fillRatio)
             let ammoTypeRaw = dominantAmmoTypeRaw(in: network.ammoPoolByItemID)
             let wallIDs = network.wallEntityIDs.sorted()
-            let wallIDsByPosition: [GridPosition: EntityID] = Dictionary(
-                uniqueKeysWithValues: wallIDs.compactMap { wallID in
-                    guard let wall = wallByID[wallID] else { return nil }
-                    return (GridPosition(x: wall.position.x, y: wall.position.y, z: 0), wallID)
-                }
+            let adjacencyByWallID = wallAdjacencyByWallID(wallIDs: wallIDs, wallByID: wallByID)
+            let inputCandidates = potentialInputWallIDs(
+                wallIDs: wallIDs,
+                wallByID: wallByID,
+                structureByPosition: structureByPosition,
+                world: world
             )
+            guard let startWallID = inputCandidates.sorted().first ?? wallIDs.first else { continue }
+            guard let startWall = wallByID[startWallID] else { continue }
+            let centroid = wallCentroid(wallIDs: wallIDs, wallByID: wallByID)
+            let initialDirection = clockwiseInitialDirection(from: startWall.position, centroid: centroid)
 
-            for wallID in wallIDs {
-                guard let wall = wallByID[wallID] else { continue }
-                let position = GridPosition(x: wall.position.x, y: wall.position.y, z: 0)
+            let maxEdges = adjacencyByWallID.values.reduce(0) { $0 + $1.count } / 2
+            let traversal = clockwiseTraversal(
+                startWallID: startWallID,
+                adjacencyByWallID: adjacencyByWallID,
+                initialDirection: initialDirection,
+                maxSteps: max(1, maxEdges)
+            )
+            guard !traversal.isEmpty else { continue }
 
-                for offset in neighborOffsets {
-                    guard segments.count < maxSegmentCount else { return segments }
-                    let neighbor = position.translated(byX: offset.x, byY: offset.y)
-                    guard wallIDsByPosition[neighbor] != nil else { continue }
+            let phaseLength = 1.0 / Float(max(1, traversal.count))
+            for (index, step) in traversal.enumerated() {
+                guard segments.count < maxSegmentCount else { return segments }
+                guard let fromWall = wallByID[step.fromWallID], let toWall = wallByID[step.toWallID] else { continue }
 
-                    let seed = (networkID &* 131) &+ (position.x &* 17) &+ (position.y &* 29) &+ (offset.x &* 7) &+ (offset.y &* 11)
-                    let phaseOffset = Float(abs(seed % 1000)) / 1000.0
+                let from = GridPosition(x: fromWall.position.x, y: fromWall.position.y, z: 0)
+                let to = GridPosition(x: toWall.position.x, y: toWall.position.y, z: 0)
+                let phaseOffset = Float(index) * phaseLength
 
-                    segments.append(
-                        WhiteboxWallFlowSegmentShader(
-                            fromX: Int32(position.x),
-                            fromY: Int32(position.y),
-                            toX: Int32(neighbor.x),
-                            toY: Int32(neighbor.y),
-                            intensity: intensity,
-                            ammoTypeRaw: ammoTypeRaw,
-                            phaseOffset: phaseOffset
-                        )
+                segments.append(
+                    WhiteboxWallFlowSegmentShader(
+                        fromX: Int32(from.x),
+                        fromY: Int32(from.y),
+                        toX: Int32(to.x),
+                        toY: Int32(to.y),
+                        intensity: intensity,
+                        ammoTypeRaw: ammoTypeRaw,
+                        networkID: UInt32(max(0, networkID)),
+                        phaseOffset: phaseOffset,
+                        phaseLength: phaseLength
                     )
-                }
+                )
             }
         }
 
         return segments
+    }
+
+    private func wallAdjacencyByWallID(
+        wallIDs: [EntityID],
+        wallByID: [EntityID: Entity]
+    ) -> [EntityID: [(neighborID: EntityID, direction: CardinalDirection)]] {
+        var wallIDByPosition: [GridPosition: EntityID] = [:]
+        for wallID in wallIDs {
+            guard let wall = wallByID[wallID] else { continue }
+            let flat = GridPosition(x: wall.position.x, y: wall.position.y, z: 0)
+            wallIDByPosition[flat] = wallID
+        }
+
+        var result: [EntityID: [(neighborID: EntityID, direction: CardinalDirection)]] = [:]
+        for wallID in wallIDs {
+            guard let wall = wallByID[wallID] else { continue }
+            let flat = GridPosition(x: wall.position.x, y: wall.position.y, z: 0)
+            var neighbors: [(neighborID: EntityID, direction: CardinalDirection)] = []
+            for direction in CardinalDirection.allCases {
+                let neighborPos = flat.translated(by: direction)
+                if let neighborID = wallIDByPosition[neighborPos] {
+                    neighbors.append((neighborID, direction))
+                }
+            }
+            result[wallID] = neighbors
+        }
+        return result
+    }
+
+    private func potentialInputWallIDs(
+        wallIDs: [EntityID],
+        wallByID: [EntityID: Entity],
+        structureByPosition: [GridPosition: Entity],
+        world: WorldState
+    ) -> Set<EntityID> {
+        var candidates: Set<EntityID> = []
+        for wallID in wallIDs {
+            guard let wall = wallByID[wallID] else { continue }
+            let wallPos = GridPosition(x: wall.position.x, y: wall.position.y, z: 0)
+            for direction in CardinalDirection.allCases {
+                let sourcePos = wallPos.translated(by: direction)
+                guard let source = structureByPosition[sourcePos] else { continue }
+                guard source.id != wallID else { continue }
+                guard let sourceType = source.structureType, sourceType != .wall && sourceType != .turretMount else { continue }
+                let directionToWall = direction.opposite
+                if sourceOutputDirections(source: source, world: world).contains(directionToWall) {
+                    candidates.insert(wallID)
+                    break
+                }
+            }
+        }
+        return candidates
+    }
+
+    private func sourceOutputDirections(source: Entity, world: WorldState) -> [CardinalDirection] {
+        guard let structureType = source.structureType else { return [] }
+        switch structureType {
+        case .conveyor:
+            return [resolvedConveyorIO(for: source, world: world).outputDirection]
+        case .splitter:
+            let facing = source.rotation.direction
+            return [facing.left, facing.right]
+        case .merger:
+            return [source.rotation.direction]
+        case .miner, .smelter, .assembler, .ammoModule, .storage, .hq:
+            return CardinalDirection.allCases
+        case .wall, .turretMount, .powerPlant:
+            return []
+        }
+    }
+
+    private func resolvedConveyorIO(for source: Entity, world: WorldState) -> ConveyorIOConfig {
+        if let configured = world.economy.conveyorIOByEntity[source.id] {
+            return configured
+        }
+        return ConveyorIOConfig.default(for: source.rotation)
+    }
+
+    private func wallCentroid(
+        wallIDs: [EntityID],
+        wallByID: [EntityID: Entity]
+    ) -> (x: Double, y: Double) {
+        guard !wallIDs.isEmpty else { return (0, 0) }
+        var sumX = 0.0
+        var sumY = 0.0
+        var count = 0.0
+        for wallID in wallIDs {
+            guard let wall = wallByID[wallID] else { continue }
+            sumX += Double(wall.position.x)
+            sumY += Double(wall.position.y)
+            count += 1
+        }
+        guard count > 0 else { return (0, 0) }
+        return (sumX / count, sumY / count)
+    }
+
+    private func clockwiseInitialDirection(
+        from position: GridPosition,
+        centroid: (x: Double, y: Double)
+    ) -> CardinalDirection {
+        let dx = Double(position.x) - centroid.x
+        let dy = Double(position.y) - centroid.y
+        let radial: CardinalDirection
+        if abs(dx) >= abs(dy) {
+            radial = dx >= 0 ? .east : .west
+        } else {
+            radial = dy >= 0 ? .south : .north
+        }
+        return radial.right
+    }
+
+    private struct TraversalStep {
+        var fromWallID: EntityID
+        var toWallID: EntityID
+    }
+
+    private func clockwiseTraversal(
+        startWallID: EntityID,
+        adjacencyByWallID: [EntityID: [(neighborID: EntityID, direction: CardinalDirection)]],
+        initialDirection: CardinalDirection,
+        maxSteps: Int
+    ) -> [TraversalStep] {
+        guard maxSteps > 0 else { return [] }
+        var steps: [TraversalStep] = []
+        var visitedEdges: Set<String> = []
+        var currentWallID = startWallID
+        var previousWallID: EntityID?
+        var previousDirection = initialDirection
+
+        for _ in 0..<maxSteps {
+            guard let neighbors = adjacencyByWallID[currentWallID], !neighbors.isEmpty else { break }
+
+            let candidates = neighbors.filter {
+                !visitedEdges.contains(edgeKey(currentWallID, $0.neighborID))
+            }
+            guard !candidates.isEmpty else { break }
+
+            let ranked = candidates.sorted { lhs, rhs in
+                let l = traversalScore(
+                    from: previousDirection,
+                    to: lhs.direction,
+                    previousWallID: previousWallID,
+                    candidateWallID: lhs.neighborID
+                )
+                let r = traversalScore(
+                    from: previousDirection,
+                    to: rhs.direction,
+                    previousWallID: previousWallID,
+                    candidateWallID: rhs.neighborID
+                )
+                if l != r { return l < r }
+                return lhs.neighborID < rhs.neighborID
+            }
+            guard let next = ranked.first else { break }
+
+            visitedEdges.insert(edgeKey(currentWallID, next.neighborID))
+            steps.append(TraversalStep(fromWallID: currentWallID, toWallID: next.neighborID))
+
+            previousWallID = currentWallID
+            currentWallID = next.neighborID
+            previousDirection = next.direction
+
+            if currentWallID == startWallID, steps.count > 1 {
+                break
+            }
+        }
+
+        return steps
+    }
+
+    private func traversalScore(
+        from: CardinalDirection,
+        to: CardinalDirection,
+        previousWallID: EntityID?,
+        candidateWallID: EntityID
+    ) -> Int {
+        let turnCost: Int
+        if to == from.right {
+            turnCost = 0
+        } else if to == from {
+            turnCost = 1
+        } else if to == from.left {
+            turnCost = 2
+        } else {
+            turnCost = 3
+        }
+        let backtrackPenalty = previousWallID == candidateWallID ? 4 : 0
+        return turnCost + backtrackPenalty
+    }
+
+    private func edgeKey(_ a: EntityID, _ b: EntityID) -> String {
+        let lo = min(a, b)
+        let hi = max(a, b)
+        return "\(lo):\(hi)"
     }
 
     private func dominantAmmoTypeRaw(in ammoPoolByItemID: [String: Int]) -> UInt32 {

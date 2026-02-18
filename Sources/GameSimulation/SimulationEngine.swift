@@ -60,6 +60,7 @@ public final class SimulationEngine {
         tickRate: UInt64 = 20,
         systems: [any SimulationSystem] = [
             CommandSystem(),
+            PlayerMovementSystem(),
             EconomySystem(),
             WaveSystem(),
             EnemyMovementSystem(),

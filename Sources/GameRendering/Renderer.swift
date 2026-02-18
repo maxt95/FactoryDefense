@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import Metal
 import MetalKit
+import simd
 import GameSimulation
 #if os(macOS)
 import AppKit
@@ -24,6 +25,8 @@ public final class FactoryRenderer: NSObject {
     public var highlightedAffordableCount: Int
     public var highlightedStructure: StructureType?
     public var placementResult: PlacementResult
+    public var viewMode: ViewMode = .baseView
+    public var fpsViewProjection: simd_float4x4?
 
     public var camera: IsometricCamera
     public let renderResources: RenderResources
@@ -165,6 +168,13 @@ extension FactoryRenderer: MTKViewDelegate {
             height: max(1, view.drawableSize.height / CGFloat(scaleY))
         )
 
+        let activeViewMode = viewMode
+        if activeViewMode == .fpsView {
+            renderGraph.setNodes(RenderGraph.fpsMode().nodes)
+        } else {
+            renderGraph.setNodes(RenderGraph.default().nodes)
+        }
+
         let context = RenderContext(
             device: device,
             drawableSize: view.drawableSize,
@@ -180,6 +190,8 @@ extension FactoryRenderer: MTKViewDelegate {
             highlightedAffordableCount: highlightedAffordableCount,
             highlightedStructure: highlightedStructure,
             placementResult: placementResult,
+            viewMode: activeViewMode,
+            fpsViewProjection: fpsViewProjection,
             currentDrawable: drawable,
             renderResources: renderResources,
             timingCapture: timingCapture,

@@ -23,6 +23,8 @@ public enum InputGesture: Sendable {
     case confirmDemolish
     case dragDrawPath(points: [GridPosition], structure: StructureType)
     case triggerWave
+    case toggleFPSMode
+    case fpsMoveTick(dx: Float, dz: Float, facingRadians: Float, pitchRadians: Float)
 }
 
 public struct InputEvent: Sendable {
@@ -105,6 +107,14 @@ public struct DefaultInputMapper: InputMapper {
                 tick: tick,
                 actor: actor,
                 payload: .placeStructure(BuildRequest(structure: structure, position: first))
+            )
+        case .toggleFPSMode:
+            return PlayerCommand(tick: tick, actor: actor, payload: .toggleFPSMode)
+        case .fpsMoveTick(let dx, let dz, let facingRadians, let pitchRadians):
+            return PlayerCommand(
+                tick: tick,
+                actor: actor,
+                payload: .playerMove(dx: dx, dz: dz, facingRadians: facingRadians, pitchRadians: pitchRadians, jump: false, sprint: false, crouch: false)
             )
         case .dragPan, .pinch, .rotateBuildSelection, .cancelBuildMode, .confirmDemolish:
             return nil

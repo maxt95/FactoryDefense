@@ -104,6 +104,23 @@ public struct EntityStore: Codable, Hashable, Sendable {
     }
 
     @discardableResult
+    public mutating func spawnPlayer(at position: GridPosition) -> EntityID {
+        let id = nextEntityID
+        nextEntityID += 1
+        entitiesByID[id] = Entity(
+            id: id,
+            category: .player,
+            position: position,
+            health: 1,
+            maxHealth: 1,
+            subCellX: 0.5,
+            subCellY: 0.5,
+            facingRadians: 0
+        )
+        return id
+    }
+
+    @discardableResult
     public mutating func spawnProjectile(at position: GridPosition) -> EntityID {
         let id = nextEntityID
         nextEntityID += 1
@@ -120,6 +137,14 @@ public struct EntityStore: Codable, Hashable, Sendable {
     public mutating func updatePosition(_ id: EntityID, to position: GridPosition) {
         guard var entity = entitiesByID[id] else { return }
         entity.position = position
+        entitiesByID[id] = entity
+    }
+
+    public mutating func updatePlayerSubCell(_ id: EntityID, subCellX: Float, subCellY: Float, facingRadians: Float) {
+        guard var entity = entitiesByID[id] else { return }
+        entity.subCellX = subCellX
+        entity.subCellY = subCellY
+        entity.facingRadians = facingRadians
         entitiesByID[id] = entity
     }
 

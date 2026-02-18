@@ -188,6 +188,7 @@ public enum WhiteboxEntityCategory: UInt32, Sendable {
     case enemy = 2
     case projectile = 3
     case resourceNode = 4
+    case player = 5
 }
 
 public enum WhiteboxStructureTypeID: UInt32, Sendable {
@@ -430,6 +431,16 @@ public struct WhiteboxSceneBuilder {
                         y: Int32(entity.position.y),
                         category: WhiteboxEntityCategory.projectile.rawValue,
                         subtypeRaw: subtypeRaw
+                    )
+                )
+            case .player:
+                entities.append(
+                    WhiteboxEntityMarker(
+                        id: Int64(entity.id),
+                        x: Int32(entity.position.x),
+                        y: Int32(entity.position.y),
+                        category: WhiteboxEntityCategory.player.rawValue,
+                        subtypeRaw: 0
                     )
                 )
             }

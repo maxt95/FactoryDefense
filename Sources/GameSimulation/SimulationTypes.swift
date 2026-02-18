@@ -274,6 +274,8 @@ public enum CommandPayload: Codable, Hashable, Sendable {
     case pinRecipe(entityID: EntityID, recipeID: String)
     case extract
     case triggerWave
+    case playerMove(dx: Float, dz: Float, facingRadians: Float, pitchRadians: Float, jump: Bool, sprint: Bool, crouch: Bool)
+    case toggleFPSMode
 
     private enum CodingKeys: String, CodingKey {
         case kind
@@ -284,6 +286,13 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         case inputDirection
         case outputDirection
         case recipeID
+        case dx
+        case dz
+        case facingRadians
+        case pitchRadians
+        case jump
+        case sprint
+        case crouch
     }
 
     private enum Kind: String, Codable {
@@ -295,6 +304,8 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         case pinRecipe
         case extract
         case triggerWave
+        case playerMove
+        case toggleFPSMode
     }
 
     public init(from decoder: any Decoder) throws {
@@ -327,6 +338,18 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             self = .extract
         case .triggerWave:
             self = .triggerWave
+        case .playerMove:
+            self = .playerMove(
+                dx: try container.decode(Float.self, forKey: .dx),
+                dz: try container.decode(Float.self, forKey: .dz),
+                facingRadians: try container.decode(Float.self, forKey: .facingRadians),
+                pitchRadians: try container.decode(Float.self, forKey: .pitchRadians),
+                jump: try container.decodeIfPresent(Bool.self, forKey: .jump) ?? false,
+                sprint: try container.decodeIfPresent(Bool.self, forKey: .sprint) ?? false,
+                crouch: try container.decodeIfPresent(Bool.self, forKey: .crouch) ?? false
+            )
+        case .toggleFPSMode:
+            self = .toggleFPSMode
         }
     }
 
@@ -359,6 +382,17 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             try container.encode(Kind.extract, forKey: .kind)
         case .triggerWave:
             try container.encode(Kind.triggerWave, forKey: .kind)
+        case .playerMove(let dx, let dz, let facingRadians, let pitchRadians, let jump, let sprint, let crouch):
+            try container.encode(Kind.playerMove, forKey: .kind)
+            try container.encode(dx, forKey: .dx)
+            try container.encode(dz, forKey: .dz)
+            try container.encode(facingRadians, forKey: .facingRadians)
+            try container.encode(pitchRadians, forKey: .pitchRadians)
+            try container.encode(jump, forKey: .jump)
+            try container.encode(sprint, forKey: .sprint)
+            try container.encode(crouch, forKey: .crouch)
+        case .toggleFPSMode:
+            try container.encode(Kind.toggleFPSMode, forKey: .kind)
         }
     }
 
@@ -381,6 +415,10 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             return "extract"
         case .triggerWave:
             return "triggerWave"
+        case .playerMove(let dx, let dz, let facingRadians, let pitchRadians, let jump, let sprint, let crouch):
+            return "playerMove:\(dx):\(dz):\(facingRadians):\(pitchRadians):\(jump):\(sprint):\(crouch)"
+        case .toggleFPSMode:
+            return "toggleFPSMode"
         }
     }
 }
@@ -461,6 +499,7 @@ public enum EntityCategory: String, Codable, Sendable {
     case structure
     case enemy
     case projectile
+    case player
 }
 
 public struct Entity: Codable, Hashable, Sendable {
@@ -474,6 +513,9 @@ public struct Entity: Codable, Hashable, Sendable {
     public var position: GridPosition
     public var health: Int
     public var maxHealth: Int
+    public var subCellX: Float?
+    public var subCellY: Float?
+    public var facingRadians: Float?
 
     public init(
         id: EntityID,
@@ -485,7 +527,10 @@ public struct Entity: Codable, Hashable, Sendable {
         rotation: Rotation = .north,
         position: GridPosition,
         health: Int,
-        maxHealth: Int
+        maxHealth: Int,
+        subCellX: Float? = nil,
+        subCellY: Float? = nil,
+        facingRadians: Float? = nil
     ) {
         self.id = id
         self.category = category
@@ -497,6 +542,16 @@ public struct Entity: Codable, Hashable, Sendable {
         self.position = position
         self.health = health
         self.maxHealth = maxHealth
+        self.subCellX = subCellX
+        self.subCellY = subCellY
+        self.facingRadians = facingRadians
+    }
+
+    public var worldPosition: SIMD3<Float> {
+        let x = Float(position.x) + (subCellX ?? 0.5)
+        let z = Float(position.y) + (subCellY ?? 0.5)
+        let y = Float(position.z)
+        return SIMD3<Float>(x, y, z)
     }
 }
 
@@ -1089,6 +1144,88 @@ public struct OrePatch: Codable, Hashable, Sendable {
     }
 }
 
+public struct PlayerState: Codable, Hashable, Sendable {
+    public var gridPosition: GridPosition
+    public var subCellX: Float
+    public var subCellY: Float
+    public var facingRadians: Float
+    public var pitchRadians: Float
+    public var moveSpeed: Float
+    public var isInFPSMode: Bool
+    public var entityID: EntityID?
+
+    // Physics state
+    public var velocityY: Float
+    public var isGrounded: Bool
+    public var isSprinting: Bool
+    public var isCrouching: Bool
+
+    // Constants
+    public static let eyeHeight: Float = 1.6
+    public static let crouchEyeHeight: Float = 1.0
+    public static let collisionRadius: Float = 0.25
+    public static let walkSpeed: Float = 4.0
+    public static let sprintSpeed: Float = 7.0
+    public static let crouchSpeed: Float = 2.0
+    public static let jumpImpulse: Float = 6.0
+    public static let gravity: Float = -15.0
+    public static let terminalVelocity: Float = -20.0
+
+    public init(
+        gridPosition: GridPosition = .zero,
+        subCellX: Float = 0.5,
+        subCellY: Float = 0.5,
+        facingRadians: Float = 0,
+        pitchRadians: Float = 0,
+        moveSpeed: Float = 4.0,
+        isInFPSMode: Bool = false,
+        entityID: EntityID? = nil,
+        velocityY: Float = 0,
+        isGrounded: Bool = true,
+        isSprinting: Bool = false,
+        isCrouching: Bool = false
+    ) {
+        self.gridPosition = gridPosition
+        self.subCellX = subCellX
+        self.subCellY = subCellY
+        self.facingRadians = facingRadians
+        self.pitchRadians = pitchRadians
+        self.moveSpeed = moveSpeed
+        self.isInFPSMode = isInFPSMode
+        self.entityID = entityID
+        self.velocityY = velocityY
+        self.isGrounded = isGrounded
+        self.isSprinting = isSprinting
+        self.isCrouching = isCrouching
+    }
+
+    public var worldX: Float {
+        Float(gridPosition.x) + subCellX
+    }
+
+    public var worldZ: Float {
+        Float(gridPosition.y) + subCellY
+    }
+
+    public var currentEyeHeight: Float {
+        isCrouching ? Self.crouchEyeHeight : Self.eyeHeight
+    }
+
+    public var effectiveSpeed: Float {
+        if isCrouching { return Self.crouchSpeed }
+        if isSprinting { return Self.sprintSpeed }
+        return Self.walkSpeed
+    }
+
+    public var worldPosition: SIMD3<Float> {
+        SIMD3<Float>(worldX, Float(gridPosition.z) + currentEyeHeight, worldZ)
+    }
+
+    public var worldY: Float {
+        Float(gridPosition.z)
+    }
+}
+
 public struct WorldState: Codable, Hashable, Sendable {
     public var tick: UInt64
     public var board: BoardState
@@ -1098,6 +1235,7 @@ public struct WorldState: Codable, Hashable, Sendable {
     public var threat: ThreatState
     public var run: RunState
     public var combat: CombatState
+    public var player: PlayerState
 
     public init(
         tick: UInt64,
@@ -1107,7 +1245,8 @@ public struct WorldState: Codable, Hashable, Sendable {
         economy: EconomyState,
         threat: ThreatState,
         run: RunState,
-        combat: CombatState = CombatState()
+        combat: CombatState = CombatState(),
+        player: PlayerState = PlayerState()
     ) {
         self.tick = tick
         self.board = board
@@ -1117,6 +1256,7 @@ public struct WorldState: Codable, Hashable, Sendable {
         self.threat = threat
         self.run = run
         self.combat = combat
+        self.player = player
     }
 
     public static func bootstrap(difficulty: Difficulty = .normal, seed: RunSeed = 0) -> WorldState {
@@ -1147,6 +1287,8 @@ public struct WorldState: Codable, Hashable, Sendable {
                 board.restrictedCells.append(cell)
             }
         }
+
+        let playerID = store.spawnPlayer(at: board.basePosition)
 
         var world = WorldState(
             tick: 0,
@@ -1192,6 +1334,10 @@ public struct WorldState: Codable, Hashable, Sendable {
                 spawnEdgeX: board.spawnEdgeX,
                 spawnYMin: board.spawnYMin,
                 spawnYMax: board.spawnYMax
+            ),
+            player: PlayerState(
+                gridPosition: board.basePosition.translated(byX: -2),
+                entityID: playerID
             )
         )
         world.rebuildAggregatedInventory()

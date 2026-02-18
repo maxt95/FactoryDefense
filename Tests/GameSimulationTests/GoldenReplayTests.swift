@@ -62,7 +62,7 @@ final class GoldenReplayTests: XCTestCase {
         let digest = SHA256.hash(data: data)
         let fingerprint = digest.map { String(format: "%02x", $0) }.joined()
 
-        let expected = "165c8e7678943717acd1d38bc2f9ac5647eb7df12e41723777250fb11416c9fa"
+        let expected = "2c2ed2e90d3d6d225351a74d38e16f1cc57c9776bfcfe7906a048d706e46336c"
         XCTAssertEqual(fingerprint, expected)
     }
 }

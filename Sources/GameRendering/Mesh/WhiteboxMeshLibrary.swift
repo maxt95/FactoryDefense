@@ -60,6 +60,7 @@ public enum MeshID: Int, CaseIterable, Hashable, Sendable {
     case ramp
     case baseCore
     case resourceNode
+    case playerCharacter
 
     static var renderOrder: [MeshID] {
         allCases

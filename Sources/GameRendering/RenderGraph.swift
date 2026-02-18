@@ -34,4 +34,14 @@ public final class RenderGraph {
             UICompositeNode()
         ])
     }
+
+    /// FPS mode render graph — draws sky gradient first, then 3D meshes with fog.
+    /// Skips WhiteboxBoardNode (2D compute shader is meaningless in perspective view).
+    public static func fpsMode() -> RenderGraph {
+        RenderGraph(nodes: [
+            FPSSkyboxNode(),
+            OpaquePBRNode(),
+            UICompositeNode()
+        ])
+    }
 }

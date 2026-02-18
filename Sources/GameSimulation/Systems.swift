@@ -212,6 +212,9 @@ public struct CommandSystem: SimulationSystem {
                 continue
             case .triggerWave:
                 state.threat.nextWaveTick = state.tick
+            case .playerMove, .toggleFPSMode:
+                // Handled by PlayerMovementSystem
+                continue
             }
         }
 
@@ -2898,5 +2901,196 @@ public struct ProjectileSystem: SimulationSystem {
                 context.emit(SimEvent(tick: state.tick, kind: .enemyDestroyed, entity: projectile.targetEnemyID, value: reward))
             }
         }
+    }
+}
+
+public struct PlayerMovementSystem: SimulationSystem {
+    public init() {}
+
+    public func update(state: inout WorldState, context: SystemContext) {
+        var wantsJump = false
+        var wantsSprint = false
+        var wantsCrouch = false
+
+        for command in context.commands {
+            switch command.payload {
+            case .toggleFPSMode:
+                state.player.isInFPSMode.toggle()
+            case .playerMove(let dx, let dz, let facingRadians, let pitchRadians, let jump, let sprint, let crouch):
+                state.player.facingRadians = facingRadians
+                state.player.pitchRadians = max(-.pi / 2 * 0.95, min(.pi / 2 * 0.95, pitchRadians))
+                if jump { wantsJump = true }
+                if sprint { wantsSprint = true }
+                if crouch { wantsCrouch = true }
+                applyHorizontalMovement(state: &state, dx: dx, dz: dz)
+            default:
+                continue
+            }
+        }
+
+        // Apply sprint/crouch state
+        state.player.isSprinting = wantsSprint && !wantsCrouch
+        state.player.isCrouching = wantsCrouch
+
+        // Apply jump (only if grounded)
+        if wantsJump && state.player.isGrounded {
+            state.player.velocityY = PlayerState.jumpImpulse
+            state.player.isGrounded = false
+        }
+
+        // Apply gravity
+        applyGravity(state: &state, dt: Float(context.tickDurationSeconds))
+
+        // Sync entity position
+        syncEntityPosition(state: &state)
+    }
+
+    // MARK: - Horizontal Movement with AABB Collision + Wall Sliding
+
+    private func applyHorizontalMovement(state: inout WorldState, dx: Float, dz: Float) {
+        guard dx != 0 || dz != 0 else { return }
+
+        let radius = PlayerState.collisionRadius
+        let oldX = state.player.worldX
+        let oldZ = state.player.worldZ
+
+        // Try X movement first (wall sliding: move each axis independently)
+        var newX = oldX + dx
+        let newZ_afterX = oldZ  // Z hasn't moved yet
+
+        if collidesAtPosition(x: newX, z: newZ_afterX, radius: radius, state: state) {
+            // Slide along wall: push out to the nearest non-colliding position on X
+            if dx > 0 {
+                let cellEdge = Float(Int(floor(newX + radius))) - radius
+                newX = min(newX, cellEdge - 0.001)
+            } else {
+                let cellEdge = Float(Int(ceil(newX - radius))) + radius
+                newX = max(newX, cellEdge + 0.001)
+            }
+            // If still colliding, revert
+            if collidesAtPosition(x: newX, z: newZ_afterX, radius: radius, state: state) {
+                newX = oldX
+            }
+        }
+
+        // Try Z movement with the resolved X position
+        var newZ = oldZ + dz
+
+        if collidesAtPosition(x: newX, z: newZ, radius: radius, state: state) {
+            if dz > 0 {
+                let cellEdge = Float(Int(floor(newZ + radius))) - radius
+                newZ = min(newZ, cellEdge - 0.001)
+            } else {
+                let cellEdge = Float(Int(ceil(newZ - radius))) + radius
+                newZ = max(newZ, cellEdge + 0.001)
+            }
+            if collidesAtPosition(x: newX, z: newZ, radius: radius, state: state) {
+                newZ = oldZ
+            }
+        }
+
+        // Clamp to board bounds
+        let boardMinX: Float = radius
+        let boardMaxX = Float(state.board.width) - radius
+        let boardMinZ: Float = radius
+        let boardMaxZ = Float(state.board.height) - radius
+        newX = max(boardMinX, min(boardMaxX, newX))
+        newZ = max(boardMinZ, min(boardMaxZ, newZ))
+
+        // Update position
+        let newGridX = Int(floor(newX))
+        let newGridZ = Int(floor(newZ))
+        state.player.gridPosition = GridPosition(x: newGridX, y: newGridZ, z: state.player.gridPosition.z)
+        state.player.subCellX = newX - Float(newGridX)
+        state.player.subCellY = newZ - Float(newGridZ)
+    }
+
+    // MARK: - AABB Collision Check (checks all cells the player's bounding box overlaps)
+
+    private func collidesAtPosition(x: Float, z: Float, radius: Float, state: WorldState) -> Bool {
+        let minCellX = Int(floor(x - radius))
+        let maxCellX = Int(floor(x + radius))
+        let minCellZ = Int(floor(z - radius))
+        let maxCellZ = Int(floor(z + radius))
+
+        for cellX in minCellX...maxCellX {
+            for cellZ in minCellZ...maxCellZ {
+                if isCellSolid(gridX: cellX, gridY: cellZ, state: state) {
+                    // AABB overlap test: player circle vs cell rectangle
+                    let cellMinX = Float(cellX)
+                    let cellMaxX = Float(cellX + 1)
+                    let cellMinZ = Float(cellZ)
+                    let cellMaxZ = Float(cellZ + 1)
+
+                    // Find closest point on cell AABB to player center
+                    let closestX = max(cellMinX, min(x, cellMaxX))
+                    let closestZ = max(cellMinZ, min(z, cellMaxZ))
+                    let distX = x - closestX
+                    let distZ = z - closestZ
+                    let distSq = distX * distX + distZ * distZ
+
+                    if distSq < radius * radius {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
+
+    private func isCellSolid(gridX: Int, gridY: Int, state: WorldState) -> Bool {
+        let pos = GridPosition(x: gridX, y: gridY, z: 0)
+        guard state.board.contains(pos) else { return true }
+        if state.board.isBlocked(pos) { return true }
+
+        // Check structures — use spatial lookup if available, otherwise iterate
+        for entity in state.entities.all where entity.category == .structure {
+            guard let structureType = entity.structureType else { continue }
+            let coveredCells = structureType.coveredCells(anchor: entity.position)
+            if coveredCells.contains(where: { $0.x == gridX && $0.y == gridY }) {
+                return true
+            }
+        }
+        return false
+    }
+
+    // MARK: - Gravity
+
+    private func applyGravity(state: inout WorldState, dt: Float) {
+        guard !state.player.isGrounded else { return }
+
+        state.player.velocityY += PlayerState.gravity * dt
+        state.player.velocityY = max(state.player.velocityY, PlayerState.terminalVelocity)
+
+        let newY = state.player.worldY + state.player.velocityY * dt
+        if newY <= 0 {
+            // Landed
+            state.player.gridPosition = GridPosition(
+                x: state.player.gridPosition.x,
+                y: state.player.gridPosition.y,
+                z: 0
+            )
+            state.player.velocityY = 0
+            state.player.isGrounded = true
+        } else {
+            state.player.gridPosition = GridPosition(
+                x: state.player.gridPosition.x,
+                y: state.player.gridPosition.y,
+                z: Int(floor(newY))
+            )
+        }
+    }
+
+    // MARK: - Entity Sync
+
+    private func syncEntityPosition(state: inout WorldState) {
+        guard let entityID = state.player.entityID else { return }
+        state.entities.updatePosition(entityID, to: state.player.gridPosition)
+        state.entities.updatePlayerSubCell(
+            entityID,
+            subCellX: state.player.subCellX,
+            subCellY: state.player.subCellY,
+            facingRadians: state.player.facingRadians
+        )
     }
 }

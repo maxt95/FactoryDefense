@@ -15,7 +15,8 @@ final class WhiteboxSceneBuilderTests: XCTestCase {
         XCTAssertEqual(scene.summary.enemyCount, 0)
         XCTAssertEqual(scene.summary.projectileCount, 0)
         XCTAssertEqual(scene.structures.count, 1)
-        XCTAssertEqual(scene.entities.count, world.orePatches.count)
+        // +1 for the player entity spawned in bootstrap
+        XCTAssertEqual(scene.entities.count, world.orePatches.count + 1)
     }
 
     func testStructureMarkersIncludeTypeAndFootprint() {

@@ -1,5 +1,7 @@
 import AppKit
+import Combine
 import MetalKit
+import simd
 import SwiftUI
 import GameRendering
 import GameSimulation
@@ -262,6 +264,14 @@ private struct FactoryDefensemacOSGameplayView: View {
     @State private var conveyorOutputDirection: CardinalDirection = .east
     @State private var didReportRunSummary = false
 
+    // FPS mode state
+    @State private var viewMode: ViewMode = .baseView
+    @StateObject private var fpsInput = FPSInputState()
+    @State private var fpsPredictor = FPSClientPredictor()
+    @State private var fpsCamera = FPSCameraController()
+    @State private var fpsYaw: Float = 0
+    @State private var fpsPitch: Float = 0
+
     let enableDebugViews: Bool
     let onRunEnded: (RunSummarySnapshot) -> Void
 
@@ -310,6 +320,10 @@ private struct FactoryDefensemacOSGameplayView: View {
                     highlightedAffordableCount: dragPreviewAffordableCount,
                     highlightedStructure: interaction.isBuildMode && runtime.highlightedCell != nil ? selectedStructure : nil,
                     placementResult: runtime.placementResult,
+                    viewMode: viewMode,
+                    fpsViewProjection: fpsViewProjectionMatrix(viewport: proxy.size),
+                    fpsInput: fpsInput,
+                    isInFPSMode: viewMode == .fpsView,
                     onTap: { location, viewport in
                         handleTap(at: location, viewport: viewport)
                     },
@@ -322,7 +336,11 @@ private struct FactoryDefensemacOSGameplayView: View {
                     },
                     onKeyboardPan: { dx, dy, viewport in
                         handleKeyboardPan(deltaX: dx, deltaY: dy, viewport: viewport)
-                    }
+                    },
+                    onFPSToggle: { toggleFPSMode() },
+                    onFPSEscape: { exitFPSMode() },
+                    onFPSLeftClick: { handleFPSLeftClick() },
+                    onFPSRightClick: { handleFPSRightClick() }
                 )
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
@@ -394,6 +412,34 @@ private struct FactoryDefensemacOSGameplayView: View {
                     }
                     .padding(16)
                 }
+
+                // FPS crosshair and HUD
+                if viewMode == .fpsView {
+                    FPSOverlayView(
+                        isSprinting: fpsPredictor.isSprinting,
+                        isCrouching: fpsPredictor.isCrouching,
+                        isGrounded: fpsPredictor.isGrounded
+                    )
+                }
+
+                // FPS toggle button (always visible)
+                VStack {
+                    Spacer()
+                    HStack {
+                        Button(action: { toggleFPSMode() }) {
+                            Text(viewMode == .fpsView ? "Base View (Tab)" : "FPS View (Tab)")
+                                .font(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.black.opacity(0.6))
+                                .foregroundColor(.white)
+                                .cornerRadius(4)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(8)
+                        Spacer()
+                    }
+                }
             }
             .onAppear {
                 runtime.start()
@@ -415,6 +461,26 @@ private struct FactoryDefensemacOSGameplayView: View {
             .onChange(of: runtime.world.tick) { _, _ in
                 onboarding.update(from: runtime.world)
                 validateSelection()
+                // FPS: harvest move command at 20Hz tick boundary and reconcile
+                if viewMode == .fpsView {
+                    let cmd = fpsPredictor.harvestMoveCommand()
+                    if cmd.dx != 0 || cmd.dz != 0 || cmd.jump || cmd.sprint || cmd.crouch
+                        || cmd.facing != fpsYaw || cmd.pitch != fpsPitch {
+                        runtime.enqueue(payload: .playerMove(
+                            dx: cmd.dx, dz: cmd.dz,
+                            facingRadians: cmd.facing, pitchRadians: cmd.pitch,
+                            jump: cmd.jump, sprint: cmd.sprint, crouch: cmd.crouch
+                        ))
+                    }
+                    let player = runtime.world.player
+                    fpsPredictor.reconcile(
+                        authorityX: player.worldX,
+                        authorityZ: player.worldZ,
+                        authorityY: player.worldY,
+                        authorityVelocityY: player.velocityY,
+                        authorityGrounded: player.isGrounded
+                    )
+                }
             }
             .onChange(of: runtime.latestEvents) { _, events in
                 placementFeedback.consume(events: events)
@@ -464,6 +530,36 @@ private struct FactoryDefensemacOSGameplayView: View {
                 }
             } message: {
                 Text("This removes the selected structure and refunds 50% of its build cost.")
+            }
+            .onReceive(Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()) { _ in
+                guard viewMode == .fpsView else { return }
+                // Process mouse look
+                let mouseSensitivity = fpsCamera.mouseSensitivity
+                let mouseDelta = fpsInput.consumeMouseDelta()
+                fpsYaw += mouseDelta.dx * mouseSensitivity
+                fpsPitch -= mouseDelta.dy * mouseSensitivity
+                fpsPitch = max(-.pi / 2 * 0.95, min(.pi / 2 * 0.95, fpsPitch))
+
+                // Consume edge-triggered jump
+                let jumpPressed = fpsInput.consumeJump()
+
+                // Process movement prediction at 60fps
+                let dt: Float = 1.0 / 60.0
+                let forward = fpsInput.forwardAxis
+                let strafe = fpsInput.strafeAxis
+                fpsPredictor.applyInput(
+                    forward: forward,
+                    strafe: strafe,
+                    facing: fpsYaw,
+                    pitch: fpsPitch,
+                    jump: jumpPressed,
+                    sprint: fpsInput.sprintHeld,
+                    crouch: fpsInput.crouchHeld,
+                    deltaTime: dt,
+                    moveSpeed: PlayerState.walkSpeed,
+                    sprintSpeed: PlayerState.sprintSpeed,
+                    crouchSpeed: PlayerState.crouchSpeed
+                )
             }
             .onReceive(NotificationCenter.default.publisher(for: RenderDiagnostics.notificationName)) { note in
                 renderDiagnostic = note.userInfo?[RenderDiagnostics.messageKey] as? String
@@ -848,6 +944,79 @@ private struct FactoryDefensemacOSGameplayView: View {
         interaction.requestDemolish(entityID: entityID)
     }
 
+    // MARK: - FPS Mode
+
+    private func toggleFPSMode() {
+        if viewMode == .fpsView {
+            exitFPSMode()
+        } else {
+            enterFPSMode()
+        }
+    }
+
+    private func enterFPSMode() {
+        viewMode = .fpsView
+        let player = runtime.world.player
+        fpsPredictor = FPSClientPredictor(
+            initialX: player.worldX,
+            initialZ: player.worldZ,
+            initialY: player.worldY,
+            yaw: player.facingRadians,
+            pitch: player.pitchRadians
+        )
+        fpsYaw = player.facingRadians
+        fpsPitch = player.pitchRadians
+        runtime.enqueue(payload: .toggleFPSMode)
+    }
+
+    private func exitFPSMode() {
+        viewMode = .baseView
+        fpsInput.reset()
+        runtime.enqueue(payload: .toggleFPSMode)
+    }
+
+    private static let fpsInteractionRange: Float = 15
+
+    private func handleFPSLeftClick() {
+        guard viewMode == .fpsView else { return }
+        guard let hit = fpsCamera.raycastGrid(
+            eye: fpsPredictor.eyePosition,
+            yaw: fpsYaw,
+            pitch: fpsPitch,
+            maxDistance: Self.fpsInteractionRange
+        ) else { return }
+        let position = GridPosition(x: hit.x, y: hit.y)
+        guard runtime.world.board.contains(position) else { return }
+        runtime.placeStructure(selectedStructure, at: position)
+    }
+
+    private func handleFPSRightClick() {
+        guard viewMode == .fpsView else { return }
+        guard let hit = fpsCamera.raycastGrid(
+            eye: fpsPredictor.eyePosition,
+            yaw: fpsYaw,
+            pitch: fpsPitch,
+            maxDistance: Self.fpsInteractionRange
+        ) else { return }
+        let position = GridPosition(x: hit.x, y: hit.y)
+        guard runtime.world.board.contains(position) else { return }
+        if let entity = runtime.world.entities.selectableEntity(at: position),
+           entity.category == .structure {
+            runtime.removeStructure(entityID: entity.id)
+        }
+    }
+
+    private func fpsViewProjectionMatrix(viewport: CGSize) -> simd_float4x4? {
+        guard viewMode == .fpsView else { return nil }
+        let aspect = Float(max(1, viewport.width)) / Float(max(1, viewport.height))
+        return fpsCamera.viewProjectionMatrix(
+            eye: fpsPredictor.eyePosition,
+            yaw: fpsYaw,
+            pitch: fpsPitch,
+            aspect: aspect
+        )
+    }
+
     private func orePatch(at position: GridPosition) -> OrePatch? {
         runtime.world.orePatches.first(where: { $0.position.x == position.x && $0.position.y == position.y })
     }
@@ -899,6 +1068,93 @@ private struct FactoryDefensemacOSGameplayView: View {
     }
 }
 
+private struct FPSOverlayView: View {
+    let isSprinting: Bool
+    let isCrouching: Bool
+    let isGrounded: Bool
+
+    var body: some View {
+        ZStack {
+            fpsCrosshair
+            fpsHUD
+        }
+    }
+
+    private var fpsCrosshair: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.9))
+                .frame(width: 4, height: 4)
+            Rectangle()
+                .fill(Color.white.opacity(0.7))
+                .frame(width: 1.5, height: 8)
+                .offset(y: -8)
+            Rectangle()
+                .fill(Color.white.opacity(0.7))
+                .frame(width: 1.5, height: 8)
+                .offset(y: 8)
+            Rectangle()
+                .fill(Color.white.opacity(0.7))
+                .frame(width: 8, height: 1.5)
+                .offset(x: -8)
+            Rectangle()
+                .fill(Color.white.opacity(0.7))
+                .frame(width: 8, height: 1.5)
+                .offset(x: 8)
+        }
+    }
+
+    private var fpsHUD: some View {
+        VStack {
+            HStack {
+                Spacer()
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("FPS Mode")
+                        .font(.caption.bold())
+                        .foregroundColor(.white.opacity(0.9))
+                    Text("WASD Move  Shift Sprint  Space Jump")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.6))
+                    Text("Ctrl Crouch  Tab/Esc Exit")
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                .padding(8)
+                .background(Color.black.opacity(0.5))
+                .cornerRadius(6)
+                .padding(8)
+            }
+            Spacer()
+            fpsStatusIndicators
+                .padding(.bottom, 40)
+        }
+    }
+
+    private var fpsStatusIndicators: some View {
+        HStack(spacing: 12) {
+            if isSprinting {
+                statusPill("SPRINT", color: .orange)
+            }
+            if isCrouching {
+                statusPill("CROUCH", color: .cyan)
+            }
+            if !isGrounded {
+                statusPill("AIRBORNE", color: .yellow)
+            }
+        }
+    }
+
+    private func statusPill(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.caption.bold())
+            .foregroundColor(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color.black.opacity(0.6))
+            .cornerRadius(4)
+    }
+}
+
 private struct MetalSurfaceView: NSViewRepresentable {
     var world: WorldState
     var cameraState: WhiteboxCameraState
@@ -908,17 +1164,30 @@ private struct MetalSurfaceView: NSViewRepresentable {
     var highlightedAffordableCount: Int
     var highlightedStructure: StructureType?
     var placementResult: PlacementResult
+    var viewMode: ViewMode
+    var fpsViewProjection: simd_float4x4?
+    var fpsInput: FPSInputState?
+    var isInFPSMode: Bool
     var onTap: (CGPoint, CGSize) -> Void
     var onPointerMove: (CGPoint, CGSize) -> Void
     var onScrollZoom: (CGFloat, CGPoint, CGSize) -> Void
     var onKeyboardPan: (Float, Float, CGSize) -> Void
+    var onFPSToggle: () -> Void
+    var onFPSEscape: () -> Void
+    var onFPSLeftClick: () -> Void
+    var onFPSRightClick: () -> Void
 
     func makeNSView(context: Context) -> MTKView {
-        let view = ScrollableMTKView(frame: .zero)
+        let view = FPSCapableMTKView(frame: .zero)
         view.onTap = onTap
         view.onPointerMove = onPointerMove
         view.onScrollZoom = onScrollZoom
         view.onKeyboardPan = onKeyboardPan
+        view.onFPSToggle = onFPSToggle
+        view.onFPSEscape = onFPSEscape
+        view.onFPSLeftClick = onFPSLeftClick
+        view.onFPSRightClick = onFPSRightClick
+        view.fpsInput = fpsInput
         if let renderer = context.coordinator.renderer {
             renderer.debugMode = debugMode
             renderer.attach(to: view)
@@ -929,16 +1198,29 @@ private struct MetalSurfaceView: NSViewRepresentable {
 
     func updateNSView(_ nsView: MTKView, context: Context) {
         guard let renderer = context.coordinator.renderer else { return }
-        if let interactiveView = nsView as? ScrollableMTKView {
+        if let interactiveView = nsView as? FPSCapableMTKView {
             interactiveView.onTap = onTap
             interactiveView.onPointerMove = onPointerMove
             interactiveView.onScrollZoom = onScrollZoom
             interactiveView.onKeyboardPan = onKeyboardPan
+            interactiveView.onFPSToggle = onFPSToggle
+            interactiveView.onFPSEscape = onFPSEscape
+            interactiveView.onFPSLeftClick = onFPSLeftClick
+            interactiveView.onFPSRightClick = onFPSRightClick
+            interactiveView.fpsInput = fpsInput
+            interactiveView.isInFPSMode = isInFPSMode
+            if isInFPSMode {
+                interactiveView.captureMouse()
+            } else {
+                interactiveView.releaseMouse()
+            }
             interactiveView.window?.makeFirstResponder(interactiveView)
         }
         renderer.worldState = world
         renderer.cameraState = cameraState
         renderer.debugMode = debugMode
+        renderer.viewMode = viewMode
+        renderer.fpsViewProjection = fpsViewProjection
         renderer.setPlacementHighlight(
             cell: highlightedCell,
             path: highlightedPath,
@@ -958,16 +1240,25 @@ private struct MetalSurfaceView: NSViewRepresentable {
     }
 }
 
-private final class ScrollableMTKView: MTKView {
+private final class FPSCapableMTKView: MTKView {
+    // Base view callbacks
     var onTap: ((CGPoint, CGSize) -> Void)?
     var onPointerMove: ((CGPoint, CGSize) -> Void)?
     var onScrollZoom: ((CGFloat, CGPoint, CGSize) -> Void)?
     var onKeyboardPan: ((Float, Float, CGSize) -> Void)?
-    private var trackingArea: NSTrackingArea?
 
-    override var acceptsFirstResponder: Bool {
-        true
-    }
+    // FPS callbacks
+    var onFPSToggle: (() -> Void)?
+    var onFPSEscape: (() -> Void)?
+    var onFPSLeftClick: (() -> Void)?
+    var onFPSRightClick: (() -> Void)?
+    var fpsInput: FPSInputState?
+    var isInFPSMode: Bool = false
+
+    private var trackingArea: NSTrackingArea?
+    private var isMouseCaptured: Bool = false
+
+    override var acceptsFirstResponder: Bool { true }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -976,51 +1267,141 @@ private final class ScrollableMTKView: MTKView {
         refreshTrackingArea()
     }
 
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
-        true
-    }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         refreshTrackingArea()
     }
 
+    // MARK: - Mouse
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        if isInFPSMode {
+            onFPSLeftClick?()
+            return
+        }
         let local = convert(event.locationInWindow, from: nil)
         let y = isFlipped ? local.y : (bounds.height - local.y)
         onTap?(CGPoint(x: local.x, y: y), bounds.size)
         super.mouseDown(with: event)
     }
 
+    override func rightMouseDown(with event: NSEvent) {
+        if isInFPSMode {
+            onFPSRightClick?()
+            return
+        }
+        super.rightMouseDown(with: event)
+    }
+
     override func mouseMoved(with event: NSEvent) {
+        if isInFPSMode {
+            fpsInput?.accumulateMouseDelta(dx: Float(event.deltaX), dy: Float(event.deltaY))
+            return
+        }
         let local = convert(event.locationInWindow, from: nil)
         let y = isFlipped ? local.y : (bounds.height - local.y)
         onPointerMove?(CGPoint(x: local.x, y: y), bounds.size)
         super.mouseMoved(with: event)
     }
 
+    override func mouseDragged(with event: NSEvent) {
+        if isInFPSMode {
+            fpsInput?.accumulateMouseDelta(dx: Float(event.deltaX), dy: Float(event.deltaY))
+            return
+        }
+        super.mouseDragged(with: event)
+    }
+
     override func scrollWheel(with event: NSEvent) {
+        guard !isInFPSMode else { return }
         let local = convert(event.locationInWindow, from: nil)
         let y = isFlipped ? local.y : (bounds.height - local.y)
         onScrollZoom?(event.scrollingDeltaY, CGPoint(x: local.x, y: y), bounds.size)
         super.scrollWheel(with: event)
     }
 
+    // MARK: - Mouse Capture
+
+    func captureMouse() {
+        guard !isMouseCaptured else { return }
+        isMouseCaptured = true
+        CGAssociateMouseAndMouseCursorPosition(0)
+        NSCursor.hide()
+    }
+
+    func releaseMouse() {
+        guard isMouseCaptured else { return }
+        isMouseCaptured = false
+        CGAssociateMouseAndMouseCursorPosition(1)
+        NSCursor.unhide()
+    }
+
+    // MARK: - Keyboard
+
     override func keyDown(with event: NSEvent) {
+        guard !event.isARepeat else { return }
+
+        if isInFPSMode {
+            switch event.keyCode {
+            case 53: // Escape
+                onFPSEscape?()
+                return
+            case 13: fpsInput?.moveForward = true; return  // W
+            case 1:  fpsInput?.moveBack = true; return     // S
+            case 0:  fpsInput?.moveLeft = true; return     // A
+            case 2:  fpsInput?.moveRight = true; return    // D
+            case 49: fpsInput?.jumpPressed = true; return  // Space
+            case 56, 60: fpsInput?.sprintHeld = true; return  // Shift
+            case 59, 62: fpsInput?.crouchHeld = true; return  // Control
+            default: break
+            }
+        }
+
         switch event.keyCode {
+        case 48: // Tab
+            onFPSToggle?()
         case 0, 123: // A, Left
-            onKeyboardPan?(-1, 0, bounds.size)
+            if !isInFPSMode { onKeyboardPan?(-1, 0, bounds.size) }
         case 2, 124: // D, Right
-            onKeyboardPan?(1, 0, bounds.size)
+            if !isInFPSMode { onKeyboardPan?(1, 0, bounds.size) }
         case 13, 126: // W, Up
-            onKeyboardPan?(0, -1, bounds.size)
+            if !isInFPSMode { onKeyboardPan?(0, -1, bounds.size) }
         case 1, 125: // S, Down
-            onKeyboardPan?(0, 1, bounds.size)
+            if !isInFPSMode { onKeyboardPan?(0, 1, bounds.size) }
         default:
             super.keyDown(with: event)
         }
     }
+
+    override func keyUp(with event: NSEvent) {
+        guard isInFPSMode else {
+            super.keyUp(with: event)
+            return
+        }
+        switch event.keyCode {
+        case 13: fpsInput?.moveForward = false   // W
+        case 1:  fpsInput?.moveBack = false      // S
+        case 0:  fpsInput?.moveLeft = false      // A
+        case 2:  fpsInput?.moveRight = false     // D
+        case 56, 60: fpsInput?.sprintHeld = false   // Shift
+        case 59, 62: fpsInput?.crouchHeld = false   // Control
+        default: super.keyUp(with: event)
+        }
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        guard isInFPSMode else {
+            super.flagsChanged(with: event)
+            return
+        }
+        fpsInput?.sprintHeld = event.modifierFlags.contains(.shift)
+        fpsInput?.crouchHeld = event.modifierFlags.contains(.control)
+    }
+
+    // MARK: - Tracking Area
 
     private func refreshTrackingArea() {
         if let trackingArea {

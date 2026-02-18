@@ -3,7 +3,13 @@ import Foundation
 import Metal
 import MetalKit
 import QuartzCore
+import simd
 import GameSimulation
+
+public enum ViewMode: String, Codable, CaseIterable, Sendable {
+    case baseView
+    case fpsView
+}
 
 public enum QualityPreset: String, Codable, CaseIterable, Sendable {
     case mobileBalanced
@@ -39,6 +45,8 @@ public struct RenderContext {
     public var highlightedAffordableCount: Int
     public var highlightedStructure: StructureType?
     public var placementResult: PlacementResult
+    public var viewMode: ViewMode
+    public var fpsViewProjection: simd_float4x4?
 
     public var currentDrawable: CAMetalDrawable?
     public var renderResources: RenderResources
@@ -62,6 +70,8 @@ public struct RenderContext {
         highlightedAffordableCount: Int = 0,
         highlightedStructure: StructureType? = nil,
         placementResult: PlacementResult = .ok,
+        viewMode: ViewMode = .baseView,
+        fpsViewProjection: simd_float4x4? = nil,
         currentDrawable: CAMetalDrawable?,
         renderResources: RenderResources,
         timingCapture: FrameTimingCapture,
@@ -83,6 +93,8 @@ public struct RenderContext {
         self.highlightedAffordableCount = max(0, highlightedAffordableCount)
         self.highlightedStructure = highlightedStructure
         self.placementResult = placementResult
+        self.viewMode = viewMode
+        self.fpsViewProjection = fpsViewProjection
         self.currentDrawable = currentDrawable
         self.renderResources = renderResources
         self.timingCapture = timingCapture
@@ -218,6 +230,58 @@ public struct WhiteboxBoardNode: RenderPassNode {
     public func encode(context: RenderContext, commandBuffer: MTLCommandBuffer) {
         commandBuffer.pushDebugGroup("WhiteboxBoard")
         context.whiteboxRenderer.encode(context: context, commandBuffer: commandBuffer)
+        commandBuffer.popDebugGroup()
+    }
+}
+
+public struct FPSSkyboxNode: RenderPassNode {
+    public let id = "fps_skybox"
+    public init() {}
+
+    public func encode(context: RenderContext, commandBuffer: MTLCommandBuffer) {
+        guard context.viewMode == .fpsView else { return }
+        commandBuffer.pushDebugGroup("FPSSkybox")
+
+        // Draw sky to the drawable texture directly
+        guard let drawableTexture = context.currentDrawable?.texture else {
+            commandBuffer.popDebugGroup()
+            return
+        }
+
+        let descriptor = MTLRenderPassDescriptor()
+        descriptor.colorAttachments[0].texture = drawableTexture
+        descriptor.colorAttachments[0].loadAction = .clear
+        descriptor.colorAttachments[0].storeAction = .store
+        descriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0.15, green: 0.35, blue: 0.65, alpha: 1)
+
+        // Also clear depth so sky sits behind everything
+        if let depthTexture = context.renderResources.drawableDepthTexture ?? context.renderResources.depthTexture {
+            descriptor.depthAttachment.texture = depthTexture
+            descriptor.depthAttachment.loadAction = .clear
+            descriptor.depthAttachment.clearDepth = 1.0
+            descriptor.depthAttachment.storeAction = .store
+        }
+
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else {
+            commandBuffer.popDebugGroup()
+            return
+        }
+        encoder.label = "FPSSkybox"
+
+        // Build sky pipeline lazily
+        if let pipeline = context.shaderVariants.skyPipelineState(
+            device: context.device,
+            colorPixelFormat: drawableTexture.pixelFormat,
+            depthPixelFormat: context.renderResources.drawableDepthTexture?.pixelFormat
+                ?? context.renderResources.depthTexture?.pixelFormat
+                ?? .depth32Float
+        ) {
+            encoder.setRenderPipelineState(pipeline)
+            // Draw fullscreen triangle (3 vertices, no vertex buffer needed)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        }
+
+        encoder.endEncoding()
         commandBuffer.popDebugGroup()
     }
 }

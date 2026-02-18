@@ -9,6 +9,15 @@ private struct InstanceUniforms {
     var tintColor: SIMD4<Float>
 }
 
+// Must match FogParams in pbr.metal
+private struct FogParams {
+    var fogColor: SIMD3<Float>
+    var fogStart: Float
+    var fogEnd: Float
+    var cameraPosition: SIMD3<Float>
+    var _padding: Float = 0 // alignment padding
+}
+
 private struct PipelineKey: Equatable {
     var deviceID: ObjectIdentifier
     var colorPixelFormat: MTLPixelFormat
@@ -105,6 +114,10 @@ public final class WhiteboxMeshRenderer {
 #else
         encoder.setTriangleFillMode(.fill)
 #endif
+
+        // Set fog params for PBR fragment shader
+        var fogParams = makeFogParams(context: context)
+        encoder.setFragmentBytes(&fogParams, length: MemoryLayout<FogParams>.stride, index: 0)
 
         for batch in batches {
             guard let mesh = meshProvider.mesh(for: batch.meshID) else { continue }
@@ -219,6 +232,10 @@ public final class WhiteboxMeshRenderer {
     }
 
     private func makeViewProjectionMatrix(context: RenderContext) -> simd_float4x4 {
+        if context.viewMode == .fpsView, let fpsVP = context.fpsViewProjection {
+            return fpsVP
+        }
+
         let board = context.worldState.board
         let viewWidth = Float(max(1, context.viewSizePoints.width))
         let viewHeight = Float(max(1, context.viewSizePoints.height))
@@ -256,6 +273,88 @@ public final class WhiteboxMeshRenderer {
         viewProjection: simd_float4x4
     ) -> ([MeshInstanceBatch], [InstanceUniforms]) {
         var grouped: [MeshID: [InstanceUniforms]] = [:]
+        let isFPSView = context.viewMode == .fpsView
+
+        // In FPS mode, generate ground for the board and a large surrounding terrain
+        if isFPSView {
+            let board = context.worldState.board
+            let blockedSet = Set(scene.blockedCells.map { WhiteboxPoint(x: $0.x, y: $0.y) })
+            let restrictedSet = Set(scene.restrictedCells.map { WhiteboxPoint(x: $0.x, y: $0.y) })
+
+            // Board ground tiles (detailed, per-cell)
+            for y in 0..<board.height {
+                for x in 0..<board.width {
+                    let point = WhiteboxPoint(x: Int32(x), y: Int32(y))
+                    let centerX = Float(x) + 0.5
+                    let centerZ = Float(y) + 0.5
+                    let model = simd_float4x4.translation(SIMD3<Float>(centerX, 0, centerZ))
+
+                    let tint: SIMD3<Float>
+                    if blockedSet.contains(point) {
+                        tint = SIMD3<Float>(0.25, 0.22, 0.20)
+                    } else if restrictedSet.contains(point) {
+                        tint = SIMD3<Float>(0.55, 0.50, 0.35)
+                    } else {
+                        tint = SIMD3<Float>(0.45, 0.55, 0.35)
+                    }
+
+                    grouped[.gridTile, default: []].append(
+                        InstanceUniforms(
+                            modelViewProjection: viewProjection * model,
+                            modelMatrix: model,
+                            tintColor: SIMD4<Float>(tint, 1)
+                        )
+                    )
+                }
+            }
+
+            // Extended terrain beyond board edges — large tiles in a ring around the board
+            // Creates the illusion of an infinite world
+            let extend = 40 // tiles beyond each edge
+            let terrainColor = SIMD3<Float>(0.32, 0.38, 0.28) // muted grass/dirt
+            let terrainFarColor = SIMD3<Float>(0.30, 0.35, 0.26)
+
+            let minX = -extend
+            let maxX = board.width + extend
+            let minZ = -extend
+            let maxZ = board.height + extend
+
+            // Use larger tiles (4x4) for the extended terrain to keep instance count reasonable
+            let tileSize = 4
+            var tx = minX
+            while tx < maxX {
+                var tz = minZ
+                while tz < maxZ {
+                    // Skip tiles that are inside the board (already rendered above)
+                    let insideBoard = tx >= 0 && tx + tileSize <= board.width
+                        && tz >= 0 && tz + tileSize <= board.height
+                    if !insideBoard {
+                        let centerX = Float(tx) + Float(tileSize) * 0.5
+                        let centerZ = Float(tz) + Float(tileSize) * 0.5
+                        let scale = SIMD3<Float>(Float(tileSize), 1.0, Float(tileSize))
+                        let model = simd_float4x4.translation(SIMD3<Float>(centerX, -0.02, centerZ))
+                            * simd_float4x4.scale(scale)
+
+                        // Darken terrain tiles further from the board for a natural gradient
+                        let distFromBoardX = max(0, max(Float(-tx), Float(tx + tileSize - board.width)))
+                        let distFromBoardZ = max(0, max(Float(-tz), Float(tz + tileSize - board.height)))
+                        let distFromBoard = max(distFromBoardX, distFromBoardZ)
+                        let fadeFactor = min(distFromBoard / Float(extend), 1.0)
+                        let tint = terrainColor + (terrainFarColor - terrainColor) * fadeFactor
+
+                        grouped[.gridTile, default: []].append(
+                            InstanceUniforms(
+                                modelViewProjection: viewProjection * model,
+                                modelMatrix: model,
+                                tintColor: SIMD4<Float>(tint, 1)
+                            )
+                        )
+                    }
+                    tz += tileSize
+                }
+                tx += tileSize
+            }
+        }
 
         for structure in scene.structures {
             let width = max(1, Int(structure.footprintWidth))
@@ -286,8 +385,24 @@ public final class WhiteboxMeshRenderer {
         }
 
         for marker in scene.entities {
-            let centerX = Float(marker.x) + 0.5
-            let centerZ = Float(marker.y) + 0.5
+            // Skip player mesh in FPS view (can't see yourself)
+            if isFPSView && marker.category == WhiteboxEntityCategory.player.rawValue {
+                continue
+            }
+
+            let centerX: Float
+            let centerZ: Float
+
+            // Use sub-cell position for player entities
+            if marker.category == WhiteboxEntityCategory.player.rawValue {
+                let player = context.worldState.player
+                centerX = player.worldX
+                centerZ = player.worldZ
+            } else {
+                centerX = Float(marker.x) + 0.5
+                centerZ = Float(marker.y) + 0.5
+            }
+
             let baseElevation = Float(
                 context.worldState.board.elevation(
                     at: GridPosition(x: Int(marker.x), y: Int(marker.y))
@@ -356,6 +471,10 @@ public final class WhiteboxMeshRenderer {
             }
         }
 
+        if marker.category == WhiteboxEntityCategory.player.rawValue {
+            return .playerCharacter
+        }
+
         return .gridTile
     }
 
@@ -365,6 +484,25 @@ public final class WhiteboxMeshRenderer {
             return OrePresentation.color(for: resourceType.oreType)
         }
         return WhiteboxColors.color(for: meshID)
+    }
+
+    private func makeFogParams(context: RenderContext) -> FogParams {
+        if context.viewMode == .fpsView {
+            let player = context.worldState.player
+            return FogParams(
+                fogColor: SIMD3<Float>(0.55, 0.70, 0.85), // match horizon color in sky shader
+                fogStart: 20.0,
+                fogEnd: 80.0,
+                cameraPosition: player.worldPosition
+            )
+        }
+        // Base view: no fog (very large start distance)
+        return FogParams(
+            fogColor: SIMD3<Float>(0.07, 0.08, 0.10),
+            fogStart: 9999.0,
+            fogEnd: 10000.0,
+            cameraPosition: SIMD3<Float>(0, 0, 0)
+        )
     }
 
     private func makeWhiteboxVertexDescriptor() -> MTLVertexDescriptor {

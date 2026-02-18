@@ -108,6 +108,11 @@ public enum WhiteboxAssetCatalog {
         case .resourceNode:
             addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.30, 0.15, 0.30))
             addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.16, 0.10, 0.16), offset: SIMD3<Float>(-0.12, 0.24, 0.08))
+
+        case .playerCharacter:
+            // Simple capsule-like shape (stacked boxes) visible in base view
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.15, 0.40, 0.15))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.12, 0.12, 0.12), offset: SIMD3<Float>(0, 0.92, 0))
         }
 
         return builder.build()

@@ -75,6 +75,8 @@ public struct ObjectInspectorBuilder: Sendable {
             return enemyModel(for: entity, in: world)
         case .projectile:
             return projectileModel(for: entity, in: world)
+        case .player:
+            return nil
         }
     }
 
