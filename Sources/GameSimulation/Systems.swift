@@ -108,6 +108,9 @@ public struct CommandSystem: SimulationSystem {
                     hostWallID: hostWallID,
                     boundPatchID: targetPatchID
                 )
+                if let defaultRecipeID = request.structure.defaultRecipeID {
+                    state.economy.pinnedRecipeByStructure[structureID] = defaultRecipeID
+                }
                 if let targetPatchID {
                     bindMiner(structureID, toPatchID: targetPatchID, state: &state)
                 }
@@ -216,7 +219,8 @@ public struct CommandSystem: SimulationSystem {
             case .rotateBuilding(let entityID):
                 state.entities.rotateStructure(entityID)
             case .pinRecipe(let entityID, let recipeID):
-                if state.entities.entity(id: entityID)?.category == .structure {
+                if let structureType = state.entities.entity(id: entityID)?.structureType,
+                   structureType.supportedRecipeIDs.contains(recipeID) {
                     state.economy.pinnedRecipeByStructure[entityID] = recipeID
                 }
             case .triggerWave:
@@ -443,28 +447,21 @@ public struct EconomySystem: SimulationSystem {
 
         runProduction(
             structures: state.entities.structures(of: .smelter),
-            prioritizedRecipeIDs: ["smelt_steel", "smelt_iron", "smelt_copper"],
+            recipeIDs: StructureType.smelter.supportedRecipeIDs,
             state: &state,
             tickDuration: tickDuration,
             efficiency: efficiency
         )
         runProduction(
             structures: state.entities.structures(of: .assembler),
-            prioritizedRecipeIDs: [
-                "craft_turret_core",
-                "craft_wall_kit",
-                "craft_repair_kit",
-                "assemble_power_cell",
-                "etch_circuit",
-                "forge_gear"
-            ],
+            recipeIDs: StructureType.assembler.supportedRecipeIDs,
             state: &state,
             tickDuration: tickDuration,
             efficiency: efficiency
         )
         runProduction(
             structures: state.entities.structures(of: .ammoModule),
-            prioritizedRecipeIDs: ["craft_ammo_plasma", "craft_ammo_heavy", "craft_ammo_light"],
+            recipeIDs: StructureType.ammoModule.supportedRecipeIDs,
             state: &state,
             tickDuration: tickDuration,
             efficiency: efficiency
@@ -550,7 +547,7 @@ public struct EconomySystem: SimulationSystem {
 
     private func runProduction(
         structures: [Entity],
-        prioritizedRecipeIDs: [String],
+        recipeIDs: [String],
         state: inout WorldState,
         tickDuration: Double,
         efficiency: Double
@@ -560,9 +557,9 @@ public struct EconomySystem: SimulationSystem {
             guard let structureType = structure.structureType else { continue }
 
             guard let selectedRecipe = selectRecipe(
-                prioritizedRecipeIDs: prioritizedRecipeIDs,
+                recipeIDs: recipeIDs,
                 structureID: structureID,
-                state: state
+                state: &state
             ) else {
                 state.economy.activeRecipeByStructure.removeValue(forKey: structureID)
                 state.economy.productionProgressByStructure[structureID] = 0
@@ -594,25 +591,35 @@ public struct EconomySystem: SimulationSystem {
     }
 
     private func selectRecipe(
-        prioritizedRecipeIDs: [String],
+        recipeIDs: [String],
         structureID: EntityID,
-        state: WorldState
+        state: inout WorldState
     ) -> RecipeDef? {
+        guard !recipeIDs.isEmpty else { return nil }
+
+        let selectedRecipeID: String
+        if let pinned = state.economy.pinnedRecipeByStructure[structureID],
+           recipeIDs.contains(pinned) {
+            selectedRecipeID = pinned
+        } else if let fallback = recipeIDs.first {
+            selectedRecipeID = fallback
+            state.economy.pinnedRecipeByStructure[structureID] = fallback
+        } else {
+            return nil
+        }
+
+        guard let recipe = recipesByID[selectedRecipeID] else { return nil }
+
         let inventory = localInputInventory(for: structureID, state: state)
         let reserveInventory = state.aggregatedPhysicalInventory()
-        if let pinnedRecipeID = state.economy.pinnedRecipeByStructure[structureID],
-           let pinnedRecipe = recipesByID[pinnedRecipeID],
-           pinnedRecipe.inputs.allSatisfy({ inventory[$0.itemID, default: 0] >= $0.quantity }),
-           canRunRecipeWithoutBreachingConstructionStock(recipe: pinnedRecipe, inventory: reserveInventory) {
-            return pinnedRecipe
+
+        guard recipe.inputs.allSatisfy({ inventory[$0.itemID, default: 0] >= $0.quantity }) else {
+            return nil
         }
-        for recipeID in prioritizedRecipeIDs {
-            guard let recipe = recipesByID[recipeID] else { continue }
-            guard recipe.inputs.allSatisfy({ inventory[$0.itemID, default: 0] >= $0.quantity }) else { continue }
-            guard canRunRecipeWithoutBreachingConstructionStock(recipe: recipe, inventory: reserveInventory) else { continue }
-            return recipe
+        guard canRunRecipeWithoutBreachingConstructionStock(recipe: recipe, inventory: reserveInventory) else {
+            return nil
         }
-        return nil
+        return recipe
     }
 
     private func localInputInventory(for structureID: EntityID, state: WorldState) -> [ItemID: Int] {

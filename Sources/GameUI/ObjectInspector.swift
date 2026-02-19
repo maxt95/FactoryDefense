@@ -26,6 +26,16 @@ public struct ObjectInspectorSection: Identifiable, Hashable, Sendable {
     }
 }
 
+public struct ObjectInspectorRecipeSelection: Hashable, Sendable {
+    public var selectedRecipeID: String
+    public var availableRecipeIDs: [String]
+
+    public init(selectedRecipeID: String, availableRecipeIDs: [String]) {
+        self.selectedRecipeID = selectedRecipeID
+        self.availableRecipeIDs = availableRecipeIDs
+    }
+}
+
 public struct ObjectInspectorViewModel: Identifiable, Sendable {
     public var id: EntityID { entityID }
     public var entityID: EntityID
@@ -34,6 +44,7 @@ public struct ObjectInspectorViewModel: Identifiable, Sendable {
     public var anchorPosition: GridPosition
     public var anchorHeightTiles: Int
     public var sections: [ObjectInspectorSection]
+    public var recipeSelection: ObjectInspectorRecipeSelection?
 
     public init(
         entityID: EntityID,
@@ -41,7 +52,8 @@ public struct ObjectInspectorViewModel: Identifiable, Sendable {
         subtitle: String,
         anchorPosition: GridPosition,
         anchorHeightTiles: Int,
-        sections: [ObjectInspectorSection]
+        sections: [ObjectInspectorSection],
+        recipeSelection: ObjectInspectorRecipeSelection? = nil
     ) {
         self.entityID = entityID
         self.title = title
@@ -49,6 +61,7 @@ public struct ObjectInspectorViewModel: Identifiable, Sendable {
         self.anchorPosition = anchorPosition
         self.anchorHeightTiles = max(1, anchorHeightTiles)
         self.sections = sections
+        self.recipeSelection = recipeSelection
     }
 }
 
@@ -108,19 +121,26 @@ public struct ObjectInspectorBuilder: Sendable {
             operationRows.append(ObjectInspectorRow(label: "Efficiency", value: percentLabel(efficiency)))
         }
 
-        if let recipeID = world.economy.activeRecipeByStructure[entity.id] {
+        let pinnedRecipeID = world.economy.pinnedRecipeByStructure[entity.id]
+        let activeRecipeID = world.economy.activeRecipeByStructure[entity.id]
+        if let recipeID = pinnedRecipeID ?? activeRecipeID {
             operationRows.append(ObjectInspectorRow(label: "Recipe", value: humanizedLabel(recipeID)))
-            let progress = world.economy.productionProgressByStructure[entity.id, default: 0]
-            if let duration = recipeDurationByID[recipeID], duration > 0 {
-                let ratio = min(1.0, max(0, progress / duration))
-                operationRows.append(
-                    ObjectInspectorRow(
-                        label: "Progress",
-                        value: "\(percentLabel(ratio)) (\(decimalLabel(progress))/\(decimalLabel(duration))s)"
-                    )
-                )
+
+            if activeRecipeID == nil, pinnedRecipeID != nil {
+                operationRows.append(ObjectInspectorRow(label: "Status", value: "Waiting for inputs"))
             } else {
-                operationRows.append(ObjectInspectorRow(label: "Progress", value: "\(decimalLabel(progress))s"))
+                let progress = world.economy.productionProgressByStructure[entity.id, default: 0]
+                if let duration = recipeDurationByID[recipeID], duration > 0 {
+                    let ratio = min(1.0, max(0, progress / duration))
+                    operationRows.append(
+                        ObjectInspectorRow(
+                            label: "Progress",
+                            value: "\(percentLabel(ratio)) (\(decimalLabel(progress))/\(decimalLabel(duration))s)"
+                        )
+                    )
+                } else {
+                    operationRows.append(ObjectInspectorRow(label: "Progress", value: "\(decimalLabel(progress))s"))
+                }
             }
         }
 
@@ -165,13 +185,29 @@ public struct ObjectInspectorBuilder: Sendable {
             }
         }
 
+        let recipeSelection: ObjectInspectorRecipeSelection?
+        let availableRecipeIDs = structureType.supportedRecipeIDs
+        if !availableRecipeIDs.isEmpty {
+            let selectedRecipeID = pinnedRecipeID
+                ?? activeRecipeID
+                ?? availableRecipeIDs.first
+                ?? ""
+            recipeSelection = ObjectInspectorRecipeSelection(
+                selectedRecipeID: selectedRecipeID,
+                availableRecipeIDs: availableRecipeIDs
+            )
+        } else {
+            recipeSelection = nil
+        }
+
         return ObjectInspectorViewModel(
             entityID: entity.id,
             title: structureLabel(structureType),
             subtitle: "Structure",
             anchorPosition: entity.position,
             anchorHeightTiles: footprint.height,
-            sections: sections
+            sections: sections,
+            recipeSelection: recipeSelection
         )
     }
 
@@ -320,10 +356,16 @@ import SwiftUI
 public struct ObjectInspectorPopup: View {
     public var model: ObjectInspectorViewModel
     public var onClose: (() -> Void)?
+    public var onSelectRecipe: ((String) -> Void)?
 
-    public init(model: ObjectInspectorViewModel, onClose: (() -> Void)? = nil) {
+    public init(
+        model: ObjectInspectorViewModel,
+        onClose: (() -> Void)? = nil,
+        onSelectRecipe: ((String) -> Void)? = nil
+    ) {
         self.model = model
         self.onClose = onClose
+        self.onSelectRecipe = onSelectRecipe
     }
 
     public var body: some View {
@@ -348,6 +390,32 @@ public struct ObjectInspectorPopup: View {
                     }
                     .buttonStyle(.plain)
                 }
+            }
+
+            if let selection = model.recipeSelection {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Production")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(HUDColor.secondaryText)
+                    Picker(
+                        "Recipe",
+                        selection: Binding(
+                            get: { selection.selectedRecipeID },
+                            set: { newValue in
+                                onSelectRecipe?(newValue)
+                            }
+                        )
+                    ) {
+                        ForEach(selection.availableRecipeIDs, id: \.self) { recipeID in
+                            Text(recipeLabel(recipeID)).tag(recipeID)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(onSelectRecipe == nil)
+                }
+                .padding(8)
+                .background(HUDColor.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
 
             ForEach(model.sections) { section in
@@ -382,6 +450,13 @@ public struct ObjectInspectorPopup: View {
                 .strokeBorder(HUDColor.border, lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.22), radius: 10, y: 6)
+    }
+
+    private func recipeLabel(_ value: String) -> String {
+        value
+            .split(separator: "_")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
     }
 }
 #endif

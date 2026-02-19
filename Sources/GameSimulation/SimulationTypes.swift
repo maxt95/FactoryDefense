@@ -248,6 +248,30 @@ public extension StructureType {
             return 0
         }
     }
+
+    var supportedRecipeIDs: [String] {
+        switch self {
+        case .smelter:
+            return ["smelt_iron", "smelt_copper", "smelt_steel"]
+        case .assembler:
+            return [
+                "forge_gear",
+                "etch_circuit",
+                "assemble_power_cell",
+                "craft_wall_kit",
+                "craft_turret_core",
+                "craft_repair_kit"
+            ]
+        case .ammoModule:
+            return ["craft_ammo_light", "craft_ammo_heavy", "craft_ammo_plasma"]
+        case .hq, .wall, .turretMount, .miner, .powerPlant, .conveyor, .splitter, .merger, .storage:
+            return []
+        }
+    }
+
+    var defaultRecipeID: String? {
+        supportedRecipeIDs.first
+    }
 }
 
 public struct BuildRequest: Codable, Hashable, Sendable {

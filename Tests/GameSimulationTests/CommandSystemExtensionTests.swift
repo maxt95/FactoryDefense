@@ -43,6 +43,28 @@ final class CommandSystemExtensionTests: XCTestCase {
         XCTAssertEqual(placed?.rotation, .south)
     }
 
+    func testPlacingProductionStructureSetsDefaultPinnedRecipe() {
+        let world = makeWorld(inventories: ["plate_steel": 4])
+        let engine = SimulationEngine(worldState: world, systems: [CommandSystem()])
+        engine.enqueue(
+            PlayerCommand(
+                tick: 0,
+                actor: PlayerID(1),
+                payload: .placeStructure(
+                    BuildRequest(structure: .smelter, position: GridPosition(x: 4, y: 4))
+                )
+            )
+        )
+
+        let events = engine.step()
+        let smelterID = events.first(where: { $0.kind == .structurePlaced })?.entity
+        XCTAssertNotNil(smelterID)
+        XCTAssertEqual(
+            smelterID.flatMap { engine.worldState.economy.pinnedRecipeByStructure[$0] },
+            StructureType.smelter.defaultRecipeID
+        )
+    }
+
     func testPinRecipeCommandStoresPinnedRecipe() {
         var entities = EntityStore()
         let smelterID = entities.spawnStructure(.smelter, at: GridPosition(x: 1, y: 1))
@@ -59,6 +81,24 @@ final class CommandSystemExtensionTests: XCTestCase {
         _ = engine.step()
 
         XCTAssertEqual(engine.worldState.economy.pinnedRecipeByStructure[smelterID], "smelt_iron")
+    }
+
+    func testPinRecipeCommandRejectsUnsupportedRecipe() {
+        var entities = EntityStore()
+        let smelterID = entities.spawnStructure(.smelter, at: GridPosition(x: 1, y: 1))
+        let world = makeWorld(entities: entities)
+        let engine = SimulationEngine(worldState: world, systems: [CommandSystem()])
+
+        engine.enqueue(
+            PlayerCommand(
+                tick: 0,
+                actor: PlayerID(1),
+                payload: .pinRecipe(entityID: smelterID, recipeID: "craft_ammo_light")
+            )
+        )
+        _ = engine.step()
+
+        XCTAssertNil(engine.worldState.economy.pinnedRecipeByStructure[smelterID])
     }
 
     func testConfigureConveyorIOCommandStoresRouting() {

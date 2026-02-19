@@ -177,7 +177,10 @@ private struct FactoryDefenseiPadOSGameplayView: View {
                     } else if let inspector = selectedEntityInspectorModel() {
                         ObjectInspectorPopup(
                             model: inspector,
-                            onClose: { selectedTarget = nil }
+                            onClose: { selectedTarget = nil },
+                            onSelectRecipe: { recipeID in
+                                runtime.pinRecipe(entityID: inspector.entityID, recipeID: recipeID)
+                            }
                         )
                         .frame(width: inspectorPopupWidth)
                         .position(inspectorPosition(for: inspector, viewport: proxy.size))
