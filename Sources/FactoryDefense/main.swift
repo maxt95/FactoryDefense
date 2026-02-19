@@ -59,7 +59,8 @@ private struct FactoryDefenseRootView: View {
                 enableDebugViews: enableDebugViews,
                 onRunEnded: { summary in
                     screen = .runSummary(summary)
-                }
+                },
+                onQuit: { screen = .mainMenu }
             )
             .id("gameplay-\(run.difficulty.rawValue)-\(run.seed)")
         case .runSummary(let summary):
@@ -265,18 +266,24 @@ private struct FactoryDefenseGameplayView: View {
     @State private var didReportRunSummary = false
     @State private var activeTechTreeResearchCenterID: EntityID? = nil
     @State private var selectedEntityID: EntityID? = nil
+    @State private var isPaused = false
+    @State private var showsPauseSettings = false
+    @AppStorage("settings.enableDebugViews") private var debugViewsSetting = false
 
     let enableDebugViews: Bool
     let onRunEnded: (RunSummarySnapshot) -> Void
+    let onQuit: () -> Void
 
     init(
         initialWorld: WorldState,
         enableDebugViews: Bool,
-        onRunEnded: @escaping (RunSummarySnapshot) -> Void
+        onRunEnded: @escaping (RunSummarySnapshot) -> Void,
+        onQuit: @escaping () -> Void
     ) {
         _runtime = StateObject(wrappedValue: GameRuntimeController(initialWorld: initialWorld))
         self.enableDebugViews = enableDebugViews
         self.onRunEnded = onRunEnded
+        self.onQuit = onQuit
     }
 
     private static let keyboardPanStep: Float = 56
@@ -314,7 +321,8 @@ private struct FactoryDefenseGameplayView: View {
                     placementResult: runtime.placementResult,
                     onKeyboardPan: { dx, dy, viewport in
                         handleKeyboardPan(deltaX: dx, deltaY: dy, viewport: viewport)
-                    }
+                    },
+                    onEscape: { handleEscape() }
                 )
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
@@ -347,24 +355,32 @@ private struct FactoryDefenseGameplayView: View {
                         }
                 )
 
-                // Fixed HUD layer
+                // Fixed HUD layer (non-interactive)
                 VStack(spacing: 0) {
                     FixedHUDBar(
                         snapshot: hudModel.snapshot,
                         warning: hudModel.warning
                     )
                     Spacer()
+                }
+                .allowsHitTesting(false)
+
+                // Bottom status bar with pause button
+                VStack {
+                    Spacer()
                     HStack(alignment: .bottom) {
                         ModeIndicatorView(
                             mode: interaction.mode,
                             structureName: interaction.isBuildMode ? buildMenu.selectedEntry()?.title : nil
                         )
+                        .allowsHitTesting(false)
                         Spacer()
+                        PauseHUDButton { pauseGame() }
                         GameClockView(tick: runtime.world.tick)
+                            .allowsHitTesting(false)
                     }
                     .padding(16)
                 }
-                .allowsHitTesting(false)
 
                 GameplayOverlayHost(
                     layoutState: $overlayLayout,
@@ -418,6 +434,22 @@ private struct FactoryDefenseGameplayView: View {
                     .transition(.opacity)
                     .animation(.easeInOut(duration: 0.25), value: activeTechTreeResearchCenterID != nil)
                 }
+
+                if isPaused {
+                    PauseMenuOverlay(
+                        onResume: { resumeGame() },
+                        onSettings: { showsPauseSettings = true },
+                        onQuit: {
+                            isPaused = false
+                            onQuit()
+                        }
+                    )
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.2), value: isPaused)
+                }
+            }
+            .sheet(isPresented: $showsPauseSettings) {
+                FactoryDefenseSettingsView(enableDebugViews: $debugViewsSetting)
             }
             .onAppear {
                 runtime.start()
@@ -678,6 +710,26 @@ private struct FactoryDefenseGameplayView: View {
         )
     }
 
+    private func handleEscape() {
+        if activeTechTreeResearchCenterID != nil {
+            closeTechTree()
+        } else if isPaused {
+            resumeGame()
+        } else {
+            pauseGame()
+        }
+    }
+
+    private func pauseGame() {
+        isPaused = true
+        runtime.stop()
+    }
+
+    private func resumeGame() {
+        isPaused = false
+        runtime.start()
+    }
+
     private func closeTechTree() {
         activeTechTreeResearchCenterID = nil
         runtime.start()
@@ -703,10 +755,12 @@ private struct MetalSurfaceView: NSViewRepresentable {
     var highlightedStructure: StructureType?
     var placementResult: PlacementResult
     var onKeyboardPan: (Float, Float, CGSize) -> Void
+    var onEscape: () -> Void
 
     func makeNSView(context: Context) -> MTKView {
         let view = KeyboardPannableMTKView(frame: .zero)
         view.onKeyboardPan = onKeyboardPan
+        view.onEscape = onEscape
         if let renderer = context.coordinator.renderer {
             renderer.debugMode = debugMode
             renderer.attach(to: view)
@@ -719,6 +773,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
         guard let renderer = context.coordinator.renderer else { return }
         if let interactiveView = nsView as? KeyboardPannableMTKView {
             interactiveView.onKeyboardPan = onKeyboardPan
+            interactiveView.onEscape = onEscape
             interactiveView.window?.makeFirstResponder(interactiveView)
         }
         renderer.worldState = world
@@ -745,6 +800,7 @@ private struct MetalSurfaceView: NSViewRepresentable {
 
 private final class KeyboardPannableMTKView: MTKView {
     var onKeyboardPan: ((Float, Float, CGSize) -> Void)?
+    var onEscape: (() -> Void)?
 
     override var acceptsFirstResponder: Bool {
         true
@@ -758,6 +814,14 @@ private final class KeyboardPannableMTKView: MTKView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         super.mouseDown(with: event)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.keyCode == 53 { // Escape
+            onEscape?()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 
     override func keyDown(with event: NSEvent) {

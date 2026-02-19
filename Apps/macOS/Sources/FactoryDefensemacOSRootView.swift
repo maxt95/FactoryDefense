@@ -36,7 +36,8 @@ struct FactoryDefensemacOSRootView: View {
                 enableDebugViews: enableDebugViews,
                 onRunEnded: { summary in
                     screen = .runSummary(summary)
-                }
+                },
+                onQuit: { screen = .mainMenu }
             )
             .id("gameplay-\(run.difficulty.rawValue)-\(run.seed)")
         case .runSummary(let summary):
@@ -263,18 +264,24 @@ private struct FactoryDefensemacOSGameplayView: View {
     @State private var conveyorOutputDirection: CardinalDirection = .east
     @State private var didReportRunSummary = false
     @State private var hoveredGridPosition: GridPosition?
+    @State private var isPaused = false
+    @State private var showsPauseSettings = false
+    @AppStorage("settings.enableDebugViews") private var debugViewsSetting = false
 
     let enableDebugViews: Bool
     let onRunEnded: (RunSummarySnapshot) -> Void
+    let onQuit: () -> Void
 
     init(
         initialWorld: WorldState,
         enableDebugViews: Bool,
-        onRunEnded: @escaping (RunSummarySnapshot) -> Void
+        onRunEnded: @escaping (RunSummarySnapshot) -> Void,
+        onQuit: @escaping () -> Void
     ) {
         _runtime = StateObject(wrappedValue: GameRuntimeController(initialWorld: initialWorld))
         self.enableDebugViews = enableDebugViews
         self.onRunEnded = onRunEnded
+        self.onQuit = onQuit
     }
 
     private static let keyboardPanStep: Float = 56
@@ -360,24 +367,32 @@ private struct FactoryDefensemacOSGameplayView: View {
                         }
                 )
 
-                // Layer 1: Fixed HUD
+                // Layer 1: Fixed HUD (non-interactive)
                 VStack(spacing: 0) {
                     FixedHUDBar(
                         snapshot: hudModel.snapshot,
                         warning: hudModel.warning
                     )
                     Spacer()
+                }
+                .allowsHitTesting(false)
+
+                // Bottom status bar with pause button
+                VStack {
+                    Spacer()
                     HStack(alignment: .bottom) {
                         ModeIndicatorView(
                             mode: interaction.mode,
                             structureName: interaction.isBuildMode ? buildMenu.selectedEntry()?.title : nil
                         )
+                        .allowsHitTesting(false)
                         Spacer()
+                        PauseHUDButton { pauseGame() }
                         GameClockView(tick: runtime.world.tick)
+                            .allowsHitTesting(false)
                     }
                     .padding(16)
                 }
-                .allowsHitTesting(false)
 
                 // Layer 2: Object inspector popups
                 if interaction.mode == .interact {
@@ -436,6 +451,20 @@ private struct FactoryDefensemacOSGameplayView: View {
                     .animation(.easeInOut(duration: 0.25), value: activeTechTreeResearchCenterID != nil)
                 }
 
+                // Layer 5: Pause menu
+                if isPaused {
+                    PauseMenuOverlay(
+                        onResume: { resumeGame() },
+                        onSettings: { showsPauseSettings = true },
+                        onQuit: {
+                            isPaused = false
+                            onQuit()
+                        }
+                    )
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.2), value: isPaused)
+                }
+
                 if let renderDiagnostic {
                     VStack {
                         HStack {
@@ -451,6 +480,9 @@ private struct FactoryDefensemacOSGameplayView: View {
                     }
                     .padding(16)
                 }
+            }
+            .sheet(isPresented: $showsPauseSettings) {
+                FactoryDefenseSettingsView(enableDebugViews: $debugViewsSetting)
             }
             .onAppear {
                 runtime.start()
@@ -704,6 +736,14 @@ private struct FactoryDefensemacOSGameplayView: View {
             }
 
         case .cancel:
+            if isPaused {
+                resumeGame()
+                return
+            }
+            if activeTechTreeResearchCenterID != nil {
+                closeTechTree()
+                return
+            }
             switch interaction.mode {
             case .build:
                 if interaction.isDragDrawActive {
@@ -720,7 +760,7 @@ private struct FactoryDefensemacOSGameplayView: View {
             case .planBelt:
                 interaction.exitPlanBeltMode()
             case .interact:
-                break
+                pauseGame()
             }
         }
     }
@@ -961,6 +1001,16 @@ private struct FactoryDefensemacOSGameplayView: View {
             deltaBaseY: newBoard.basePosition.y - oldBoard.basePosition.y
         )
         cameraState.clampToSafePerimeter(viewport: viewport, board: newBoard)
+    }
+
+    private func pauseGame() {
+        isPaused = true
+        runtime.stop()
+    }
+
+    private func resumeGame() {
+        isPaused = false
+        runtime.start()
     }
 
     private func closeTechTree() {
@@ -1266,6 +1316,14 @@ private final class ScrollableMTKView: MTKView {
         let y = isFlipped ? local.y : (bounds.height - local.y)
         onScrollZoom?(event.scrollingDeltaY, CGPoint(x: local.x, y: y), bounds.size)
         super.scrollWheel(with: event)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.keyCode == 53 { // Escape
+            onKeyAction?(.cancel, bounds.size)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 
     override func keyDown(with event: NSEvent) {
