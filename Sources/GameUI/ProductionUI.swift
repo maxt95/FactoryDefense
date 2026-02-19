@@ -121,6 +121,13 @@ public struct BuildMenuViewModel: Sendable {
             costs: [ItemStack(itemID: "circuit", quantity: 2), ItemStack(itemID: "plate_copper", quantity: 4)]
         ),
         BuildMenuEntry(
+            id: "research_center",
+            title: "Research Center",
+            structure: .researchCenter,
+            category: .utility,
+            costs: [ItemStack(itemID: "plate_iron", quantity: 8), ItemStack(itemID: "circuit", quantity: 4)]
+        ),
+        BuildMenuEntry(
             id: "turret_mount",
             title: "Turret Mount",
             structure: .turretMount,
@@ -809,6 +816,7 @@ public struct BuildingReferencePanel: View {
         case .splitter: return "Splitter"
         case .merger: return "Merger"
         case .storage: return "Storage"
+        case .researchCenter: return "Research Center"
         }
     }
 
@@ -838,6 +846,8 @@ public struct BuildingReferencePanel: View {
             return Color(red: 0.48, green: 0.52, blue: 0.80)
         case .storage:
             return Color(red: 0.60, green: 0.40, blue: 0.20)
+        case .researchCenter:
+            return Color(red: 0.55, green: 0.28, blue: 0.72)
         }
     }
 

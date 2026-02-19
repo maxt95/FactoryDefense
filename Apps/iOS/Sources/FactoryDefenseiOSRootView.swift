@@ -70,6 +70,7 @@ private struct FactoryDefenseiOSGameplayView: View {
     @State private var dragTranslation: CGSize = .zero
     @State private var zoomGestureScale: CGFloat = 1
     @State private var selectedTarget: SelectionTarget?
+    @State private var activeTechTreeResearchCenterID: EntityID? = nil
     @State private var conveyorInputDirection: CardinalDirection = .west
     @State private var conveyorOutputDirection: CardinalDirection = .east
 
@@ -175,12 +176,20 @@ private struct FactoryDefenseiOSGameplayView: View {
                         )
                         .position(widgetPos)
                     } else if let inspector = selectedEntityInspectorModel() {
+                        let isResearchCenter = runtime.world.entities.entity(id: inspector.entityID)?.structureType == .researchCenter
                         ObjectInspectorPopup(
                             model: inspector,
                             onClose: { selectedTarget = nil },
                             onSelectRecipe: { recipeID in
                                 runtime.pinRecipe(entityID: inspector.entityID, recipeID: recipeID)
-                            }
+                            },
+                            actionLabel: isResearchCenter ? "Open Research" : nil,
+                            onAction: isResearchCenter ? {
+                                let entityID = inspector.entityID
+                                selectedTarget = nil
+                                activeTechTreeResearchCenterID = entityID
+                                runtime.stop()
+                            } : nil
                         )
                         .frame(width: inspectorPopupWidth)
                         .position(inspectorPosition(for: inspector, viewport: proxy.size))
@@ -201,6 +210,21 @@ private struct FactoryDefenseiOSGameplayView: View {
                     windows: overlayWindowDefinitions
                 ) { windowID in
                     overlayContent(for: windowID)
+                }
+
+                // Full-screen tech tree
+                if let rcID = activeTechTreeResearchCenterID {
+                    TechTreeFullScreenView(
+                        techTree: $techTree,
+                        researchCenterEntityID: rcID,
+                        researchCenterBuffer: runtime.world.economy.structureInputBuffers[rcID, default: [:]],
+                        onClose: { closeTechTree() },
+                        onUnlock: { nodeID in
+                            handleTechUnlock(nodeID: nodeID, researchCenterID: rcID)
+                        }
+                    )
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.25), value: activeTechTreeResearchCenterID != nil)
                 }
             }
             .onAppear {
@@ -280,7 +304,6 @@ private struct FactoryDefenseiOSGameplayView: View {
             GameplayOverlayWindowDefinition(id: .buildMenu, title: "Build", preferredWidth: 290, preferredHeight: 520),
             GameplayOverlayWindowDefinition(id: .buildingReference, title: "Buildings", preferredWidth: 290, preferredHeight: 520),
             GameplayOverlayWindowDefinition(id: .tileLegend, title: "Tile Legend", preferredWidth: 280, preferredHeight: 340),
-            GameplayOverlayWindowDefinition(id: .techTree, title: "Tech Tree", preferredWidth: 340, preferredHeight: 320),
             GameplayOverlayWindowDefinition(id: .onboarding, title: "Objectives", preferredWidth: 360, preferredHeight: 340),
             GameplayOverlayWindowDefinition(id: .tuningDashboard, title: "Telemetry", preferredWidth: 220, preferredHeight: 260)
         ]
@@ -299,9 +322,6 @@ private struct FactoryDefenseiOSGameplayView: View {
 
         case .tileLegend:
             TileLegendPanel()
-
-        case .techTree:
-            TechTreePanel(nodes: techTree.nodes(inventory: inventory))
 
         case .onboarding:
             OnboardingPanel(steps: onboarding.steps)
@@ -341,8 +361,6 @@ private struct FactoryDefenseiOSGameplayView: View {
             return CGPoint(x: 348, y: 96)
         case .tileLegend:
             return CGPoint(x: 1032, y: 96)
-        case .techTree:
-            return CGPoint(x: 660, y: 96)
         case .onboarding:
             return CGPoint(x: 660, y: 408)
         case .tuningDashboard:
@@ -557,6 +575,20 @@ private struct FactoryDefenseiOSGameplayView: View {
             deltaBaseY: newBoard.basePosition.y - oldBoard.basePosition.y
         )
         cameraState.clampToSafePerimeter(viewport: viewport, board: newBoard)
+    }
+
+    private func closeTechTree() {
+        activeTechTreeResearchCenterID = nil
+        runtime.start()
+    }
+
+    private func handleTechUnlock(nodeID: String, researchCenterID: EntityID) -> Bool {
+        guard let node = techTree.nodeDefs.first(where: { $0.id == nodeID }) else { return false }
+        guard !techTree.unlockedNodeIDs.contains(nodeID) else { return true }
+        guard node.prerequisites.allSatisfy({ techTree.unlockedNodeIDs.contains($0) }) else { return false }
+        guard runtime.deductFromInputBuffer(entityID: researchCenterID, costs: node.costs) else { return false }
+        techTree.unlockedNodeIDs.insert(nodeID)
+        return true
     }
 
     private func pickGrid(at location: CGPoint, viewport: CGSize) -> GridPosition? {

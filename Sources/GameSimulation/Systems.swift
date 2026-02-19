@@ -1509,6 +1509,8 @@ public struct EconomySystem: SimulationSystem {
             return true
         case .turretMount:
             return itemID.hasPrefix("ammo_")
+        case .researchCenter:
+            return true
         default:
             return false
         }
@@ -1527,6 +1529,8 @@ public struct EconomySystem: SimulationSystem {
             return 24
         case .turretMount:
             return 6
+        case .researchCenter:
+            return 24
         default:
             return 0
         }

@@ -153,6 +153,7 @@ public enum StructureType: String, Codable, CaseIterable, Sendable {
     case splitter
     case merger
     case storage
+    case researchCenter
 }
 
 public struct StructureFootprint: Codable, Hashable, Sendable {
@@ -186,7 +187,7 @@ public extension StructureType {
         switch self {
         case .hq:
             return StructureFootprint(width: 2, height: 2)
-        case .wall, .turretMount, .miner, .smelter, .assembler, .ammoModule, .powerPlant, .conveyor, .splitter, .merger, .storage:
+        case .wall, .turretMount, .miner, .smelter, .assembler, .ammoModule, .powerPlant, .conveyor, .splitter, .merger, .storage, .researchCenter:
             return StructureFootprint(width: 1, height: 1)
         }
     }
@@ -221,6 +222,8 @@ public extension StructureType {
             return [ItemStack(itemID: "wall_kit", quantity: 1)]
         case .turretMount:
             return [ItemStack(itemID: "turret_core", quantity: 1), ItemStack(itemID: "plate_steel", quantity: 2)]
+        case .researchCenter:
+            return [ItemStack(itemID: "plate_iron", quantity: 8), ItemStack(itemID: "circuit", quantity: 4)]
         }
     }
 
@@ -246,6 +249,8 @@ public extension StructureType {
             return 0
         case .wall, .turretMount:
             return 0
+        case .researchCenter:
+            return 2
         }
     }
 
@@ -264,7 +269,7 @@ public extension StructureType {
             ]
         case .ammoModule:
             return ["craft_ammo_light", "craft_ammo_heavy", "craft_ammo_plasma"]
-        case .hq, .wall, .turretMount, .miner, .powerPlant, .conveyor, .splitter, .merger, .storage:
+        case .hq, .wall, .turretMount, .miner, .powerPlant, .conveyor, .splitter, .merger, .storage, .researchCenter:
             return []
         }
     }

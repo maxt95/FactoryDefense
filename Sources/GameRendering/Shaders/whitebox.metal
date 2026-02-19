@@ -167,6 +167,7 @@ inline float structure_height_in_tiles(uint typeRaw) {
         case 10u: return 0.20; // merger
         case 11u: return 0.72; // storage
         case 12u: return 0.90; // hq
+        case 13u: return 0.65; // research center
         default: return 0.50;
     }
 }
@@ -185,6 +186,7 @@ inline float3 structure_base_color(uint typeRaw) {
         case 10u: return float3(0.48, 0.52, 0.80);
         case 11u: return float3(0.60, 0.40, 0.20);
         case 12u: return float3(0.20, 0.80, 0.90);
+        case 13u: return float3(0.55, 0.28, 0.72); // research center (purple)
         default: return float3(0.75, 0.76, 0.78);
     }
 }

@@ -95,13 +95,13 @@ final class OverlayWindowingTests: XCTestCase {
         var layout = GameplayOverlayLayoutState.defaultLayout(viewportSize: viewport)
 
         layout.updateWindowSize(
-            id: .techTree,
+            id: .onboarding,
             size: CGSize(width: 700, height: 300),
             viewportSize: viewport
         )
 
-        guard let state = layout.windowState(for: .techTree) else {
-            return XCTFail("Expected tech tree state")
+        guard let state = layout.windowState(for: .onboarding) else {
+            return XCTFail("Expected onboarding state")
         }
         XCTAssertEqual(state.size.width, 700, accuracy: 0.001)
         XCTAssertEqual(state.size.height, 300, accuracy: 0.001)
@@ -139,7 +139,7 @@ final class OverlayWindowingTests: XCTestCase {
         )
         var moved = baseline
         moved.setDragPosition(
-            windowID: .techTree,
+            windowID: .onboarding,
             origin: CGPoint(x: 200, y: 240),
             viewportSize: CGSize(width: 1366, height: 768)
         )
@@ -148,11 +148,11 @@ final class OverlayWindowingTests: XCTestCase {
         )
 
         guard
-            let movedOrigin = moved.windowState(for: .techTree)?.origin,
-            let baselineOrigin = baseline.windowState(for: .techTree)?.origin,
-            let freshOrigin = fresh.windowState(for: .techTree)?.origin
+            let movedOrigin = moved.windowState(for: .onboarding)?.origin,
+            let baselineOrigin = baseline.windowState(for: .onboarding)?.origin,
+            let freshOrigin = fresh.windowState(for: .onboarding)?.origin
         else {
-            return XCTFail("Expected tech tree window states")
+            return XCTFail("Expected onboarding window states")
         }
 
         XCTAssertNotEqual(movedOrigin, baselineOrigin)

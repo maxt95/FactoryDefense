@@ -203,6 +203,7 @@ public enum WhiteboxStructureTypeID: UInt32, Sendable {
     case merger = 10
     case storage = 11
     case hq = 12
+    case researchCenter = 13
 
     public init(structureType: StructureType) {
         switch structureType {
@@ -230,6 +231,8 @@ public enum WhiteboxStructureTypeID: UInt32, Sendable {
             self = .merger
         case .storage:
             self = .storage
+        case .researchCenter:
+            self = .researchCenter
         }
     }
 }

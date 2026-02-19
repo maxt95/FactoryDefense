@@ -288,7 +288,7 @@ public extension StructureType {
         switch self {
         case .conveyor, .splitter, .merger, .turretMount:
             return false
-        case .hq, .wall, .miner, .smelter, .assembler, .ammoModule, .powerPlant, .storage:
+        case .hq, .wall, .miner, .smelter, .assembler, .ammoModule, .powerPlant, .storage, .researchCenter:
             return true
         }
     }

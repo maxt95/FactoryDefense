@@ -376,6 +376,23 @@ public final class GameRuntimeController: ObservableObject {
         }
     }
 
+    public func deductFromInputBuffer(entityID: EntityID, costs: [ItemStack]) -> Bool {
+        var buffer = engine.worldState.economy.structureInputBuffers[entityID, default: [:]]
+        for cost in costs {
+            guard buffer[cost.itemID, default: 0] >= cost.quantity else { return false }
+        }
+        for cost in costs {
+            buffer[cost.itemID, default: 0] -= cost.quantity
+            if buffer[cost.itemID, default: 0] <= 0 {
+                buffer.removeValue(forKey: cost.itemID)
+            }
+        }
+        engine.worldState.economy.structureInputBuffers[entityID] = buffer
+        engine.worldState.rebuildAggregatedInventory()
+        world = engine.worldState
+        return true
+    }
+
     public func snapshot() -> WorldSnapshot {
         engine.makeSnapshot()
     }
@@ -537,6 +554,10 @@ extension GameRuntimeController {
             // Buildings output in all directions
             return true
 
+        case .researchCenter:
+            // Research Centers are input-only, never feed items out
+            return false
+
         default:
             return false
         }
@@ -574,7 +595,7 @@ extension GameRuntimeController {
             let facing = neighbor.rotation.direction
             return dirFromNeighborToUs == facing.left || dirFromNeighborToUs == facing.right
 
-        case .miner, .smelter, .assembler, .ammoModule, .storage, .hq, .powerPlant:
+        case .miner, .smelter, .assembler, .ammoModule, .storage, .hq, .powerPlant, .researchCenter:
             // Buildings accept from all directions
             return true
 

@@ -330,6 +330,8 @@ public struct ObjectInspectorBuilder: Sendable {
             return "Merger"
         case .storage:
             return "Storage"
+        case .researchCenter:
+            return "Research Center"
         }
     }
 
@@ -357,15 +359,21 @@ public struct ObjectInspectorPopup: View {
     public var model: ObjectInspectorViewModel
     public var onClose: (() -> Void)?
     public var onSelectRecipe: ((String) -> Void)?
+    public var actionLabel: String?
+    public var onAction: (() -> Void)?
 
     public init(
         model: ObjectInspectorViewModel,
         onClose: (() -> Void)? = nil,
-        onSelectRecipe: ((String) -> Void)? = nil
+        onSelectRecipe: ((String) -> Void)? = nil,
+        actionLabel: String? = nil,
+        onAction: (() -> Void)? = nil
     ) {
         self.model = model
         self.onClose = onClose
         self.onSelectRecipe = onSelectRecipe
+        self.actionLabel = actionLabel
+        self.onAction = onAction
     }
 
     public var body: some View {
@@ -440,6 +448,27 @@ public struct ObjectInspectorPopup: View {
                 .padding(8)
                 .background(HUDColor.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+
+            if let actionLabel, let onAction {
+                Button(action: onAction) {
+                    HStack {
+                        Text(actionLabel)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(HUDColor.primaryText)
+                        Spacer()
+                        Image(systemName: "arrow.right.circle.fill")
+                            .foregroundStyle(HUDColor.accentTeal)
+                    }
+                }
+                .buttonStyle(.plain)
+                .padding(10)
+                .background(HUDColor.accentTeal.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(HUDColor.accentTeal.opacity(0.4), lineWidth: 1)
+                }
             }
         }
         .padding(10)

@@ -263,6 +263,8 @@ private struct FactoryDefenseGameplayView: View {
     @State private var dragTranslation: CGSize = .zero
     @State private var zoomGestureScale: CGFloat = 1
     @State private var didReportRunSummary = false
+    @State private var activeTechTreeResearchCenterID: EntityID? = nil
+    @State private var selectedEntityID: EntityID? = nil
 
     let enableDebugViews: Bool
     let onRunEnded: (RunSummarySnapshot) -> Void
@@ -279,6 +281,7 @@ private struct FactoryDefenseGameplayView: View {
 
     private static let keyboardPanStep: Float = 56
     private let dragDrawPlanner = GameplayDragDrawPlanner()
+    private let objectInspectorBuilder = ObjectInspectorBuilder()
 
     private var selectedStructure: StructureType {
         interaction.selectedStructure(from: buildMenu)
@@ -371,6 +374,50 @@ private struct FactoryDefenseGameplayView: View {
                 ) { windowID in
                     overlayContent(for: windowID)
                 }
+
+                // Object inspector popup (interact mode)
+                if interaction.mode == .interact,
+                   let entityID = selectedEntityID,
+                   let inspector = objectInspectorBuilder.build(entityID: entityID, in: runtime.world) {
+                    let entity = runtime.world.entities.entity(id: entityID)
+                    let isResearchCenter = entity?.structureType == .researchCenter
+                    let screenPos = WhiteboxPicker().screenPosition(
+                        for: inspector.anchorPosition,
+                        viewport: proxy.size,
+                        camera: cameraState,
+                        board: runtime.world.board
+                    )
+                    ObjectInspectorPopup(
+                        model: inspector,
+                        onClose: { selectedEntityID = nil },
+                        onSelectRecipe: { recipeID in
+                            runtime.pinRecipe(entityID: entityID, recipeID: recipeID)
+                        },
+                        actionLabel: isResearchCenter ? "Open Research" : nil,
+                        onAction: isResearchCenter ? {
+                            selectedEntityID = nil
+                            activeTechTreeResearchCenterID = entityID
+                            runtime.stop()
+                        } : nil
+                    )
+                    .frame(width: 300)
+                    .position(x: min(max(160, screenPos.x), proxy.size.width - 160),
+                              y: min(max(120, screenPos.y - 80), proxy.size.height - 120))
+                }
+
+                if let rcID = activeTechTreeResearchCenterID {
+                    TechTreeFullScreenView(
+                        techTree: $techTree,
+                        researchCenterEntityID: rcID,
+                        researchCenterBuffer: runtime.world.economy.structureInputBuffers[rcID, default: [:]],
+                        onClose: { closeTechTree() },
+                        onUnlock: { nodeID in
+                            handleTechUnlock(nodeID: nodeID, researchCenterID: rcID)
+                        }
+                    )
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.25), value: activeTechTreeResearchCenterID != nil)
+                }
             }
             .onAppear {
                 runtime.start()
@@ -406,6 +453,7 @@ private struct FactoryDefenseGameplayView: View {
                 }
             }
             .onChange(of: interaction.mode) { _, mode in
+                selectedEntityID = nil
                 switch mode {
                 case .build:
                     if let highlighted = runtime.highlightedCell {
@@ -431,7 +479,6 @@ private struct FactoryDefenseGameplayView: View {
             GameplayOverlayWindowDefinition(id: .buildMenu, title: "Build", preferredWidth: 320, preferredHeight: 520),
             GameplayOverlayWindowDefinition(id: .buildingReference, title: "Buildings", preferredWidth: 300, preferredHeight: 520),
             GameplayOverlayWindowDefinition(id: .tileLegend, title: "Tile Legend", preferredWidth: 300, preferredHeight: 340),
-            GameplayOverlayWindowDefinition(id: .techTree, title: "Tech Tree", preferredWidth: 360, preferredHeight: 320),
             GameplayOverlayWindowDefinition(id: .onboarding, title: "Objectives", preferredWidth: 360, preferredHeight: 340),
             GameplayOverlayWindowDefinition(id: .tuningDashboard, title: "Telemetry", preferredWidth: 240, preferredHeight: 260)
         ]
@@ -450,9 +497,6 @@ private struct FactoryDefenseGameplayView: View {
 
         case .tileLegend:
             TileLegendPanel()
-
-        case .techTree:
-            TechTreePanel(nodes: techTree.nodes(inventory: inventory))
 
         case .onboarding:
             OnboardingPanel(steps: onboarding.steps)
@@ -492,8 +536,6 @@ private struct FactoryDefenseGameplayView: View {
             return CGPoint(x: 348, y: 96)
         case .tileLegend:
             return CGPoint(x: 1032, y: 96)
-        case .techTree:
-            return CGPoint(x: 660, y: 96)
         case .onboarding:
             return CGPoint(x: 660, y: 408)
         case .tuningDashboard:
@@ -508,6 +550,12 @@ private struct FactoryDefenseGameplayView: View {
         }
 
         guard interaction.isBuildMode else {
+            // In interact mode, select entity for inspector popup
+            if let entity = runtime.world.entities.selectableEntity(at: position) {
+                selectedEntityID = entity.id
+            } else {
+                selectedEntityID = nil
+            }
             runtime.clearPlacementPreview()
             return
         }
@@ -628,6 +676,20 @@ private struct FactoryDefenseGameplayView: View {
             board: runtime.world.board,
             camera: cameraState
         )
+    }
+
+    private func closeTechTree() {
+        activeTechTreeResearchCenterID = nil
+        runtime.start()
+    }
+
+    private func handleTechUnlock(nodeID: String, researchCenterID: EntityID) -> Bool {
+        guard let node = techTree.nodeDefs.first(where: { $0.id == nodeID }) else { return false }
+        guard !techTree.unlockedNodeIDs.contains(nodeID) else { return true }
+        guard node.prerequisites.allSatisfy({ techTree.unlockedNodeIDs.contains($0) }) else { return false }
+        guard runtime.deductFromInputBuffer(entityID: researchCenterID, costs: node.costs) else { return false }
+        techTree.unlockedNodeIDs.insert(nodeID)
+        return true
     }
 }
 
