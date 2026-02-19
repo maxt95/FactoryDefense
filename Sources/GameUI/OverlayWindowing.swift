@@ -6,8 +6,6 @@ import SwiftUI
 #endif
 
 public enum GameplayOverlayWindowID: String, CaseIterable, Sendable {
-    case topControls
-    case resources
     case buildMenu
     case buildingReference
     case tileLegend
@@ -49,14 +47,12 @@ public struct GameplayOverlayLayoutState: Sendable {
         safeAreaInsets: SafeAreaInsets = .zero
     ) -> GameplayOverlayLayoutState {
         let defaults: [(GameplayOverlayWindowID, CGPoint, CGSize)] = [
-            (.topControls, CGPoint(x: 16, y: 16), CGSize(width: 560, height: 96)),
-            (.resources, CGPoint(x: 16, y: 124), CGSize(width: 860, height: 220)),
-            (.buildMenu, CGPoint(x: 16, y: 356), CGSize(width: 320, height: 460)),
-            (.buildingReference, CGPoint(x: 348, y: 356), CGSize(width: 300, height: 460)),
-            (.tileLegend, CGPoint(x: 1032, y: 356), CGSize(width: 280, height: 240)),
-            (.techTree, CGPoint(x: 660, y: 356), CGSize(width: 360, height: 300)),
-            (.onboarding, CGPoint(x: 660, y: 668), CGSize(width: 360, height: 300)),
-            (.tuningDashboard, CGPoint(x: 660, y: 980), CGSize(width: 220, height: 220))
+            (.buildMenu, CGPoint(x: 16, y: 96), CGSize(width: 320, height: 460)),
+            (.buildingReference, CGPoint(x: 348, y: 96), CGSize(width: 300, height: 460)),
+            (.tileLegend, CGPoint(x: 1032, y: 96), CGSize(width: 280, height: 240)),
+            (.techTree, CGPoint(x: 660, y: 96), CGSize(width: 360, height: 300)),
+            (.onboarding, CGPoint(x: 660, y: 408), CGSize(width: 360, height: 300)),
+            (.tuningDashboard, CGPoint(x: 660, y: 720), CGSize(width: 220, height: 220))
         ]
 
         var stateByID: [GameplayOverlayWindowID: GameplayOverlayWindowState] = [:]
@@ -224,15 +220,15 @@ public struct GameplayOverlayWindowChrome<Content: View>: View {
                 HStack(spacing: 8) {
                     Text(title)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(HUDColor.primaryText)
                     Spacer(minLength: 8)
                     Image(systemName: "line.3.horizontal")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(HUDColor.secondaryText)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
-                .background(.thinMaterial)
+                .background(HUDColor.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .contentShape(Rectangle())
                 .gesture(
@@ -256,11 +252,11 @@ public struct GameplayOverlayWindowChrome<Content: View>: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(8)
-            .background(.ultraThinMaterial)
+            .background(HUDColor.background.opacity(0.92))
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay {
                 RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                    .strokeBorder(HUDColor.border, lineWidth: 1)
             }
             .simultaneousGesture(
                 TapGesture().onEnded { onFocus() }
@@ -268,9 +264,9 @@ public struct GameplayOverlayWindowChrome<Content: View>: View {
 
             Image(systemName: "arrow.up.left.and.arrow.down.right")
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(HUDColor.secondaryText)
                 .padding(6)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                .background(HUDColor.surface, in: RoundedRectangle(cornerRadius: 6))
                 .contentShape(Rectangle())
                 .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)
@@ -380,22 +376,18 @@ public struct GameplayOverlayHost<Content: View>: View {
 
     private func defaultOrigin(for windowID: GameplayOverlayWindowID) -> CGPoint {
         switch windowID {
-        case .topControls:
-            return CGPoint(x: 16, y: 16)
-        case .resources:
-            return CGPoint(x: 16, y: 124)
         case .buildMenu:
-            return CGPoint(x: 16, y: 356)
+            return CGPoint(x: 16, y: 96)
         case .buildingReference:
-            return CGPoint(x: 348, y: 356)
+            return CGPoint(x: 348, y: 96)
         case .tileLegend:
-            return CGPoint(x: 1032, y: 356)
+            return CGPoint(x: 1032, y: 96)
         case .techTree:
-            return CGPoint(x: 660, y: 356)
+            return CGPoint(x: 660, y: 96)
         case .onboarding:
-            return CGPoint(x: 660, y: 668)
+            return CGPoint(x: 660, y: 408)
         case .tuningDashboard:
-            return CGPoint(x: 660, y: 980)
+            return CGPoint(x: 660, y: 720)
         }
     }
 }

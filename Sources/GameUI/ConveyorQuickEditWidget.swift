@@ -60,7 +60,11 @@ public struct ConveyorQuickEditWidget: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(.ultraThinMaterial)
+        .background(HUDColor.background.opacity(0.92))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(HUDColor.border, lineWidth: 1)
+        }
     }
 }

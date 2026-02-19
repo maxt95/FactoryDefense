@@ -76,9 +76,10 @@ public struct OrePatchInspectorPopup: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.title)
                         .font(.headline)
+                        .foregroundStyle(HUDColor.primaryText)
                     Text(model.subtitle)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(HUDColor.secondaryText)
                 }
 
                 Spacer(minLength: 8)
@@ -87,7 +88,7 @@ public struct OrePatchInspectorPopup: View {
                     Button(action: onClose) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(HUDColor.secondaryText)
                     }
                     .buttonStyle(.plain)
                 }
@@ -97,31 +98,32 @@ public struct OrePatchInspectorPopup: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(section.title)
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(HUDColor.secondaryText)
 
                     ForEach(section.rows) { row in
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text(row.label)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(HUDColor.secondaryText)
                             Spacer(minLength: 8)
                             Text(row.value)
                                 .font(.caption.monospacedDigit())
+                                .foregroundStyle(HUDColor.primaryText)
                                 .multilineTextAlignment(.trailing)
                         }
                     }
                 }
                 .padding(8)
-                .background(Color.white.opacity(0.12))
+                .background(HUDColor.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
         .padding(10)
-        .background(.ultraThinMaterial)
+        .background(HUDColor.background.opacity(0.92))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay {
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                .strokeBorder(HUDColor.border, lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.22), radius: 10, y: 6)
     }

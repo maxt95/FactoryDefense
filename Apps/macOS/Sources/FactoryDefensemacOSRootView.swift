@@ -291,6 +291,10 @@ private struct FactoryDefensemacOSGameplayView: View {
         runtime.world.economy.inventories
     }
 
+    private var hudModel: HUDViewModel {
+        HUDViewModel.build(from: runtime.world)
+    }
+
     private var dragPreviewAffordableCount: Int {
         guard interaction.isDragDrawActive else { return 0 }
         let affordable = interaction.previewAffordableCount(
@@ -355,6 +359,26 @@ private struct FactoryDefensemacOSGameplayView: View {
                         }
                 )
 
+                // Layer 1: Fixed HUD
+                VStack(spacing: 0) {
+                    FixedHUDBar(
+                        snapshot: hudModel.snapshot,
+                        warning: hudModel.warning
+                    )
+                    Spacer()
+                    HStack(alignment: .bottom) {
+                        ModeIndicatorView(
+                            mode: interaction.mode,
+                            structureName: interaction.isBuildMode ? buildMenu.selectedEntry()?.title : nil
+                        )
+                        Spacer()
+                        GameClockView(tick: runtime.world.tick)
+                    }
+                    .padding(16)
+                }
+                .allowsHitTesting(false)
+
+                // Layer 2: Object inspector popups
                 if interaction.mode == .interact {
                     if let inspector = selectedEntityInspectorModel() {
                         let inspectorPosition = inspectorPosition(for: inspector, viewport: proxy.size)
@@ -375,6 +399,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                     }
                 }
 
+                // Layer 3: Moveable overlay windows
                 GameplayOverlayHost(
                     layoutState: $overlayLayout,
                     viewportSize: proxy.size,
@@ -478,8 +503,6 @@ private struct FactoryDefensemacOSGameplayView: View {
 
     private var overlayWindowDefinitions: [GameplayOverlayWindowDefinition] {
         [
-            GameplayOverlayWindowDefinition(id: .topControls, title: "Controls", preferredWidth: 560, preferredHeight: 120),
-            GameplayOverlayWindowDefinition(id: .resources, title: "Resources", preferredWidth: 860, preferredHeight: 260),
             GameplayOverlayWindowDefinition(id: .buildMenu, title: "Build", preferredWidth: 320, preferredHeight: 520),
             GameplayOverlayWindowDefinition(id: .buildingReference, title: "Buildings", preferredWidth: 300, preferredHeight: 520),
             GameplayOverlayWindowDefinition(id: .tileLegend, title: "Tile Legend", preferredWidth: 300, preferredHeight: 340),
@@ -492,82 +515,6 @@ private struct FactoryDefensemacOSGameplayView: View {
     @ViewBuilder
     private func overlayContent(for windowID: GameplayOverlayWindowID) -> some View {
         switch windowID {
-        case .topControls:
-            HStack {
-                Text("Factory Defense macOS")
-                    .font(.headline)
-                    .padding(8)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                Text("Placement: \(placementLabel(placementFeedback.displayedResult(current: runtime.placementResult)))")
-                    .font(.caption)
-                    .padding(8)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                if interaction.isDragDrawActive {
-                    Text("Preview: \(interaction.dragPreviewPath.count) tiles")
-                        .font(.caption)
-                        .padding(8)
-                        .background(.ultraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-
-                Picker("Mode", selection: $interaction.mode) {
-                    ForEach(GameplayInteractionMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 210)
-
-                Button("Demolish") {
-                    requestDemolishSelected()
-                }
-                .buttonStyle(.bordered)
-                .disabled(selectedDemolishableEntityID == nil)
-
-                if interaction.mode == .interact, let selectedConveyorEntityID {
-                    Divider()
-                        .frame(height: 20)
-                    Text("Conveyor I/O")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Picker("Input", selection: $conveyorInputDirection) {
-                        ForEach(CardinalDirection.allCases, id: \.self) { direction in
-                            Text(direction.rawValue.capitalized).tag(direction)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 100)
-                    Picker("Output", selection: $conveyorOutputDirection) {
-                        ForEach(CardinalDirection.allCases, id: \.self) { direction in
-                            Text(direction.rawValue.capitalized).tag(direction)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 100)
-                    Button("Apply") {
-                        runtime.configureConveyorIO(
-                            entityID: selectedConveyorEntityID,
-                            inputDirection: conveyorInputDirection,
-                            outputDirection: conveyorOutputDirection
-                        )
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(conveyorInputDirection == conveyorOutputDirection)
-                }
-
-                Spacer(minLength: 8)
-            }
-            .padding(10)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-
-        case .resources:
-            ResourceHUDPanel(world: runtime.world, techNodes: techTree.nodes(inventory: inventory))
-
         case .buildMenu:
             BuildMenuPanel(viewModel: buildMenu, inventory: inventory) { entry in
                 interaction.selectBuildEntry(entry.id, in: &buildMenu)
@@ -614,45 +561,18 @@ private struct FactoryDefensemacOSGameplayView: View {
 
     private func defaultOrigin(for windowID: GameplayOverlayWindowID) -> CGPoint {
         switch windowID {
-        case .topControls:
-            return CGPoint(x: 16, y: 16)
-        case .resources:
-            return CGPoint(x: 16, y: 124)
         case .buildMenu:
-            return CGPoint(x: 16, y: 356)
+            return CGPoint(x: 16, y: 96)
         case .buildingReference:
-            return CGPoint(x: 348, y: 356)
+            return CGPoint(x: 348, y: 96)
         case .tileLegend:
-            return CGPoint(x: 1032, y: 356)
+            return CGPoint(x: 1032, y: 96)
         case .techTree:
-            return CGPoint(x: 660, y: 356)
+            return CGPoint(x: 660, y: 96)
         case .onboarding:
-            return CGPoint(x: 660, y: 668)
+            return CGPoint(x: 660, y: 408)
         case .tuningDashboard:
-            return CGPoint(x: 660, y: 980)
-        }
-    }
-
-    private func placementLabel(_ result: PlacementResult) -> String {
-        switch result {
-        case .ok:
-            return "Valid"
-        case .occupied:
-            return "Occupied"
-        case .outOfBounds:
-            return "Out of bounds"
-        case .blocksCriticalPath:
-            return "Blocks path"
-        case .restrictedZone:
-            return "Restricted"
-        case .insufficientResources:
-            return "Insufficient resources"
-        case .invalidMinerPlacement:
-            return "Needs adjacent ore patch"
-        case .invalidTurretMountPlacement:
-            return "Requires wall segment"
-        case .invalidRemoval:
-            return "Cannot remove"
+            return CGPoint(x: 660, y: 720)
         }
     }
 

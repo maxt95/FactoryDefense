@@ -44,6 +44,18 @@ public struct LayoutProfile: Sendable {
         self.radialMenuEnabled = radialMenuEnabled
     }
 
+    public var fixedHUDHeight: CGFloat {
+        switch aspectClass {
+        case .compact: return 96
+        case .standard: return 80
+        case .wide: return 80
+        }
+    }
+
+    public var resourceTrayVisible: Bool {
+        aspectClass != .compact || viewportSize.width >= 400
+    }
+
     public static func resolve(viewportSize: CGSize, safeAreaInsets: SafeAreaInsets) -> LayoutProfile {
         let aspect = max(0.1, viewportSize.width / max(1, viewportSize.height))
 

@@ -319,34 +319,46 @@ public struct BuildMenuPanel: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Build")
                 .font(.headline)
+                .foregroundStyle(HUDColor.primaryText)
 
             ForEach(BuildMenuCategory.allCases, id: \.self) { category in
                 if let entries = viewModel.groupedEntries()[category], !entries.isEmpty {
                     Text(category.rawValue.capitalized)
                         .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(HUDColor.primaryText)
                         .padding(.top, 4)
 
                     ForEach(entries) { entry in
                         let affordable = viewModel.isAffordable(entry, inventory: inventory)
+                        let isSelected = viewModel.selectedEntryID == entry.id
                         Button(action: { onSelect(entry) }) {
                             HStack {
                                 Text(entry.title)
+                                    .foregroundStyle(HUDColor.primaryText)
                                 Spacer()
                                 Text(costLabel(entry.costs))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(HUDColor.secondaryText)
                             }
                         }
                         .buttonStyle(.plain)
                         .padding(6)
-                        .background(affordable ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
+                        .background(
+                            isSelected
+                                ? HUDColor.accentTeal.opacity(0.20)
+                                : affordable ? HUDColor.accentGreen.opacity(0.15) : HUDColor.accentRed.opacity(0.15)
+                        )
                         .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay {
+                            if isSelected {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(HUDColor.border, lineWidth: 1)
+                            }
+                        }
                     }
                 }
             }
         }
         .padding(10)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func costLabel(_ costs: [ItemStack]) -> String {
@@ -365,6 +377,7 @@ public struct TechTreePanel: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Tech Tree")
                 .font(.headline)
+                .foregroundStyle(HUDColor.primaryText)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -372,9 +385,10 @@ public struct TechTreePanel: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(node.title)
                                 .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(HUDColor.primaryText)
                             Text(statusLabel(node.status))
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(HUDColor.secondaryText)
                         }
                         .padding(8)
                         .frame(width: 150, alignment: .leading)
@@ -385,8 +399,6 @@ public struct TechTreePanel: View {
             }
         }
         .padding(10)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func statusLabel(_ status: TechNodeStatus) -> String {
@@ -399,9 +411,9 @@ public struct TechTreePanel: View {
 
     private func backgroundColor(_ status: TechNodeStatus) -> Color {
         switch status {
-        case .locked: return Color.gray.opacity(0.2)
-        case .available: return Color.orange.opacity(0.25)
-        case .unlocked: return Color.green.opacity(0.25)
+        case .locked: return HUDColor.surface
+        case .available: return HUDColor.accentAmber.opacity(0.20)
+        case .unlocked: return HUDColor.accentGreen.opacity(0.20)
         }
     }
 }
@@ -417,24 +429,24 @@ public struct OnboardingPanel: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Run Objectives")
                 .font(.headline)
+                .foregroundStyle(HUDColor.primaryText)
 
             ForEach(steps) { step in
                 HStack(spacing: 8) {
                     Image(systemName: step.isComplete ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(step.isComplete ? .green : .secondary)
+                        .foregroundStyle(step.isComplete ? HUDColor.accentGreen : HUDColor.secondaryText)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(step.title)
                             .font(.subheadline)
+                            .foregroundStyle(HUDColor.primaryText)
                         Text(step.detail)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(HUDColor.secondaryText)
                     }
                 }
             }
         }
         .padding(10)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -449,206 +461,25 @@ public struct TuningDashboardPanel: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Balance Telemetry")
                 .font(.headline)
-            Text("Ammo: \(snapshot.ammoStock)")
-            Text("Enemies: \(snapshot.enemyCount)")
-            Text("Projectiles: \(snapshot.projectileCount)")
-            Text("Base HP: \(snapshot.baseIntegrity)")
-            Text("Power Headroom: \(snapshot.powerHeadroom)")
-        }
-        .font(.caption)
-        .padding(10)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-    }
-}
-
-public struct ResourceHUDPanel: View {
-    public var world: WorldState
-    public var techNodes: [TechNodePresentation]
-
-    public init(world: WorldState, techNodes: [TechNodePresentation] = []) {
-        self.world = world
-        self.techNodes = techNodes
-    }
-
-    public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Run Resources")
-                .font(.headline)
-
-            if let warning = warningText {
-                Text(warning.message)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(warning.color)
-            }
-
-            HStack(spacing: 10) {
-                statChip(title: "Tick", value: "\(world.tick)")
-                statChip(title: "HQ", value: "\(world.hqHealth)/\(world.hqMaxHealth)")
-                statChip(title: "Wave", value: waveLabel)
-                statChip(title: "Timer", value: timerLabel)
-                statChip(title: "Power", value: "\(world.economy.powerAvailable)/\(world.economy.powerDemand)")
-                statChip(title: "Headroom", value: "\(world.economy.powerAvailable - world.economy.powerDemand)")
-                statChip(title: "Currency", value: "\(world.economy.currency)")
-                statChip(title: "Research", value: researchProgressLabel)
-            }
-
-            HStack(spacing: 10) {
-                statChip(title: "Iron Plate", value: "\(world.economy.inventories["plate_iron", default: 0])")
-                statChip(title: "Gear", value: "\(world.economy.inventories["gear", default: 0])")
-                statChip(title: "Circuit", value: "\(world.economy.inventories["circuit", default: 0])")
-                statChip(title: "Light Ammo", value: "\(world.economy.inventories["ammo_light", default: 0])")
-            }
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(resourceRows, id: \.itemID) { row in
-                        Text("\(row.label): \(row.quantity)")
-                            .font(.caption2.monospacedDigit())
-                            .padding(.vertical, 4)
-                            .padding(.horizontal, 8)
-                            .background(Color.white.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 7))
-                    }
-                }
-            }
+                .foregroundStyle(HUDColor.primaryText)
+            statRow("Ammo:", value: "\(snapshot.ammoStock)")
+            statRow("Enemies:", value: "\(snapshot.enemyCount)")
+            statRow("Projectiles:", value: "\(snapshot.projectileCount)")
+            statRow("Base HP:", value: "\(snapshot.baseIntegrity)")
+            statRow("Power Headroom:", value: "\(snapshot.powerHeadroom)")
         }
         .padding(10)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
-    private var hudModel: HUDViewModel {
-        HUDViewModel.build(from: world)
-    }
-
-    private var warningText: (message: String, color: Color)? {
-        switch hudModel.warning {
-        case .none:
-            return nil
-        case .lowAmmo:
-            return ("Warning: Low ammo stock during active surge", .orange)
-        case .baseCritical:
-            return ("Warning: HQ health critical", .red)
-        case .surgeImminent:
-            return ("Warning: Surge imminent", .yellow)
-        case .powerShortage:
-            return ("Warning: Power shortage reducing throughput", .yellow)
-        case .patchExhausted:
-            return ("Warning: Ore patch exhausted", .orange)
-        }
-    }
-
-    private var waveLabel: String {
-        if world.run.phase == .gracePeriod {
-            return "\(world.threat.waveIndex) (grace)"
-        }
-        let state = world.threat.isWaveActive ? "active" : "idle"
-        return "\(world.threat.waveIndex) (\(state))"
-    }
-
-    private var timerLabel: String {
-        if world.run.phase == .gracePeriod {
-            return "Grace \(formatTicks(hudModel.snapshot.graceRemainingTicks))"
-        }
-
-        if world.threat.isWaveActive, let waveEnds = world.threat.waveEndsAtTick, waveEnds > world.tick {
-            return "Surge \(formatTicks(waveEnds - world.tick))"
-        }
-
-        return "Next \(formatTicks(hudModel.snapshot.nextWaveInTicks))"
-    }
-
-    private var researchProgressLabel: String {
-        guard !techNodes.isEmpty else { return "n/a" }
-        let unlocked = techNodes.filter { $0.status == .unlocked }.count
-        return "\(unlocked)/\(techNodes.count)"
-    }
-
-    private func formatTicks(_ ticks: UInt64) -> String {
-        let totalSeconds = Int(ticks / 20)
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
-        let paddedSeconds = seconds < 10 ? "0\(seconds)" : "\(seconds)"
-        return "\(minutes):\(paddedSeconds)"
-    }
-
-    private var resourceRows: [(itemID: ItemID, label: String, quantity: Int)] {
-        let order: [ItemID] = [
-            "ore_iron",
-            "ore_copper",
-            "ore_coal",
-            "plate_iron",
-            "plate_copper",
-            "plate_steel",
-            "gear",
-            "circuit",
-            "power_cell",
-            "wall_kit",
-            "turret_core",
-            "ammo_light",
-            "ammo_heavy",
-            "ammo_plasma"
-        ]
-
-        let indexedRows = order.enumerated().map { (index, itemID) in
-            (
-                index: index,
-                itemID: itemID,
-                label: shortLabel(for: itemID),
-                quantity: world.economy.inventories[itemID, default: 0]
-            )
-        }
-
-        return indexedRows
-            .sorted { lhs, rhs in
-                let lhsNonZero = lhs.quantity > 0
-                let rhsNonZero = rhs.quantity > 0
-                if lhsNonZero != rhsNonZero {
-                    return lhsNonZero && !rhsNonZero
-                }
-                if lhs.quantity != rhs.quantity {
-                    return lhs.quantity > rhs.quantity
-                }
-                return lhs.index < rhs.index
-            }
-            .map { row in
-                (itemID: row.itemID, label: row.label, quantity: row.quantity)
-            }
-    }
-
-    private func shortLabel(for itemID: ItemID) -> String {
-        switch itemID {
-        case "ore_iron": return "Iron Ore"
-        case "ore_copper": return "Copper Ore"
-        case "ore_coal": return "Coal"
-        case "plate_iron": return "Iron Plate"
-        case "plate_copper": return "Copper Plate"
-        case "plate_steel": return "Steel Plate"
-        case "gear": return "Gear"
-        case "circuit": return "Circuit"
-        case "power_cell": return "Power Cell"
-        case "wall_kit": return "Wall Kit"
-        case "turret_core": return "Turret Core"
-        case "ammo_light": return "Light Ammo"
-        case "ammo_heavy": return "Heavy Ammo"
-        case "ammo_plasma": return "Plasma Ammo"
-        default: return itemID
-        }
-    }
-
-    private func statChip(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+    private func statRow(_ label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(HUDColor.secondaryText)
             Text(value)
                 .font(.caption.monospacedDigit())
+                .foregroundStyle(HUDColor.primaryText)
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
-        .background(Color.white.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 7))
     }
 }
 
@@ -661,6 +492,7 @@ public struct TileLegendPanel: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Tile Legend")
                 .font(.headline)
+                .foregroundStyle(HUDColor.primaryText)
 
             ForEach(rows) { row in
                 HStack(alignment: .top, spacing: 8) {
@@ -669,28 +501,30 @@ public struct TileLegendPanel: View {
                         .frame(width: 14, height: 14)
                         .overlay {
                             RoundedRectangle(cornerRadius: 4)
-                                .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                                .strokeBorder(HUDColor.border, lineWidth: 1)
                         }
                         .padding(.top, 3)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(row.label)
                             .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(HUDColor.primaryText)
                         Text(row.detail)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(HUDColor.secondaryText)
                         Text(row.formula)
                             .font(.caption2.monospaced())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(HUDColor.secondaryText)
                     }
                 }
                 .padding(6)
-                .background(Color.white.opacity(0.08))
+                .background(HUDColor.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 7))
             }
 
             Text("Ore Deposits")
                 .font(.subheadline.weight(.semibold))
+                .foregroundStyle(HUDColor.primaryText)
                 .padding(.top, 4)
 
             ForEach(oreRows) { row in
@@ -700,20 +534,21 @@ public struct TileLegendPanel: View {
                         .frame(width: 14, height: 14)
                         .overlay {
                             RoundedRectangle(cornerRadius: 4)
-                                .strokeBorder(Color.white.opacity(0.35), lineWidth: 1)
+                                .strokeBorder(HUDColor.border, lineWidth: 1)
                         }
                         .padding(.top, 3)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(row.label)
                             .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(HUDColor.primaryText)
                         Text(row.detail)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(HUDColor.secondaryText)
                     }
                 }
                 .padding(6)
-                .background(Color.white.opacity(0.08))
+                .background(HUDColor.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 7))
             }
 
@@ -721,17 +556,15 @@ public struct TileLegendPanel: View {
                 "Order: walkable -> spawn blend -> blocked override -> restricted blend -> ramp boost -> base override -> border darken (x0.68 near edges) -> preview blend."
             )
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(HUDColor.secondaryText)
 
             Text(
                 "Ramp sample: walkable + 0.16 (elevation 2) = \(sample.rampSample.label)"
             )
             .font(.caption2.monospaced())
-            .foregroundStyle(.secondary)
+            .foregroundStyle(HUDColor.secondaryText)
         }
         .padding(10)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private var rows: [TileLegendRow] {
@@ -917,6 +750,7 @@ public struct BuildingReferencePanel: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Building Reference")
                 .font(.headline)
+                .foregroundStyle(HUDColor.primaryText)
 
             ForEach(referenceRows) { row in
                 HStack(alignment: .top, spacing: 8) {
@@ -928,25 +762,24 @@ public struct BuildingReferencePanel: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(row.label)
                             .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(HUDColor.primaryText)
                         Text(row.info)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(HUDColor.secondaryText)
                     }
 
                     Spacer()
 
                     Text("x\(row.count)")
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(HUDColor.secondaryText)
                 }
                 .padding(6)
-                .background(Color.white.opacity(0.08))
+                .background(HUDColor.surface)
                 .clipShape(RoundedRectangle(cornerRadius: 7))
             }
         }
         .padding(10)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private var referenceRows: [ReferenceRow] {

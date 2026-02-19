@@ -31,19 +31,19 @@ final class OverlayWindowingTests: XCTestCase {
         var layout = GameplayOverlayLayoutState.defaultLayout(
             viewportSize: CGSize(width: 1800, height: 1200)
         )
-        guard let initial = layout.windowState(for: .topControls)?.origin else {
-            return XCTFail("Expected top controls state")
+        guard let initial = layout.windowState(for: .buildMenu)?.origin else {
+            return XCTFail("Expected build menu state")
         }
 
         let moved = CGPoint(x: initial.x + 140, y: initial.y + 90)
         layout.setDragPosition(
-            windowID: .topControls,
+            windowID: .buildMenu,
             origin: moved,
             viewportSize: CGSize(width: 1800, height: 1200)
         )
 
-        guard let updated = layout.windowState(for: .topControls)?.origin else {
-            return XCTFail("Expected updated top controls state")
+        guard let updated = layout.windowState(for: .buildMenu)?.origin else {
+            return XCTFail("Expected updated build menu state")
         }
         XCTAssertEqual(updated.x, moved.x, accuracy: 0.001)
         XCTAssertEqual(updated.y, moved.y, accuracy: 0.001)
@@ -95,13 +95,13 @@ final class OverlayWindowingTests: XCTestCase {
         var layout = GameplayOverlayLayoutState.defaultLayout(viewportSize: viewport)
 
         layout.updateWindowSize(
-            id: .resources,
+            id: .techTree,
             size: CGSize(width: 700, height: 300),
             viewportSize: viewport
         )
 
-        guard let state = layout.windowState(for: .resources) else {
-            return XCTFail("Expected resources state")
+        guard let state = layout.windowState(for: .techTree) else {
+            return XCTFail("Expected tech tree state")
         }
         XCTAssertEqual(state.size.width, 700, accuracy: 0.001)
         XCTAssertEqual(state.size.height, 300, accuracy: 0.001)
@@ -139,7 +139,7 @@ final class OverlayWindowingTests: XCTestCase {
         )
         var moved = baseline
         moved.setDragPosition(
-            windowID: .resources,
+            windowID: .techTree,
             origin: CGPoint(x: 200, y: 240),
             viewportSize: CGSize(width: 1366, height: 768)
         )
@@ -148,11 +148,11 @@ final class OverlayWindowingTests: XCTestCase {
         )
 
         guard
-            let movedOrigin = moved.windowState(for: .resources)?.origin,
-            let baselineOrigin = baseline.windowState(for: .resources)?.origin,
-            let freshOrigin = fresh.windowState(for: .resources)?.origin
+            let movedOrigin = moved.windowState(for: .techTree)?.origin,
+            let baselineOrigin = baseline.windowState(for: .techTree)?.origin,
+            let freshOrigin = fresh.windowState(for: .techTree)?.origin
         else {
-            return XCTFail("Expected resource window states")
+            return XCTFail("Expected tech tree window states")
         }
 
         XCTAssertNotEqual(movedOrigin, baselineOrigin)
