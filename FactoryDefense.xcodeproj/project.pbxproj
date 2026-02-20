@@ -290,7 +290,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense.macos;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maxconrad.factorydefense.macos;
 				PRODUCT_NAME = "Factory Defense";
 				SDKROOT = macosx;
 			};
@@ -312,7 +312,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maxconrad.factorydefense;
 				PRODUCT_NAME = "Factory Defense";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -466,7 +466,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense.macos;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maxconrad.factorydefense.macos;
 				PRODUCT_NAME = "Factory Defense";
 				SDKROOT = macosx;
 			};
@@ -488,7 +488,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maxconrad.factorydefense;
 				PRODUCT_NAME = "Factory Defense";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

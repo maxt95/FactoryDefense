@@ -33,7 +33,7 @@ targets:
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.factorydefense
+        PRODUCT_BUNDLE_IDENTIFIER: com.maxconrad.factorydefense
         PRODUCT_NAME: "Factory Defense"
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -83,7 +83,7 @@ targets:
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.factorydefense.macos
+        PRODUCT_BUNDLE_IDENTIFIER: com.maxconrad.factorydefense.macos
         PRODUCT_NAME: "Factory Defense"
         ARCHS: arm64
         ONLY_ACTIVE_ARCH: YES
