@@ -148,6 +148,24 @@ public struct ObjectInspectorBuilder: Sendable {
             operationRows.append(ObjectInspectorRow(label: "Last Shot Tick", value: "\(lastFireTick)"))
         }
 
+        // Bottleneck status for this entity
+        let entitySignals = world.bottleneck.activeSignals.filter { signal in
+            if case .structure(let id) = signal.scope { return id == entity.id }
+            return false
+        }
+        if let topSignal = entitySignals.first {
+            operationRows.append(ObjectInspectorRow(
+                id: "bottleneck-status",
+                label: "Status",
+                value: bottleneckStatusText(for: topSignal)
+            ))
+            operationRows.append(ObjectInspectorRow(
+                id: "bottleneck-detail",
+                label: "Detail",
+                value: bottleneckDetailText(for: topSignal, tick: world.tick)
+            ))
+        }
+
         if !operationRows.isEmpty {
             sections.append(ObjectInspectorSection(title: "Operation", rows: operationRows))
         }
@@ -349,6 +367,28 @@ public struct ObjectInspectorBuilder: Sendable {
 
     private func decimalLabel(_ value: Double) -> String {
         String(format: "%.1f", value)
+    }
+
+    private func bottleneckStatusText(for signal: BottleneckSignal) -> String {
+        switch signal.kind {
+        case .ammoDryFire: return "Dry firing"
+        case .inputStarved: return "Input starved"
+        case .outputBlocked: return "Output blocked"
+        case .powerShortage: return "Power shortage"
+        case .minerNoOre: return "No ore"
+        case .conveyorStall: return "Stalled"
+        case .wallNetworkUnderfed: return "Low ammo"
+        case .surgeBacklogHigh: return "Backlog high"
+        }
+    }
+
+    private func bottleneckDetailText(for signal: BottleneckSignal, tick: UInt64) -> String {
+        let durationSeconds = Double(tick - signal.firstTick) / 20.0
+        let durationLabel = String(format: "%.1fs", durationSeconds)
+        if let detail = signal.detail {
+            return "\(detail) for \(durationLabel)"
+        }
+        return "Active for \(durationLabel)"
     }
 }
 

@@ -449,6 +449,145 @@ public enum EventKind: String, Codable, Sendable {
     case minerIdled
     case wallNetworkSplit
     case wallNetworkRebuilt
+    case bottleneckActivated
+    case bottleneckDeactivated
+}
+
+// MARK: - Bottleneck Detection Types
+
+public enum BottleneckSignalKind: String, Codable, Hashable, CaseIterable, Sendable {
+    case ammoDryFire
+    case inputStarved
+    case outputBlocked
+    case powerShortage
+    case minerNoOre
+    case conveyorStall
+    case wallNetworkUnderfed
+    case surgeBacklogHigh
+
+    public var priority: Int {
+        guard let index = Self.allCases.firstIndex(of: self) else { return Int.max }
+        return index
+    }
+}
+
+public enum BottleneckSignalScope: Codable, Hashable, Sendable {
+    case global
+    case network(Int)
+    case structure(EntityID)
+}
+
+public enum BottleneckSignalSeverity: String, Codable, Hashable, Sendable, Comparable {
+    case info
+    case warn
+    case critical
+
+    private var sortOrder: Int {
+        switch self {
+        case .info: return 0
+        case .warn: return 1
+        case .critical: return 2
+        }
+    }
+
+    public static func < (lhs: BottleneckSignalSeverity, rhs: BottleneckSignalSeverity) -> Bool {
+        lhs.sortOrder < rhs.sortOrder
+    }
+}
+
+public struct BottleneckSignal: Codable, Hashable, Sendable {
+    public var kind: BottleneckSignalKind
+    public var scope: BottleneckSignalScope
+    public var severity: BottleneckSignalSeverity
+    public var firstTick: UInt64
+    public var lastTick: UInt64
+    public var entityID: EntityID?
+    public var networkID: Int?
+    public var itemID: ItemID?
+    public var detail: String?
+
+    public init(
+        kind: BottleneckSignalKind,
+        scope: BottleneckSignalScope,
+        severity: BottleneckSignalSeverity,
+        firstTick: UInt64,
+        lastTick: UInt64,
+        entityID: EntityID? = nil,
+        networkID: Int? = nil,
+        itemID: ItemID? = nil,
+        detail: String? = nil
+    ) {
+        self.kind = kind
+        self.scope = scope
+        self.severity = severity
+        self.firstTick = firstTick
+        self.lastTick = lastTick
+        self.entityID = entityID
+        self.networkID = networkID
+        self.itemID = itemID
+        self.detail = detail
+    }
+}
+
+public struct BottleneckSignalKey: Codable, Hashable, Sendable {
+    public var kind: BottleneckSignalKind
+    public var scope: BottleneckSignalScope
+
+    public init(kind: BottleneckSignalKind, scope: BottleneckSignalScope) {
+        self.kind = kind
+        self.scope = scope
+    }
+}
+
+public struct BottleneckSignalHysteresis: Codable, Hashable, Sendable {
+    public var conditionMetTickCount: UInt64
+    public var conditionClearedTickCount: UInt64
+    public var isActive: Bool
+
+    public init(
+        conditionMetTickCount: UInt64 = 0,
+        conditionClearedTickCount: UInt64 = 0,
+        isActive: Bool = false
+    ) {
+        self.conditionMetTickCount = conditionMetTickCount
+        self.conditionClearedTickCount = conditionClearedTickCount
+        self.isActive = isActive
+    }
+}
+
+public struct BottleneckTelemetry: Codable, Hashable, Sendable {
+    public var signalActiveTicksByKind: [BottleneckSignalKind: UInt64]
+    public var signalTransitionsByKind: [BottleneckSignalKind: Int]
+    public var maxConcurrentSignals: Int
+
+    public init(
+        signalActiveTicksByKind: [BottleneckSignalKind: UInt64] = [:],
+        signalTransitionsByKind: [BottleneckSignalKind: Int] = [:],
+        maxConcurrentSignals: Int = 0
+    ) {
+        self.signalActiveTicksByKind = signalActiveTicksByKind
+        self.signalTransitionsByKind = signalTransitionsByKind
+        self.maxConcurrentSignals = maxConcurrentSignals
+    }
+}
+
+public struct BottleneckState: Codable, Hashable, Sendable {
+    public var activeSignals: [BottleneckSignal]
+    public var hysteresis: [BottleneckSignalKey: BottleneckSignalHysteresis]
+    public var telemetry: BottleneckTelemetry
+    public var previousDryFireEvents: Int
+
+    public init(
+        activeSignals: [BottleneckSignal] = [],
+        hysteresis: [BottleneckSignalKey: BottleneckSignalHysteresis] = [:],
+        telemetry: BottleneckTelemetry = BottleneckTelemetry(),
+        previousDryFireEvents: Int = 0
+    ) {
+        self.activeSignals = activeSignals
+        self.hysteresis = hysteresis
+        self.telemetry = telemetry
+        self.previousDryFireEvents = previousDryFireEvents
+    }
 }
 
 public struct SimEvent: Codable, Hashable, Sendable {
@@ -932,6 +1071,7 @@ public struct WorldState: Codable, Hashable, Sendable {
     public var threat: ThreatState
     public var run: RunState
     public var combat: CombatState
+    public var bottleneck: BottleneckState
 
     public init(
         tick: UInt64,
@@ -941,7 +1081,8 @@ public struct WorldState: Codable, Hashable, Sendable {
         economy: EconomyState,
         threat: ThreatState,
         run: RunState,
-        combat: CombatState = CombatState()
+        combat: CombatState = CombatState(),
+        bottleneck: BottleneckState = BottleneckState()
     ) {
         self.tick = tick
         self.board = board
@@ -951,6 +1092,7 @@ public struct WorldState: Codable, Hashable, Sendable {
         self.threat = threat
         self.run = run
         self.combat = combat
+        self.bottleneck = bottleneck
     }
 
     public static func bootstrap(difficulty: Difficulty = .normal, seed: RunSeed = 0) -> WorldState {

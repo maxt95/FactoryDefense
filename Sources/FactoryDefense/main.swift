@@ -693,15 +693,20 @@ private struct FactoryDefenseGameplayView: View {
                         }
                 )
 
-                // Fixed HUD layer (non-interactive)
+                // Fixed HUD layer (alert strip is interactive for tap-to-inspect)
                 VStack(spacing: 0) {
                     FixedHUDBar(
                         snapshot: hudModel.snapshot,
-                        warning: hudModel.warning
+                        warning: hudModel.warning,
+                        onSelectEntity: { entityID in
+                            if interaction.mode == .interact {
+                                selectedEntityID = entityID
+                            }
+                        }
                     )
                     Spacer()
+                        .allowsHitTesting(false)
                 }
-                .allowsHitTesting(false)
 
                 // Bottom status bar with pause button
                 VStack {

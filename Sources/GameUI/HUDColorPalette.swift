@@ -1,5 +1,6 @@
 #if canImport(SwiftUI)
 import SwiftUI
+import GameSimulation
 
 public enum HUDColor {
     public static let background = Color(red: 0.05, green: 0.07, blue: 0.09)
@@ -40,9 +41,10 @@ public enum HUDColor {
     public static func warningColor(for warning: WarningBanner) -> Color {
         switch warning {
         case .none: return .clear
-        case .baseCritical: return accentRed
-        case .powerShortage, .surgeImminent, .lowAmmo: return accentAmber
+        case .baseCritical, .ammoDryFire: return accentRed
+        case .powerShortage, .surgeImminent, .lowAmmo, .inputStarved, .outputBlocked, .wallNetworkUnderfed, .surgeBacklogHigh: return accentAmber
         case .patchExhausted: return Color(red: 0.85, green: 0.50, blue: 0.15)
+        case .conveyorStall: return accentBlue
         }
     }
 
@@ -54,6 +56,20 @@ public enum HUDColor {
         case .lowAmmo: return "LOW AMMO DURING SURGE"
         case .surgeImminent: return "SURGE IMMINENT"
         case .patchExhausted: return "ORE PATCH EXHAUSTED"
+        case .ammoDryFire: return "TURRETS DRY FIRING"
+        case .inputStarved: return "BUILDINGS INPUT STARVED"
+        case .outputBlocked: return "OUTPUT BUFFERS FULL"
+        case .conveyorStall: return "CONVEYORS STALLED"
+        case .wallNetworkUnderfed: return "WALL NETWORK LOW AMMO"
+        case .surgeBacklogHigh: return "SPAWN BACKLOG HIGH"
+        }
+    }
+
+    public static func severityColor(for severity: BottleneckSignalSeverity) -> Color {
+        switch severity {
+        case .info: return accentBlue
+        case .warn: return accentAmber
+        case .critical: return accentRed
         }
     }
 }

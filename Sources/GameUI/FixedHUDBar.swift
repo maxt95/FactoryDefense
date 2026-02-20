@@ -1,13 +1,16 @@
 #if canImport(SwiftUI)
 import SwiftUI
+import GameSimulation
 
 public struct FixedHUDBar: View {
     public var snapshot: HUDSnapshot
     public var warning: WarningBanner
+    public var onSelectEntity: ((EntityID) -> Void)?
 
-    public init(snapshot: HUDSnapshot, warning: WarningBanner) {
+    public init(snapshot: HUDSnapshot, warning: WarningBanner, onSelectEntity: ((EntityID) -> Void)? = nil) {
         self.snapshot = snapshot
         self.warning = warning
+        self.onSelectEntity = onSelectEntity
     }
 
     public var body: some View {
@@ -34,17 +37,24 @@ public struct FixedHUDBar: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
+            .allowsHitTesting(false)
 
             // Warning banner (conditional)
             WarningBannerView(warning: warning)
                 .animation(.spring(response: 0.35), value: warning)
+                .allowsHitTesting(false)
+
+            // Alert strip (bottleneck signals — interactive, tappable pills)
+            AlertStripView(alerts: snapshot.groupedAlerts, onSelectEntity: onSelectEntity)
 
             // Row 2: Resource tray
             Divider()
                 .overlay(HUDColor.border)
+                .allowsHitTesting(false)
 
             ResourceTray(resources: snapshot.allResources)
                 .frame(height: 28)
+                .allowsHitTesting(false)
         }
         .background(HUDColor.background.opacity(0.85))
         .overlay(alignment: .bottom) {

@@ -14,6 +14,29 @@ public struct ResourceChip: Sendable, Identifiable {
     }
 }
 
+public struct GroupedBottleneckAlert: Sendable, Identifiable {
+    public var id: String { kind.rawValue }
+    public var kind: BottleneckSignalKind
+    public var severity: BottleneckSignalSeverity
+    public var count: Int
+    public var message: String
+    public var representativeEntityID: EntityID?
+
+    public init(
+        kind: BottleneckSignalKind,
+        severity: BottleneckSignalSeverity,
+        count: Int,
+        message: String,
+        representativeEntityID: EntityID? = nil
+    ) {
+        self.kind = kind
+        self.severity = severity
+        self.count = count
+        self.message = message
+        self.representativeEntityID = representativeEntityID
+    }
+}
+
 public struct HUDSnapshot: Sendable {
     public var tick: UInt64
     public var currency: Int
@@ -29,6 +52,7 @@ public struct HUDSnapshot: Sendable {
     public var powerAvailable: Int
     public var powerDemand: Int
     public var allResources: [ResourceChip]
+    public var groupedAlerts: [GroupedBottleneckAlert]
 
     public init(
         tick: UInt64,
@@ -44,7 +68,8 @@ public struct HUDSnapshot: Sendable {
         ammoLight: Int,
         powerAvailable: Int,
         powerDemand: Int,
-        allResources: [ResourceChip]
+        allResources: [ResourceChip],
+        groupedAlerts: [GroupedBottleneckAlert] = []
     ) {
         self.tick = tick
         self.currency = currency
@@ -60,6 +85,7 @@ public struct HUDSnapshot: Sendable {
         self.powerAvailable = powerAvailable
         self.powerDemand = powerDemand
         self.allResources = allResources
+        self.groupedAlerts = groupedAlerts
     }
 
     public var elapsedSeconds: Int {
@@ -78,6 +104,12 @@ public enum WarningBanner: String, Sendable {
     case surgeImminent
     case powerShortage
     case patchExhausted
+    case ammoDryFire
+    case inputStarved
+    case outputBlocked
+    case conveyorStall
+    case wallNetworkUnderfed
+    case surgeBacklogHigh
 }
 
 public struct HUDViewModel: Sendable {
@@ -101,24 +133,20 @@ public struct HUDViewModel: Sendable {
             surgeRemaining = 0
         }
         let ammo = world.economy.inventories["ammo_light", default: 0]
-        let powerShortage = world.economy.powerDemand > world.economy.powerAvailable
-        let hasExhaustedPatch = world.orePatches.contains(where: { $0.isExhausted })
 
+        // Legacy overrides that aren't bottleneck signals
         let warning: WarningBanner
         if world.hqHealth <= 100 {
             warning = .baseCritical
-        } else if powerShortage {
-            warning = .powerShortage
-        } else if ammo < 10 && world.threat.isWaveActive {
-            warning = .lowAmmo
-        } else if hasExhaustedPatch {
-            warning = .patchExhausted
         } else if world.run.phase == .playing && nextWaveIn > 0 && nextWaveIn <= 80 {
             warning = .surgeImminent
+        } else if let topSignal = world.bottleneck.activeSignals.first {
+            warning = warningBanner(for: topSignal.kind)
         } else {
             warning = .none
         }
 
+        let groupedAlerts = buildGroupedAlerts(from: world.bottleneck.activeSignals)
         let resources = buildResourceChips(from: world.economy.inventories)
 
         let snapshot = HUDSnapshot(
@@ -135,10 +163,74 @@ public struct HUDViewModel: Sendable {
             ammoLight: ammo,
             powerAvailable: world.economy.powerAvailable,
             powerDemand: world.economy.powerDemand,
-            allResources: resources
+            allResources: resources,
+            groupedAlerts: groupedAlerts
         )
 
         return HUDViewModel(snapshot: snapshot, warning: warning)
+    }
+
+    private static func warningBanner(for kind: BottleneckSignalKind) -> WarningBanner {
+        switch kind {
+        case .ammoDryFire: return .ammoDryFire
+        case .inputStarved: return .inputStarved
+        case .outputBlocked: return .outputBlocked
+        case .powerShortage: return .powerShortage
+        case .minerNoOre: return .patchExhausted
+        case .conveyorStall: return .conveyorStall
+        case .wallNetworkUnderfed: return .wallNetworkUnderfed
+        case .surgeBacklogHigh: return .surgeBacklogHigh
+        }
+    }
+
+    static func buildGroupedAlerts(from signals: [BottleneckSignal]) -> [GroupedBottleneckAlert] {
+        var grouped: [BottleneckSignalKind: (count: Int, severity: BottleneckSignalSeverity, entityID: EntityID?)] = [:]
+
+        for signal in signals {
+            if let existing = grouped[signal.kind] {
+                grouped[signal.kind] = (
+                    count: existing.count + 1,
+                    severity: max(existing.severity, signal.severity),
+                    entityID: existing.entityID
+                )
+            } else {
+                grouped[signal.kind] = (count: 1, severity: signal.severity, entityID: signal.entityID)
+            }
+        }
+
+        return grouped
+            .sorted { $0.key.priority < $1.key.priority }
+            .prefix(4)
+            .map { kind, group in
+                GroupedBottleneckAlert(
+                    kind: kind,
+                    severity: group.severity,
+                    count: group.count,
+                    message: alertMessage(for: kind, count: group.count),
+                    representativeEntityID: group.entityID
+                )
+            }
+    }
+
+    private static func alertMessage(for kind: BottleneckSignalKind, count: Int) -> String {
+        switch kind {
+        case .ammoDryFire:
+            return "Turrets dry firing"
+        case .inputStarved:
+            return count == 1 ? "1 building starved" : "\(count) buildings starved"
+        case .outputBlocked:
+            return count == 1 ? "1 output blocked" : "\(count) outputs blocked"
+        case .powerShortage:
+            return "Power shortage"
+        case .minerNoOre:
+            return count == 1 ? "1 miner idle (no ore)" : "\(count) miners idle (no ore)"
+        case .conveyorStall:
+            return count == 1 ? "1 conveyor stalled" : "\(count) conveyors stalled"
+        case .wallNetworkUnderfed:
+            return count == 1 ? "1 wall network low ammo" : "\(count) wall networks low ammo"
+        case .surgeBacklogHigh:
+            return "Spawn backlog high"
+        }
     }
 
     private static let resourceOrder: [String] = [
