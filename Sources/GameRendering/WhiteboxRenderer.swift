@@ -35,7 +35,11 @@ private struct WhiteboxUniforms {
     var cameraPanY: Float
     var cameraZoom: Float
     var animationTick: Float
-    var _padding0: UInt32
+    var cursorWorldX: Float
+    var cursorWorldY: Float
+    var gridRevealRadius: Float
+    var gridRevealStrength: Float
+    var oreCount: UInt32
 }
 
 private struct WhiteboxPointShader {
@@ -77,6 +81,13 @@ private struct WhiteboxWallFlowSegmentShader {
     var _pad0: UInt32 = 0
 }
 
+private struct WhiteboxOreInfluenceShader {
+    var x: Int32
+    var y: Int32
+    var oreTypeRaw: UInt32
+    var richness: Float
+}
+
 private struct DebugOverlayPayload {
     var debugModeRaw: UInt32
     var turretOverlays: [WhiteboxTurretOverlayShader]
@@ -98,6 +109,69 @@ public final class WhiteboxRenderer {
 
         let scene = sceneBuilder.build(from: context.worldState)
         let debugOverlays = buildDebugOverlays(context: context)
+
+        // Compute grid reveal parameters based on interaction state
+        let cursorWorldX: Float
+        let cursorWorldY: Float
+        let gridRevealRadius: Float
+        let gridRevealStrength: Float
+
+        if context.highlightedStructure != nil && context.highlightedCell != nil {
+            // Building placement mode
+            cursorWorldX = Float(context.highlightedCell!.x) + 0.5
+            cursorWorldY = Float(context.highlightedCell!.y) + 0.5
+            gridRevealRadius = 3.0
+            gridRevealStrength = 0.70
+        } else if !context.highlightedPath.isEmpty, let first = context.highlightedPath.first {
+            // Path placement mode
+            cursorWorldX = Float(first.x) + 0.5
+            cursorWorldY = Float(first.y) + 0.5
+            gridRevealRadius = 4.0
+            gridRevealStrength = 0.80
+        } else if let cell = context.highlightedCell {
+            // Passive hover
+            cursorWorldX = Float(cell.x) + 0.5
+            cursorWorldY = Float(cell.y) + 0.5
+            gridRevealRadius = 2.0
+            gridRevealStrength = 0.35
+        } else {
+            // No hover
+            cursorWorldX = -100.0
+            cursorWorldY = -100.0
+            gridRevealRadius = 0.0
+            gridRevealStrength = 0.0
+        }
+
+        // Build ore influences from world state
+        let oreInfluences: [WhiteboxOreInfluenceShader] = context.worldState.orePatches.compactMap { patch in
+            guard !patch.isExhausted else { return nil }
+            let oreTypeRaw: UInt32
+            switch patch.oreType {
+            case "iron_ore":
+                oreTypeRaw = 1
+            case "copper_ore":
+                oreTypeRaw = 2
+            case "coal":
+                oreTypeRaw = 3
+            default:
+                oreTypeRaw = 1
+            }
+            let richness: Float
+            switch patch.richness {
+            case .poor:
+                richness = 0.4
+            case .normal:
+                richness = 0.7
+            case .rich:
+                richness = 1.0
+            }
+            return WhiteboxOreInfluenceShader(
+                x: Int32(patch.position.x),
+                y: Int32(patch.position.y),
+                oreTypeRaw: oreTypeRaw,
+                richness: richness
+            )
+        }
 
         var uniforms = WhiteboxUniforms(
             viewportPixelWidth: UInt32(max(1, Int(context.drawableSize.width))),
@@ -132,7 +206,11 @@ public final class WhiteboxRenderer {
             cameraPanY: context.cameraState.pan.y,
             cameraZoom: context.cameraState.zoom,
             animationTick: Float(context.worldState.tick),
-            _padding0: 0
+            cursorWorldX: cursorWorldX,
+            cursorWorldY: cursorWorldY,
+            gridRevealRadius: gridRevealRadius,
+            gridRevealStrength: gridRevealStrength,
+            oreCount: UInt32(oreInfluences.count)
         )
 
         let blockedBuffer = makePointBuffer(context.device, points: scene.blockedCells)
@@ -147,6 +225,7 @@ public final class WhiteboxRenderer {
             context.device,
             points: context.highlightedPath.map { WhiteboxPoint(x: Int32($0.x), y: Int32($0.y)) }
         )
+        let oreInfluenceBuffer = makeOreInfluenceBuffer(context.device, influences: oreInfluences)
 
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return }
         encoder.label = "WhiteboxBoardCompute"
@@ -162,6 +241,7 @@ public final class WhiteboxRenderer {
         encoder.setBuffer(pathSegmentBuffer, offset: 0, index: 7)
         encoder.setBuffer(highlightedPathBuffer, offset: 0, index: 8)
         encoder.setBuffer(wallFlowSegmentBuffer, offset: 0, index: 9)
+        encoder.setBuffer(oreInfluenceBuffer, offset: 0, index: 10)
 
         let threadsPerThreadgroup = MTLSize(width: 8, height: 8, depth: 1)
         let threadgroups = MTLSize(
@@ -245,6 +325,15 @@ public final class WhiteboxRenderer {
         return device.makeBuffer(
             bytes: &payload,
             length: MemoryLayout<WhiteboxWallFlowSegmentShader>.stride * payload.count
+        )
+    }
+
+    private func makeOreInfluenceBuffer(_ device: MTLDevice, influences: [WhiteboxOreInfluenceShader]) -> MTLBuffer? {
+        guard !influences.isEmpty else { return nil }
+        var payload = influences
+        return device.makeBuffer(
+            bytes: &payload,
+            length: MemoryLayout<WhiteboxOreInfluenceShader>.stride * payload.count
         )
     }
 

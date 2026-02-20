@@ -34,7 +34,11 @@ struct WhiteboxUniforms {
     float cameraPanY;
     float cameraZoom;
     float animationTick;
-    uint _padding0;
+    float cursorWorldX;
+    float cursorWorldY;
+    float gridRevealRadius;
+    float gridRevealStrength;
+    uint oreCount;
 };
 
 struct WhiteboxPoint {
@@ -92,6 +96,13 @@ struct WhiteboxWallFlowSegment {
     uint ammoTypeRaw;
     float phaseOffset;
     uint _pad0;
+};
+
+struct WhiteboxOreInfluence {
+    int x;
+    int y;
+    uint oreTypeRaw;
+    float richness;
 };
 
 inline bool in_bounds(int2 cell, constant WhiteboxUniforms& uniforms) {
@@ -225,6 +236,64 @@ inline float distance_to_segment(float2 p, float2 a, float2 b) {
     return length(p - closest);
 }
 
+// --- Procedural noise primitives ---
+
+inline float hash21(float2 p) {
+    float3 p3 = fract(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+inline float value_noise(float2 p) {
+    float2 i = floor(p);
+    float2 f = fract(p);
+    float2 u = f * f * (3.0 - 2.0 * f); // Hermite interpolation
+
+    float a = hash21(i);
+    float b = hash21(i + float2(1.0, 0.0));
+    float c = hash21(i + float2(0.0, 1.0));
+    float d = hash21(i + float2(1.0, 1.0));
+
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+inline float fbm2(float2 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    float2 pos = p;
+    for (int i = 0; i < 3; ++i) {
+        value += amplitude * value_noise(pos);
+        pos *= 2.17;
+        amplitude *= 0.5;
+    }
+    return value;
+}
+
+inline float2 voronoi(float2 p) {
+    float2 i = floor(p);
+    float2 f = fract(p);
+    float minDist = 8.0;
+    float secondDist = 8.0;
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            float2 neighbor = float2(float(x), float(y));
+            float2 point = float2(
+                hash21(i + neighbor),
+                hash21(i + neighbor + float2(127.1, 311.7))
+            );
+            float2 diff = neighbor + point - f;
+            float dist = dot(diff, diff);
+            if (dist < minDist) {
+                secondDist = minDist;
+                minDist = dist;
+            } else if (dist < secondDist) {
+                secondDist = dist;
+            }
+        }
+    }
+    return float2(sqrt(minDist), sqrt(secondDist));
+}
+
 inline float3 wall_flow_color(uint ammoTypeRaw) {
     switch (ammoTypeRaw) {
         case 2u: return float3(0.95, 0.54, 0.18); // heavy
@@ -246,6 +315,7 @@ kernel void whitebox_board(
     device const WhiteboxPathSegment* pathSegments [[buffer(7)]],
     device const WhiteboxPoint* highlightedPath [[buffer(8)]],
     device const WhiteboxWallFlowSegment* wallFlowSegments [[buffer(9)]],
+    device const WhiteboxOreInfluence* oreInfluences [[buffer(10)]],
     uint2 gid [[thread_position_in_grid]]
 ) {
     if (gid.x >= uniforms.viewportPixelWidth || gid.y >= uniforms.viewportPixelHeight) {
@@ -278,16 +348,35 @@ kernel void whitebox_board(
     if (in_bounds(cell, uniforms)) {
         color = float3(0.16, 0.18, 0.20);
 
+        // Spawn edge - corrupted ground
         if (cell.x == uniforms.spawnEdgeX && cell.y >= uniforms.spawnYMin && cell.y <= uniforms.spawnYMax) {
-            color = mix(color, float3(0.36, 0.20, 0.18), 0.55);
+            const float spawnDist = abs(float(cell.x - uniforms.spawnEdgeX));
+            const float corruption = clamp(1.0 - spawnDist / 6.0, 0.0, 1.0);
+            const float3 corruptBase = float3(0.18, 0.10, 0.14);
+            const float2 voro = voronoi(cellF * 1.8 + float2(0.0, uniforms.animationTick * 0.003));
+            const float veins = smoothstep(0.04, 0.15, voro.y - voro.x);
+            float3 corruptColor = mix(corruptBase, corruptBase * 1.4, veins * 0.5);
+            // Subtle animated pulse
+            const float pulse = 0.92 + 0.08 * sin(uniforms.animationTick * 0.08 + float(cell.y) * 0.5);
+            corruptColor *= pulse;
+            color = mix(color, corruptColor, corruption * 0.7);
         }
 
+        // Blocked cells - rough impassable terrain
         if (contains_cell(blockedCells, uniforms.blockedCount, cell)) {
-            color = float3(0.08, 0.09, 0.10);
+            const float3 rockBase = float3(0.10, 0.10, 0.11);
+            const float2 voro = voronoi(cellF * 2.5);
+            const float rockDetail = smoothstep(0.06, 0.22, voro.y - voro.x);
+            color = rockBase + float3(rockDetail * 0.06);
         }
 
+        // Restricted cells - paved foundation
         if (contains_cell(restrictedCells, uniforms.restrictedCount, cell)) {
-            color = mix(color, float3(0.40, 0.32, 0.10), 0.7);
+            const float3 paveBase = float3(0.30, 0.28, 0.22);
+            const float2 voro = voronoi(cellF * 3.2);
+            const float paverPattern = smoothstep(0.02, 0.06, voro.y - voro.x);
+            const float3 paveColor = paveBase * (0.95 + 0.05 * paverPattern);
+            color = mix(color, paveColor, 0.7);
         }
 
         const int elevation = ramp_elevation(ramps, uniforms.rampCount, cell);
@@ -296,14 +385,62 @@ kernel void whitebox_board(
             color += float3(boost, boost, boost);
         }
 
-        if (cell.x == uniforms.baseX && cell.y == uniforms.baseY) {
-            color = float3(0.12, 0.42, 0.46);
+        // HQ area - cleared platform with paved concrete look
+        {
+            const float chebyshevDist = max(abs(float(cell.x - uniforms.baseX)), abs(float(cell.y - uniforms.baseY)));
+            if (chebyshevDist <= 3.0) {
+                const float3 concreteBase = float3(0.25, 0.27, 0.30);
+                const float2 voro = voronoi(cellF * 2.0);
+                const float tilePattern = smoothstep(0.02, 0.08, voro.y - voro.x);
+                float3 platformColor = concreteBase * (0.96 + 0.04 * tilePattern);
+                // Inner core teal accent
+                if (chebyshevDist <= 1.0) {
+                    const float innerBlend = 1.0 - chebyshevDist;
+                    platformColor = mix(platformColor, float3(0.18, 0.52, 0.56), innerBlend * 0.6);
+                }
+                const float edgeFade = smoothstep(2.5, 3.0, chebyshevDist);
+                color = mix(platformColor, color, edgeFade);
+            }
         }
 
+        // Soft AO edge darkening (replaces hard grid borders)
         const float2 local = fract(cellF);
-        const float borderDistance = min(min(local.x, 1.0 - local.x), min(local.y, 1.0 - local.y));
-        if (borderDistance < 0.05) {
-            color *= 0.68;
+        const float edgeDist = min(min(local.x, 1.0 - local.x), min(local.y, 1.0 - local.y));
+        const float edgeAO = smoothstep(0.0, 0.18, edgeDist);
+        color *= (0.97 + 0.03 * edgeAO);
+
+        // Ore terrain staining
+        for (uint i = 0; i < uniforms.oreCount; ++i) {
+            const WhiteboxOreInfluence ore = oreInfluences[i];
+            const float dx = cellF.x - (float(ore.x) + 0.5);
+            const float dy = cellF.y - (float(ore.y) + 0.5);
+            const float dist = sqrt(dx * dx + dy * dy);
+            const float falloff = 1.0 - smoothstep(0.3, 2.0, dist);
+            if (falloff > 0.001) {
+                float3 oreColor;
+                if (ore.oreTypeRaw == 1u) {
+                    oreColor = float3(0.45, 0.28, 0.14); // iron - rusty brown
+                } else if (ore.oreTypeRaw == 2u) {
+                    oreColor = float3(0.14, 0.36, 0.32); // copper - teal-green
+                } else {
+                    oreColor = float3(0.15, 0.14, 0.13); // coal - dark charcoal
+                }
+                const float stainStrength = falloff * ore.richness * 0.45;
+                color = mix(color, oreColor, stainStrength);
+            }
+        }
+
+        // Grid-on-hover reveal
+        if (uniforms.gridRevealStrength > 0.001) {
+            const float cursorDist = max(abs(cellF.x - uniforms.cursorWorldX), abs(cellF.y - uniforms.cursorWorldY));
+            const float reveal = (1.0 - smoothstep(uniforms.gridRevealRadius * 0.6, uniforms.gridRevealRadius, cursorDist));
+            if (reveal > 0.001) {
+                // Thin grid lines that adapt to zoom for ~1px appearance
+                const float lineWidth = clamp(0.04 / max(0.3, uniforms.cameraZoom), 0.02, 0.08);
+                const float gridLine = 1.0 - smoothstep(0.0, lineWidth, edgeDist);
+                const float gridAlpha = gridLine * reveal * uniforms.gridRevealStrength;
+                color = mix(color, float3(0.85, 0.88, 0.92), gridAlpha * 0.5);
+            }
         }
 
         const int pathIndex = index_of_cell(highlightedPath, uniforms.highlightedPathCount, cell);
