@@ -9,7 +9,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 swift test                          # Run all tests
 swift test --filter <TestName>      # Run a single test class or method
 swift run FactoryDefensePrototype   # Run CLI simulation smoke test
-swift run FactoryDefense            # Run macOS app
 ./scripts/generate_xcode_project.sh # Generate Xcode project for app targets
 ```
 

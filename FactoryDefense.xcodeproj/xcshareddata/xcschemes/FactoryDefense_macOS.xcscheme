@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "2620"
+   LastUpgradeVersion = "2600"
    version = "1.3">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "5828ECF7B3E195BF2EE6E8B9"
-               BuildableName = "FactoryDefense_macOS.app"
+               BuildableName = "Factory Defense.app"
                BlueprintName = "FactoryDefense_macOS"
                ReferencedContainer = "container:FactoryDefense.xcodeproj">
             </BuildableReference>
@@ -31,7 +31,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5828ECF7B3E195BF2EE6E8B9"
-            BuildableName = "FactoryDefense_macOS.app"
+            BuildableName = "Factory Defense.app"
             BlueprintName = "FactoryDefense_macOS"
             ReferencedContainer = "container:FactoryDefense.xcodeproj">
          </BuildableReference>
@@ -54,7 +54,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5828ECF7B3E195BF2EE6E8B9"
-            BuildableName = "FactoryDefense_macOS.app"
+            BuildableName = "Factory Defense.app"
             BlueprintName = "FactoryDefense_macOS"
             ReferencedContainer = "container:FactoryDefense.xcodeproj">
          </BuildableReference>
@@ -71,7 +71,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5828ECF7B3E195BF2EE6E8B9"
-            BuildableName = "FactoryDefense_macOS.app"
+            BuildableName = "Factory Defense.app"
             BlueprintName = "FactoryDefense_macOS"
             ReferencedContainer = "container:FactoryDefense.xcodeproj">
          </BuildableReference>

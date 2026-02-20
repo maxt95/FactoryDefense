@@ -3,59 +3,45 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		06F9C599D13ABC9481B999CC /* FactoryDefenseiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A30B7E7E7F81567360D289F /* FactoryDefenseiOSApp.swift */; };
 		0EF5465EEE28CC1693F7B9A9 /* GamePlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 73195A00C9FA1F0151AF2AD3 /* GamePlatform */; };
+		1019647A5D587620C0950001 /* FactoryDefenseRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A674EBE7798D26CD408C8623 /* FactoryDefenseRootView.swift */; };
 		1B363AEC1FE4DE2445683E09 /* GameUI in Frameworks */ = {isa = PBXBuildFile; productRef = EF3704ABFDC055A3552035A9 /* GameUI */; };
 		238FBE1D49009385E8DE98A0 /* FactoryDefensemacOSRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1946AD536272650F81D4E16E /* FactoryDefensemacOSRootView.swift */; };
 		248AEDC4B6FEC0E6F988F49B /* FactoryDefensemacOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DAB58A3FB14E4E602891CD4 /* FactoryDefensemacOSApp.swift */; };
-		255A5CF49D7C353913693E14 /* FactoryDefenseiOSRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE078FAD106370AB01AA7117 /* FactoryDefenseiOSRootView.swift */; };
-		3E90FA884939D8927210969F /* FactoryDefenseiPadOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3198ADC04733BF73D34E15A /* FactoryDefenseiPadOSApp.swift */; };
 		580EA17F3F11335ED6A22D9B /* GameContent in Frameworks */ = {isa = PBXBuildFile; productRef = A19C0F0FDF7C91400A522B20 /* GameContent */; };
-		596F206493D3E243F9D613AD /* GamePlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 5A6FA41C7E2D9E18A0386E4F /* GamePlatform */; };
 		5EB6CC2EF3D8B8754C0C9262 /* GameRendering in Frameworks */ = {isa = PBXBuildFile; productRef = BD341917CE630FB32F83519B /* GameRendering */; };
-		898993E92224807BF04D2E90 /* GameSimulation in Frameworks */ = {isa = PBXBuildFile; productRef = 48A5433BB81002859DF77B63 /* GameSimulation */; };
-		8A395C223C183377C966E0DA /* GameUI in Frameworks */ = {isa = PBXBuildFile; productRef = 3CA2999396678690833B49CD /* GameUI */; };
-		8FE2384E292BECF29923005C /* FactoryDefenseiPadOSRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12D554DF94D7991F645093E /* FactoryDefenseiPadOSRootView.swift */; };
+		71C96B482C361D7DC218EA0E /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C76EE20EE25C45DF161DF394 /* PrivacyInfo.xcprivacy */; };
+		76A6B66F9B96F3BA8DF43A20 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8D3FC07270FB6BE85510A0F7 /* PrivacyInfo.xcprivacy */; };
+		7B151B4259EBC08254D111EB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10A567F90953ABBE69424AA /* Assets.xcassets */; };
 		9EE054EB6E89372142B05FDE /* GamePlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 4558728C7379DD12FA5FC516 /* GamePlatform */; };
+		AEBCC8FD3CDC4156AFD352CD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E430BCC79F4F853FD8E172A5 /* Assets.xcassets */; };
 		B4220ED18DA800450B0EF761 /* GameRendering in Frameworks */ = {isa = PBXBuildFile; productRef = 6088D2A0F3BF7197A7B4FA04 /* GameRendering */; };
-		C7C677E817449C51121B235D /* GameContent in Frameworks */ = {isa = PBXBuildFile; productRef = 8F9BCB0EFE468E1712ECE91B /* GameContent */; };
 		CC2CB97D5FF0097BE8FE1891 /* GameUI in Frameworks */ = {isa = PBXBuildFile; productRef = D1EC8F29E821FF0DCE265673 /* GameUI */; };
 		CC8E591AC302520D060CAE2B /* GameSimulation in Frameworks */ = {isa = PBXBuildFile; productRef = 8B6F5770615DAC76217DC753 /* GameSimulation */; };
 		D715F582A4068629C6F920A1 /* GameSimulation in Frameworks */ = {isa = PBXBuildFile; productRef = BD2D36B88E9A7143FD102DAE /* GameSimulation */; };
-		D9F64ED74DD4D6682C0E2DF9 /* GameRendering in Frameworks */ = {isa = PBXBuildFile; productRef = 523C152419FCC180CA9DA305 /* GameRendering */; };
 		FB97BDC7CBB85E7378B1F0F9 /* GameContent in Frameworks */ = {isa = PBXBuildFile; productRef = 3F2D8ABC468E5EBACDA094D7 /* GameContent */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		1946AD536272650F81D4E16E /* FactoryDefensemacOSRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FactoryDefensemacOSRootView.swift; sourceTree = "<group>"; };
 		58FD115FF154F2A9A700C012 /* FactoryDefense_macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FactoryDefense_macOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		664308933AB8BB2AFB1E2F83 /* FactoryDefense_iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FactoryDefense_iOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		664308933AB8BB2AFB1E2F83 /* FactoryDefense_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FactoryDefense_iOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6A30B7E7E7F81567360D289F /* FactoryDefenseiOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FactoryDefenseiOSApp.swift; sourceTree = "<group>"; };
 		6DAB58A3FB14E4E602891CD4 /* FactoryDefensemacOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FactoryDefensemacOSApp.swift; sourceTree = "<group>"; };
+		8D3FC07270FB6BE85510A0F7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A10A567F90953ABBE69424AA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A674EBE7798D26CD408C8623 /* FactoryDefenseRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FactoryDefenseRootView.swift; sourceTree = "<group>"; };
 		B6FBC465E45BCD8E01C66D2C /* factory-defense */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "factory-defense"; path = .; sourceTree = SOURCE_ROOT; };
-		BE078FAD106370AB01AA7117 /* FactoryDefenseiOSRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FactoryDefenseiOSRootView.swift; sourceTree = "<group>"; };
-		C12D554DF94D7991F645093E /* FactoryDefenseiPadOSRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FactoryDefenseiPadOSRootView.swift; sourceTree = "<group>"; };
-		D4DD2774B01C958F65B6A9AB /* FactoryDefense_iPadOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FactoryDefense_iPadOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		E3198ADC04733BF73D34E15A /* FactoryDefenseiPadOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FactoryDefenseiPadOSApp.swift; sourceTree = "<group>"; };
+		C76EE20EE25C45DF161DF394 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		E430BCC79F4F853FD8E172A5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A4977B5BFD4C245E7844CD84 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				898993E92224807BF04D2E90 /* GameSimulation in Frameworks */,
-				D9F64ED74DD4D6682C0E2DF9 /* GameRendering in Frameworks */,
-				8A395C223C183377C966E0DA /* GameUI in Frameworks */,
-				596F206493D3E243F9D613AD /* GamePlatform in Frameworks */,
-				C7C677E817449C51121B235D /* GameContent in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		D13FCBD7A511C36610C71E3F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -95,13 +81,34 @@
 			isa = PBXGroup;
 			children = (
 				664308933AB8BB2AFB1E2F83 /* FactoryDefense_iOS.app */,
-				D4DD2774B01C958F65B6A9AB /* FactoryDefense_iPadOS.app */,
 				58FD115FF154F2A9A700C012 /* FactoryDefense_macOS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		1F8902CC469A2F68BB8E2B7E /* Sources */ = {
+		332AC42DDA311C64F9906857 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				6A30B7E7E7F81567360D289F /* FactoryDefenseiOSApp.swift */,
+				A674EBE7798D26CD408C8623 /* FactoryDefenseRootView.swift */,
+			);
+			name = Sources;
+			path = Apps/iOS/Sources;
+			sourceTree = "<group>";
+		};
+		42B552DE1AEC0C716C25589F = {
+			isa = PBXGroup;
+			children = (
+				96D059F10327E6F09C4091B5 /* iOS */,
+				8667219D2EC2AD180ACA98C5 /* macOS */,
+				034B1192FF6A85D38654BBD2 /* Packages */,
+				332AC42DDA311C64F9906857 /* Sources */,
+				512D8ADB361D9516C173EE9D /* Sources */,
+				1AF2C1190BE0220AA6E9C915 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		512D8ADB361D9516C173EE9D /* Sources */ = {
 			isa = PBXGroup;
 			children = (
 				6DAB58A3FB14E4E602891CD4 /* FactoryDefensemacOSApp.swift */,
@@ -111,35 +118,24 @@
 			path = Apps/macOS/Sources;
 			sourceTree = "<group>";
 		};
-		332AC42DDA311C64F9906857 /* Sources */ = {
+		8667219D2EC2AD180ACA98C5 /* macOS */ = {
 			isa = PBXGroup;
 			children = (
-				6A30B7E7E7F81567360D289F /* FactoryDefenseiOSApp.swift */,
-				BE078FAD106370AB01AA7117 /* FactoryDefenseiOSRootView.swift */,
+				A10A567F90953ABBE69424AA /* Assets.xcassets */,
+				8D3FC07270FB6BE85510A0F7 /* PrivacyInfo.xcprivacy */,
 			);
-			name = Sources;
-			path = Apps/iOS/Sources;
+			name = macOS;
+			path = Apps/macOS;
 			sourceTree = "<group>";
 		};
-		42B552DE1AEC0C716C25589F = {
+		96D059F10327E6F09C4091B5 /* iOS */ = {
 			isa = PBXGroup;
 			children = (
-				034B1192FF6A85D38654BBD2 /* Packages */,
-				332AC42DDA311C64F9906857 /* Sources */,
-				512D8ADB361D9516C173EE9D /* Sources */,
-				1F8902CC469A2F68BB8E2B7E /* Sources */,
-				1AF2C1190BE0220AA6E9C915 /* Products */,
+				E430BCC79F4F853FD8E172A5 /* Assets.xcassets */,
+				C76EE20EE25C45DF161DF394 /* PrivacyInfo.xcprivacy */,
 			);
-			sourceTree = "<group>";
-		};
-		512D8ADB361D9516C173EE9D /* Sources */ = {
-			isa = PBXGroup;
-			children = (
-				E3198ADC04733BF73D34E15A /* FactoryDefenseiPadOSApp.swift */,
-				C12D554DF94D7991F645093E /* FactoryDefenseiPadOSRootView.swift */,
-			);
-			name = Sources;
-			path = Apps/iPadOS/Sources;
+			name = iOS;
+			path = Apps/iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -150,6 +146,7 @@
 			buildConfigurationList = 1964D85CEF416153CCDA2872 /* Build configuration list for PBXNativeTarget "FactoryDefense_macOS" */;
 			buildPhases = (
 				018806DAF1ECFEE1CB753C0B /* Sources */,
+				7F524BFC84E3676B838020DC /* Resources */,
 				D13FCBD7A511C36610C71E3F /* Frameworks */,
 			);
 			buildRules = (
@@ -173,6 +170,7 @@
 			buildConfigurationList = 74D03F1A78339165564C22B7 /* Build configuration list for PBXNativeTarget "FactoryDefense_iOS" */;
 			buildPhases = (
 				063514873A00A38B92870F67 /* Sources */,
+				8084D384964EC90DAAFE869A /* Resources */,
 				F62AEE113D8FC8FC682DCACE /* Frameworks */,
 			);
 			buildRules = (
@@ -191,29 +189,6 @@
 			productReference = 664308933AB8BB2AFB1E2F83 /* FactoryDefense_iOS.app */;
 			productType = "com.apple.product-type.application";
 		};
-		C328CA08D628B100630E6431 /* FactoryDefense_iPadOS */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = D32C73799B1A93316987ADBC /* Build configuration list for PBXNativeTarget "FactoryDefense_iPadOS" */;
-			buildPhases = (
-				AA68B557A888163702F5AEA4 /* Sources */,
-				A4977B5BFD4C245E7844CD84 /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = FactoryDefense_iPadOS;
-			packageProductDependencies = (
-				48A5433BB81002859DF77B63 /* GameSimulation */,
-				523C152419FCC180CA9DA305 /* GameRendering */,
-				3CA2999396678690833B49CD /* GameUI */,
-				5A6FA41C7E2D9E18A0386E4F /* GamePlatform */,
-				8F9BCB0EFE468E1712ECE91B /* GameContent */,
-			);
-			productName = FactoryDefense_iPadOS;
-			productReference = D4DD2774B01C958F65B6A9AB /* FactoryDefense_iPadOS.app */;
-			productType = "com.apple.product-type.application";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -221,7 +196,17 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					5828ECF7B3E195BF2EE6E8B9 = {
+						DevelopmentTeam = CQ8HGJ67R9;
+						ProvisioningStyle = Automatic;
+					};
+					90FC9DA25A6F0E4A8BCE76A2 = {
+						DevelopmentTeam = CQ8HGJ67R9;
+						ProvisioningStyle = Automatic;
+					};
+				};
 			};
 			buildConfigurationList = 2D33B1D04C44B12F5BE5C138 /* Build configuration list for PBXProject "FactoryDefense" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -236,15 +221,36 @@
 			packageReferences = (
 				BC33B0E0CDAB767ECE16F114 /* XCLocalSwiftPackageReference "." */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				90FC9DA25A6F0E4A8BCE76A2 /* FactoryDefense_iOS */,
-				C328CA08D628B100630E6431 /* FactoryDefense_iPadOS */,
 				5828ECF7B3E195BF2EE6E8B9 /* FactoryDefense_macOS */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		7F524BFC84E3676B838020DC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B151B4259EBC08254D111EB /* Assets.xcassets in Resources */,
+				76A6B66F9B96F3BA8DF43A20 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8084D384964EC90DAAFE869A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AEBCC8FD3CDC4156AFD352CD /* Assets.xcassets in Resources */,
+				71C96B482C361D7DC218EA0E /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		018806DAF1ECFEE1CB753C0B /* Sources */ = {
@@ -260,53 +266,23 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1019647A5D587620C0950001 /* FactoryDefenseRootView.swift in Sources */,
 				06F9C599D13ABC9481B999CC /* FactoryDefenseiOSApp.swift in Sources */,
-				255A5CF49D7C353913693E14 /* FactoryDefenseiOSRootView.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		AA68B557A888163702F5AEA4 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				3E90FA884939D8927210969F /* FactoryDefenseiPadOSApp.swift in Sources */,
-				8FE2384E292BECF29923005C /* FactoryDefenseiPadOSRootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		198A890751057583E75BCAED /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				INFOPLIST_FILE = Apps/iPadOS/Info.plist;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiresFullScreen = NO;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense.ipados;
-				PRODUCT_NAME = FactoryDefense_iPadOS;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 2;
-			};
-			name = Release;
-		};
 		1FB54E21AE50D38B7E07D581 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Apps/macOS/FactoryDefense.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Apps/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -316,8 +292,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense.macos;
-				PRODUCT_NAME = FactoryDefense_macOS;
-				PROVISIONING_PROFILE_SPECIFIER = "";
+				PRODUCT_NAME = "Factory Defense";
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -326,20 +301,22 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_ENTITLEMENTS = Apps/iOS/FactoryDefense.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				INFOPLIST_FILE = Apps/iOS/Info.plist;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = NO;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense.ios;
-				PRODUCT_NAME = FactoryDefense_iOS;
+				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense;
+				PRODUCT_NAME = "Factory Defense";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -347,7 +324,6 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -377,13 +353,13 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				DEAD_CODE_STRIPPING = YES;
+				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = CQ8HGJ67R9;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -394,42 +370,22 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 6.0;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
-		};
-		7AC2EB7865598A50EF37BB1D /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				INFOPLIST_FILE = Apps/iPadOS/Info.plist;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiresFullScreen = NO;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense.ipados;
-				PRODUCT_NAME = FactoryDefense_iPadOS;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 2;
-			};
-			name = Debug;
 		};
 		7BB23F01C40DF7A0E15AB097 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -459,13 +415,13 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				DEAD_CODE_STRIPPING = YES;
+				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = CQ8HGJ67R9;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -482,14 +438,16 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
 		};
@@ -497,11 +455,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Apps/macOS/FactoryDefense.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Apps/macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -511,8 +469,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense.macos;
-				PRODUCT_NAME = FactoryDefense_macOS;
-				PROVISIONING_PROFILE_SPECIFIER = "";
+				PRODUCT_NAME = "Factory Defense";
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -521,20 +478,22 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_ENTITLEMENTS = Apps/iOS/FactoryDefense.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				INFOPLIST_FILE = Apps/iOS/Info.plist;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = NO;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense.ios;
-				PRODUCT_NAME = FactoryDefense_iOS;
+				PRODUCT_BUNDLE_IDENTIFIER = com.factorydefense;
+				PRODUCT_NAME = "Factory Defense";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -548,7 +507,7 @@
 				1FB54E21AE50D38B7E07D581 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		2D33B1D04C44B12F5BE5C138 /* Build configuration list for PBXProject "FactoryDefense" */ = {
 			isa = XCConfigurationList;
@@ -557,7 +516,7 @@
 				58D9F884D7124E0D4E3E93AA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 		74D03F1A78339165564C22B7 /* Build configuration list for PBXNativeTarget "FactoryDefense_iOS" */ = {
 			isa = XCConfigurationList;
@@ -566,16 +525,7 @@
 				40961325AD8E78C7AE97A09E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
-		D32C73799B1A93316987ADBC /* Build configuration list for PBXNativeTarget "FactoryDefense_iPadOS" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				7AC2EB7865598A50EF37BB1D /* Debug */,
-				198A890751057583E75BCAED /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 
@@ -587,27 +537,11 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		3CA2999396678690833B49CD /* GameUI */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = GameUI;
-		};
 		3F2D8ABC468E5EBACDA094D7 /* GameContent */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GameContent;
 		};
 		4558728C7379DD12FA5FC516 /* GamePlatform */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = GamePlatform;
-		};
-		48A5433BB81002859DF77B63 /* GameSimulation */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = GameSimulation;
-		};
-		523C152419FCC180CA9DA305 /* GameRendering */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = GameRendering;
-		};
-		5A6FA41C7E2D9E18A0386E4F /* GamePlatform */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GamePlatform;
 		};
@@ -622,10 +556,6 @@
 		8B6F5770615DAC76217DC753 /* GameSimulation */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = GameSimulation;
-		};
-		8F9BCB0EFE468E1712ECE91B /* GameContent */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = GameContent;
 		};
 		A19C0F0FDF7C91400A522B20 /* GameContent */ = {
 			isa = XCSwiftPackageProductDependency;

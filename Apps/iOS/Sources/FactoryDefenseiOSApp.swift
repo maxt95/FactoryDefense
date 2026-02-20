@@ -1,10 +1,10 @@
 import SwiftUI
 
 @main
-struct FactoryDefenseiOSApp: App {
+struct FactoryDefenseApp: App {
     var body: some Scene {
         WindowGroup {
-            FactoryDefenseiOSRootView()
+            FactoryDefenseRootView()
         }
     }
 }
