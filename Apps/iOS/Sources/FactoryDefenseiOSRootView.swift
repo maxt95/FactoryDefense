@@ -24,29 +24,199 @@ struct FactoryDefenseiOSRootView: View {
 private struct FactoryDefenseMainMenu: View {
     let title: String
     let onStart: () -> Void
+    @State private var cardScale: CGFloat = 0.94
+    @State private var cardOpacity: Double = 0
+    @State private var cardOffsetY: CGFloat = -8
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.08, green: 0.11, blue: 0.19), Color(red: 0.04, green: 0.06, blue: 0.11)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            MainMenuBackground()
 
-            VStack(spacing: 16) {
-                Text(title)
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+            VStack(spacing: 24) {
+                // Title
+                VStack(spacing: 8) {
+                    Image(systemName: "shield.checkered")
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundStyle(HUDColor.accentTeal)
 
-                Button("Start", action: onStart)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    Text(title.uppercased())
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .tracking(3)
+                        .foregroundStyle(HUDColor.primaryText)
+
+                    Text("Build. Defend. Survive.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(HUDColor.secondaryText)
+                }
+
+                // Divider
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                HUDColor.border.opacity(0),
+                                HUDColor.accentTeal.opacity(0.4),
+                                HUDColor.border.opacity(0)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 180, height: 1)
+
+                // Start button
+                MainMenuButton(
+                    title: "Start Game",
+                    icon: "play.fill",
+                    action: onStart
+                )
             }
-            .padding(34)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .padding(.horizontal, 44)
+            .padding(.vertical, 38)
+            .background {
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(HUDColor.background.opacity(0.92))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [
+                                        HUDColor.accentTeal.opacity(0.25),
+                                        HUDColor.border,
+                                        HUDColor.accentTeal.opacity(0.25)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    }
+                    .shadow(color: HUDColor.accentTeal.opacity(0.08), radius: 60, y: 10)
+                    .shadow(color: Color.black.opacity(0.6), radius: 40, y: 8)
+            }
+            .scaleEffect(cardScale)
+            .opacity(cardOpacity)
+            .offset(y: cardOffsetY)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.5)) {
+                    cardScale = 1.0
+                    cardOpacity = 1.0
+                    cardOffsetY = 0
+                }
+            }
             .padding()
+        }
+    }
+}
+
+// MARK: - Main Menu Background
+
+private struct MainMenuBackground: View {
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+            Canvas { context, size in
+                let baseGradient = Gradient(colors: [
+                    Color(red: 0.06, green: 0.08, blue: 0.13),
+                    Color(red: 0.03, green: 0.05, blue: 0.09)
+                ])
+                context.fill(
+                    Path(CGRect(origin: .zero, size: size)),
+                    with: .linearGradient(
+                        baseGradient,
+                        startPoint: .zero,
+                        endPoint: CGPoint(x: size.width, y: size.height)
+                    )
+                )
+
+                let time = timeline.date.timeIntervalSinceReferenceDate
+                drawOrb(
+                    in: &context, size: size, time: time,
+                    cx: 0.25, cy: 0.30, radius: 0.35,
+                    color: HUDColor.accentTeal, opacity: 0.06, speed: 0.15
+                )
+                drawOrb(
+                    in: &context, size: size, time: time,
+                    cx: 0.75, cy: 0.70, radius: 0.30,
+                    color: HUDColor.accentBlue, opacity: 0.04, speed: 0.12
+                )
+                drawOrb(
+                    in: &context, size: size, time: time,
+                    cx: 0.50, cy: 0.55, radius: 0.25,
+                    color: HUDColor.accentTeal, opacity: 0.03, speed: 0.08
+                )
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private func drawOrb(
+        in context: inout GraphicsContext,
+        size: CGSize, time: TimeInterval,
+        cx: CGFloat, cy: CGFloat, radius: CGFloat,
+        color: Color, opacity: CGFloat, speed: CGFloat
+    ) {
+        let x = (cx + sin(time * speed) * 0.08) * size.width
+        let y = (cy + cos(time * speed * 0.7) * 0.06) * size.height
+        let r = radius * min(size.width, size.height)
+
+        let gradient = Gradient(stops: [
+            .init(color: color.opacity(opacity), location: 0),
+            .init(color: color.opacity(0), location: 1)
+        ])
+
+        context.fill(
+            Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
+            with: .radialGradient(
+                gradient,
+                center: CGPoint(x: x, y: y),
+                startRadius: 0,
+                endRadius: r
+            )
+        )
+    }
+}
+
+// MARK: - Main Menu Button
+
+private struct MainMenuButton: View {
+    let title: String
+    let icon: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 18)
+
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .foregroundStyle(HUDColor.primaryText)
+            .frame(width: 220, height: 48)
+            .background(isHovered ? HUDColor.accentTeal.opacity(0.30) : HUDColor.accentTeal.opacity(0.18))
+            .clipShape(RoundedRectangle(cornerRadius: 13))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13)
+                    .strokeBorder(
+                        isHovered ? HUDColor.accentTeal.opacity(0.6) : HUDColor.accentTeal.opacity(0.35),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(
+                color: isHovered ? HUDColor.accentTeal.opacity(0.2) : .clear,
+                radius: 10, y: 2
+            )
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHovered = hovering
+            }
         }
     }
 }

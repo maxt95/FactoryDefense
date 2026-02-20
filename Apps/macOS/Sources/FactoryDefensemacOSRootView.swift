@@ -68,43 +68,266 @@ private struct FactoryDefenseMainMenu: View {
     let onStart: () -> Void
     let onQuit: () -> Void
     @State private var showsSettings = false
+    @State private var cardScale: CGFloat = 0.94
+    @State private var cardOpacity: Double = 0
+    @State private var cardOffsetY: CGFloat = -8
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.09, green: 0.12, blue: 0.18), Color(red: 0.05, green: 0.07, blue: 0.11)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            MainMenuBackground()
 
-            VStack(spacing: 16) {
-                Text(title)
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+            VStack(spacing: 24) {
+                // Title
+                VStack(spacing: 8) {
+                    Image(systemName: "shield.checkered")
+                        .font(.system(size: 36, weight: .light))
+                        .foregroundStyle(HUDColor.accentTeal)
 
+                    Text(title.uppercased())
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .tracking(3)
+                        .foregroundStyle(HUDColor.primaryText)
+
+                    Text("Build. Defend. Survive.")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(HUDColor.secondaryText)
+                }
+
+                // Divider
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                HUDColor.border.opacity(0),
+                                HUDColor.accentTeal.opacity(0.4),
+                                HUDColor.border.opacity(0)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 200, height: 1)
+
+                // Buttons
                 VStack(spacing: 10) {
-                    Button("Start", action: onStart)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-
-                    Button("Settings") {
-                        showsSettings = true
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-
-                    Button("Quit", action: onQuit)
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
+                    MainMenuButton(
+                        title: "Start Game",
+                        icon: "play.fill",
+                        style: .primary,
+                        action: onStart
+                    )
+                    MainMenuButton(
+                        title: "Settings",
+                        icon: "gearshape.fill",
+                        style: .secondary,
+                        action: { showsSettings = true }
+                    )
+                    MainMenuButton(
+                        title: "Quit",
+                        icon: "xmark.circle",
+                        style: .destructive,
+                        action: onQuit
+                    )
                 }
             }
-            .padding(40)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .padding(.horizontal, 52)
+            .padding(.vertical, 44)
+            .background {
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(HUDColor.background.opacity(0.92))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [
+                                        HUDColor.accentTeal.opacity(0.25),
+                                        HUDColor.border,
+                                        HUDColor.accentTeal.opacity(0.25)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    }
+                    .shadow(color: HUDColor.accentTeal.opacity(0.08), radius: 60, y: 10)
+                    .shadow(color: Color.black.opacity(0.6), radius: 40, y: 8)
+            }
+            .scaleEffect(cardScale)
+            .opacity(cardOpacity)
+            .offset(y: cardOffsetY)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.5)) {
+                    cardScale = 1.0
+                    cardOpacity = 1.0
+                    cardOffsetY = 0
+                }
+            }
         }
         .sheet(isPresented: $showsSettings) {
             FactoryDefenseSettingsView(enableDebugViews: $enableDebugViews)
+        }
+    }
+}
+
+// MARK: - Main Menu Background
+
+private struct MainMenuBackground: View {
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+            Canvas { context, size in
+                let baseGradient = Gradient(colors: [
+                    Color(red: 0.06, green: 0.08, blue: 0.13),
+                    Color(red: 0.03, green: 0.05, blue: 0.09)
+                ])
+                context.fill(
+                    Path(CGRect(origin: .zero, size: size)),
+                    with: .linearGradient(
+                        baseGradient,
+                        startPoint: .zero,
+                        endPoint: CGPoint(x: size.width, y: size.height)
+                    )
+                )
+
+                let time = timeline.date.timeIntervalSinceReferenceDate
+                drawOrb(
+                    in: &context, size: size, time: time,
+                    cx: 0.25, cy: 0.30, radius: 0.35,
+                    color: HUDColor.accentTeal, opacity: 0.06, speed: 0.15
+                )
+                drawOrb(
+                    in: &context, size: size, time: time,
+                    cx: 0.75, cy: 0.70, radius: 0.30,
+                    color: HUDColor.accentBlue, opacity: 0.04, speed: 0.12
+                )
+                drawOrb(
+                    in: &context, size: size, time: time,
+                    cx: 0.50, cy: 0.55, radius: 0.25,
+                    color: HUDColor.accentTeal, opacity: 0.03, speed: 0.08
+                )
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private func drawOrb(
+        in context: inout GraphicsContext,
+        size: CGSize, time: TimeInterval,
+        cx: CGFloat, cy: CGFloat, radius: CGFloat,
+        color: Color, opacity: CGFloat, speed: CGFloat
+    ) {
+        let x = (cx + sin(time * speed) * 0.08) * size.width
+        let y = (cy + cos(time * speed * 0.7) * 0.06) * size.height
+        let r = radius * min(size.width, size.height)
+
+        let gradient = Gradient(stops: [
+            .init(color: color.opacity(opacity), location: 0),
+            .init(color: color.opacity(0), location: 1)
+        ])
+
+        context.fill(
+            Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
+            with: .radialGradient(
+                gradient,
+                center: CGPoint(x: x, y: y),
+                startRadius: 0,
+                endRadius: r
+            )
+        )
+    }
+}
+
+// MARK: - Main Menu Button
+
+private enum MainMenuButtonStyle {
+    case primary, secondary, destructive
+}
+
+private struct MainMenuButton: View {
+    let title: String
+    let icon: String
+    let style: MainMenuButtonStyle
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 18)
+
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .foregroundStyle(textColor)
+            .frame(width: 240, height: 50)
+            .background(isHovered ? hoverBackground : background)
+            .clipShape(RoundedRectangle(cornerRadius: 13))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13)
+                    .strokeBorder(isHovered ? hoverBorder : borderColor, lineWidth: 1)
+            }
+            .shadow(
+                color: isHovered ? shadowColor : .clear,
+                radius: 10, y: 2
+            )
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+
+    private var textColor: Color {
+        switch style {
+        case .primary: HUDColor.primaryText
+        case .secondary: HUDColor.primaryText
+        case .destructive: isHovered ? HUDColor.accentRedBright : HUDColor.accentRed
+        }
+    }
+
+    private var background: Color {
+        switch style {
+        case .primary: HUDColor.accentTeal.opacity(0.18)
+        case .secondary: HUDColor.surface
+        case .destructive: HUDColor.accentRed.opacity(0.08)
+        }
+    }
+
+    private var hoverBackground: Color {
+        switch style {
+        case .primary: HUDColor.accentTeal.opacity(0.30)
+        case .secondary: HUDColor.surface.opacity(0.8)
+        case .destructive: HUDColor.accentRed.opacity(0.18)
+        }
+    }
+
+    private var borderColor: Color {
+        switch style {
+        case .primary: HUDColor.accentTeal.opacity(0.35)
+        case .secondary: HUDColor.border
+        case .destructive: HUDColor.accentRed.opacity(0.2)
+        }
+    }
+
+    private var hoverBorder: Color {
+        switch style {
+        case .primary: HUDColor.accentTeal.opacity(0.6)
+        case .secondary: HUDColor.secondaryText.opacity(0.3)
+        case .destructive: HUDColor.accentRed.opacity(0.5)
+        }
+    }
+
+    private var shadowColor: Color {
+        switch style {
+        case .primary: HUDColor.accentTeal.opacity(0.2)
+        case .secondary: Color.white.opacity(0.03)
+        case .destructive: HUDColor.accentRed.opacity(0.15)
         }
     }
 }
@@ -141,38 +364,151 @@ private struct FactoryDefenseSettingsView: View {
 private struct FactoryDefenseDifficultySelect: View {
     let onSelectDifficulty: (Difficulty) -> Void
     let onBack: () -> Void
+    @State private var cardScale: CGFloat = 0.94
+    @State private var cardOpacity: Double = 0
+    @State private var cardOffsetY: CGFloat = -8
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.09, green: 0.12, blue: 0.18), Color(red: 0.05, green: 0.07, blue: 0.11)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            MainMenuBackground()
 
-            VStack(spacing: 18) {
-                Text("Select Difficulty")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+            VStack(spacing: 24) {
+                // Title
+                VStack(spacing: 8) {
+                    Image(systemName: "gauge.with.dots.needle.50percent")
+                        .font(.system(size: 30, weight: .light))
+                        .foregroundStyle(HUDColor.accentTeal)
 
-                HStack(spacing: 12) {
-                    Button("Easy") { onSelectDifficulty(.easy) }
-                        .buttonStyle(.borderedProminent)
-                    Button("Normal") { onSelectDifficulty(.normal) }
-                        .buttonStyle(.borderedProminent)
-                    Button("Hard") { onSelectDifficulty(.hard) }
-                        .buttonStyle(.borderedProminent)
+                    Text("SELECT DIFFICULTY")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .tracking(2)
+                        .foregroundStyle(HUDColor.primaryText)
                 }
-                .controlSize(.large)
 
-                Button("Back", action: onBack)
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
+                // Divider
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                HUDColor.border.opacity(0),
+                                HUDColor.accentTeal.opacity(0.4),
+                                HUDColor.border.opacity(0)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 200, height: 1)
+
+                // Difficulty options
+                HStack(spacing: 12) {
+                    DifficultyOptionButton(
+                        name: "Easy",
+                        subtitle: "Slower waves, forgiving economy",
+                        accent: HUDColor.accentGreen,
+                        action: { onSelectDifficulty(.easy) }
+                    )
+                    DifficultyOptionButton(
+                        name: "Normal",
+                        subtitle: "Balanced challenge",
+                        accent: HUDColor.accentTeal,
+                        action: { onSelectDifficulty(.normal) }
+                    )
+                    DifficultyOptionButton(
+                        name: "Hard",
+                        subtitle: "Relentless waves, tight resources",
+                        accent: HUDColor.accentRed,
+                        action: { onSelectDifficulty(.hard) }
+                    )
+                }
+
+                // Back button
+                MainMenuButton(
+                    title: "Back",
+                    icon: "chevron.left",
+                    style: .secondary,
+                    action: onBack
+                )
             }
-            .padding(40)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .padding(.horizontal, 48)
+            .padding(.vertical, 40)
+            .background {
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(HUDColor.background.opacity(0.92))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [
+                                        HUDColor.accentTeal.opacity(0.25),
+                                        HUDColor.border,
+                                        HUDColor.accentTeal.opacity(0.25)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    }
+                    .shadow(color: HUDColor.accentTeal.opacity(0.08), radius: 60, y: 10)
+                    .shadow(color: Color.black.opacity(0.6), radius: 40, y: 8)
+            }
+            .scaleEffect(cardScale)
+            .opacity(cardOpacity)
+            .offset(y: cardOffsetY)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.45)) {
+                    cardScale = 1.0
+                    cardOpacity = 1.0
+                    cardOffsetY = 0
+                }
+            }
+        }
+    }
+}
+
+private struct DifficultyOptionButton: View {
+    let name: String
+    let subtitle: String
+    let accent: Color
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Text(name)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(isHovered ? accent : HUDColor.primaryText)
+
+                Text(subtitle)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(HUDColor.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .frame(width: 150, height: 72)
+            .background(isHovered ? accent.opacity(0.15) : accent.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 13))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13)
+                    .strokeBorder(
+                        isHovered ? accent.opacity(0.5) : accent.opacity(0.25),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(
+                color: isHovered ? accent.opacity(0.2) : .clear,
+                radius: 10, y: 2
+            )
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHovered = hovering
+            }
         }
     }
 }
