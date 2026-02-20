@@ -14,6 +14,26 @@ public struct ResourceChip: Sendable, Identifiable {
     }
 }
 
+public struct OreRingStatusChip: Sendable, Hashable, Identifiable {
+    public var id: Int { ringIndex }
+    public var ringIndex: Int
+    public var state: OreRingVisibilityState
+    public var remainingSurveyTicks: UInt64
+    public var visiblePatchCount: Int
+
+    public init(
+        ringIndex: Int,
+        state: OreRingVisibilityState,
+        remainingSurveyTicks: UInt64,
+        visiblePatchCount: Int
+    ) {
+        self.ringIndex = ringIndex
+        self.state = state
+        self.remainingSurveyTicks = remainingSurveyTicks
+        self.visiblePatchCount = visiblePatchCount
+    }
+}
+
 public struct HUDSnapshot: Sendable {
     public var tick: UInt64
     public var currency: Int
@@ -28,6 +48,7 @@ public struct HUDSnapshot: Sendable {
     public var ammoLight: Int
     public var powerAvailable: Int
     public var powerDemand: Int
+    public var oreRings: [OreRingStatusChip]
     public var allResources: [ResourceChip]
 
     public init(
@@ -44,6 +65,7 @@ public struct HUDSnapshot: Sendable {
         ammoLight: Int,
         powerAvailable: Int,
         powerDemand: Int,
+        oreRings: [OreRingStatusChip],
         allResources: [ResourceChip]
     ) {
         self.tick = tick
@@ -59,6 +81,7 @@ public struct HUDSnapshot: Sendable {
         self.ammoLight = ammoLight
         self.powerAvailable = powerAvailable
         self.powerDemand = powerDemand
+        self.oreRings = oreRings
         self.allResources = allResources
     }
 
@@ -120,6 +143,7 @@ public struct HUDViewModel: Sendable {
         }
 
         let resources = buildResourceChips(from: world.economy.inventories)
+        let ringStatuses = buildOreRingStatuses(from: world)
 
         let snapshot = HUDSnapshot(
             tick: world.tick,
@@ -135,6 +159,7 @@ public struct HUDViewModel: Sendable {
             ammoLight: ammo,
             powerAvailable: world.economy.powerAvailable,
             powerDemand: world.economy.powerDemand,
+            oreRings: ringStatuses,
             allResources: resources
         )
 
@@ -155,6 +180,29 @@ public struct HUDViewModel: Sendable {
                 itemID: itemID,
                 label: shortLabel(for: itemID),
                 quantity: inventories[itemID, default: 0]
+            )
+        }
+    }
+
+    private static func buildOreRingStatuses(from world: WorldState) -> [OreRingStatusChip] {
+        let maxRing = max(3, world.oreLifecycle.ringStates.keys.max() ?? 0)
+        return (0...maxRing).map { ringIndex in
+            let state = world.oreLifecycle.ringStates[ringIndex, default: ringIndex == 0 ? .revealed : .locked]
+            let remainingSurveyTicks: UInt64
+            if state == .surveying {
+                let endsAt = world.oreLifecycle.surveyEndTickByRing[ringIndex] ?? world.tick
+                remainingSurveyTicks = endsAt > world.tick ? (endsAt - world.tick) : 0
+            } else {
+                remainingSurveyTicks = 0
+            }
+            let visiblePatchCount = world.orePatches.filter {
+                $0.revealRing == ringIndex && $0.isRevealed
+            }.count
+            return OreRingStatusChip(
+                ringIndex: ringIndex,
+                state: state,
+                remainingSurveyTicks: remainingSurveyTicks,
+                visiblePatchCount: visiblePatchCount
             )
         }
     }

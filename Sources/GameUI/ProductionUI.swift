@@ -226,10 +226,33 @@ public extension TechTreeViewModel {
     static let productionPreset = TechTreeViewModel(
         nodeDefs: [
             TechNodeDef(id: "root", costs: [], prerequisites: [], unlocks: ["logistics_1", "defense_1"]),
-            TechNodeDef(id: "logistics_1", costs: [ItemStack(itemID: "plate_iron", quantity: 20)], prerequisites: ["root"], unlocks: ["conveyor_mk2"]),
+            TechNodeDef(
+                id: "logistics_1",
+                costs: [ItemStack(itemID: "plate_iron", quantity: 20)],
+                prerequisites: ["root"],
+                unlocks: ["conveyor_mk2", "geology_survey_1"]
+            ),
             TechNodeDef(id: "defense_1", costs: [ItemStack(itemID: "ammo_light", quantity: 40)], prerequisites: ["root"], unlocks: ["heavy_ammo"]),
             TechNodeDef(id: "conveyor_mk2", costs: [ItemStack(itemID: "gear", quantity: 12)], prerequisites: ["logistics_1"], unlocks: []),
-            TechNodeDef(id: "heavy_ammo", costs: [ItemStack(itemID: "ammo_heavy", quantity: 25)], prerequisites: ["defense_1"], unlocks: [])
+            TechNodeDef(id: "heavy_ammo", costs: [ItemStack(itemID: "ammo_heavy", quantity: 25)], prerequisites: ["defense_1"], unlocks: []),
+            TechNodeDef(
+                id: "geology_survey_1",
+                costs: [ItemStack(itemID: "gear", quantity: 12)],
+                prerequisites: ["logistics_1"],
+                unlocks: ["geology_survey_2"]
+            ),
+            TechNodeDef(
+                id: "geology_survey_2",
+                costs: [ItemStack(itemID: "plate_steel", quantity: 18)],
+                prerequisites: ["geology_survey_1"],
+                unlocks: ["geology_survey_3"]
+            ),
+            TechNodeDef(
+                id: "geology_survey_3",
+                costs: [ItemStack(itemID: "circuit", quantity: 14)],
+                prerequisites: ["geology_survey_2"],
+                unlocks: []
+            )
         ],
         unlockedNodeIDs: ["root"]
     )

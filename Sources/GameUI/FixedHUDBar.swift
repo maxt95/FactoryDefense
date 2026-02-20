@@ -22,6 +22,12 @@ public struct FixedHUDBar: View {
 
                 WavePhaseIndicator(snapshot: snapshot)
 
+                Divider()
+                    .frame(height: 20)
+                    .overlay(HUDColor.border)
+
+                oreRingStrip
+
                 Spacer(minLength: 8)
 
                 powerIndicator
@@ -81,6 +87,44 @@ public struct FixedHUDBar: View {
                 .font(.system(size: 15, weight: .semibold).monospacedDigit())
                 .foregroundStyle(HUDColor.primaryText)
                 .contentTransition(.numericText())
+        }
+    }
+
+    private var oreRingStrip: some View {
+        HStack(spacing: 4) {
+            ForEach(snapshot.oreRings) { ring in
+                VStack(spacing: 0) {
+                    Text("R\(ring.ringIndex)")
+                        .font(.system(size: 9, weight: .bold).monospacedDigit())
+                        .foregroundStyle(HUDColor.primaryText)
+                    if ring.state == .surveying {
+                        Text("\((ring.remainingSurveyTicks + 19) / 20)s")
+                            .font(.system(size: 8, weight: .medium).monospacedDigit())
+                            .foregroundStyle(HUDColor.secondaryText)
+                    } else {
+                        Text("\(ring.visiblePatchCount)")
+                            .font(.system(size: 8, weight: .medium).monospacedDigit())
+                            .foregroundStyle(HUDColor.secondaryText)
+                    }
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 3)
+                .background(ringBackgroundColor(ringStateRaw: ring.state.rawValue))
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+        }
+    }
+
+    private func ringBackgroundColor(ringStateRaw: String) -> Color {
+        switch ringStateRaw {
+        case "locked":
+            return HUDColor.border.opacity(0.25)
+        case "surveying":
+            return HUDColor.accentAmber.opacity(0.30)
+        case "revealed":
+            return HUDColor.accentGreen.opacity(0.30)
+        default:
+            return HUDColor.border.opacity(0.25)
         }
     }
 }

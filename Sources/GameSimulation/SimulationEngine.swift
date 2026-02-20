@@ -1,7 +1,7 @@
 import Foundation
 
 public struct WorldSnapshot: Codable, Hashable, Sendable {
-    public static let currentSchemaVersion = 4
+    public static let currentSchemaVersion = 5
 
     public var schemaVersion: Int
     public var world: WorldState
@@ -62,6 +62,7 @@ public final class SimulationEngine {
             CommandSystem(),
             EconomySystem(),
             WaveSystem(),
+            OreLifecycleSystem(),
             EnemyMovementSystem(),
             CombatSystem(),
             ProjectileSystem()

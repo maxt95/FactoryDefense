@@ -223,6 +223,13 @@ public struct CommandSystem: SimulationSystem {
                    structureType.supportedRecipeIDs.contains(recipeID) {
                     state.economy.pinnedRecipeByStructure[entityID] = recipeID
                 }
+            case .startOreSurvey(let nodeID, let researchCenterID):
+                startOreSurvey(
+                    nodeID: nodeID,
+                    researchCenterID: researchCenterID,
+                    state: &state,
+                    context: context
+                )
             case .triggerWave:
                 state.threat.nextWaveTick = state.tick
             }
@@ -235,6 +242,87 @@ public struct CommandSystem: SimulationSystem {
         guard let patchIndex = state.orePatches.firstIndex(where: { $0.id == patchID }) else { return }
         state.orePatches[patchIndex].boundMinerID = minerID
         state.entities.updateBoundPatchID(minerID, to: patchID)
+    }
+
+    private func startOreSurvey(
+        nodeID: String,
+        researchCenterID: EntityID,
+        state: inout WorldState,
+        context: SystemContext
+    ) {
+        guard let ringIndex = geologyRingIndex(for: nodeID) else { return }
+        guard state.oreLifecycle.ringStates[ringIndex, default: .locked] == .locked else { return }
+        guard let researchCenter = state.entities.entity(id: researchCenterID),
+              researchCenter.structureType == .researchCenter else { return }
+
+        guard let content = CanonicalBootstrapContent.bundle else { return }
+        guard let node = content.techNodes.first(where: { $0.id == nodeID }) else { return }
+        guard consumeResearchCosts(node.costs, fromResearchCenterID: researchCenterID, state: &state) else { return }
+
+        let durationTicks = surveyDurationTicks(
+            forRing: ringIndex,
+            difficulty: state.run.difficulty,
+            oreConfig: content.orePatches
+        )
+        state.oreLifecycle.ringStates[ringIndex] = .surveying
+        state.oreLifecycle.surveyEndTickByRing[ringIndex] = state.tick + durationTicks
+        context.emit(
+            SimEvent(
+                tick: state.tick,
+                kind: .ringSurveyStarted,
+                entity: researchCenterID,
+                value: ringIndex,
+                reasonDetail: nodeID
+            )
+        )
+    }
+
+    private func geologyRingIndex(for nodeID: String) -> Int? {
+        switch nodeID {
+        case "geology_survey_1":
+            return 1
+        case "geology_survey_2":
+            return 2
+        case "geology_survey_3":
+            return 3
+        default:
+            return nil
+        }
+    }
+
+    private func consumeResearchCosts(
+        _ costs: [ItemStack],
+        fromResearchCenterID researchCenterID: EntityID,
+        state: inout WorldState
+    ) -> Bool {
+        guard !costs.isEmpty else { return true }
+        var buffer = state.economy.structureInputBuffers[researchCenterID, default: [:]]
+
+        for cost in costs where cost.quantity > 0 {
+            guard buffer[cost.itemID, default: 0] >= cost.quantity else { return false }
+        }
+        for cost in costs where cost.quantity > 0 {
+            let updated = buffer[cost.itemID, default: 0] - cost.quantity
+            if updated > 0 {
+                buffer[cost.itemID] = updated
+            } else {
+                buffer.removeValue(forKey: cost.itemID)
+            }
+        }
+
+        if buffer.isEmpty {
+            state.economy.structureInputBuffers.removeValue(forKey: researchCenterID)
+        } else {
+            state.economy.structureInputBuffers[researchCenterID] = buffer
+        }
+        return true
+    }
+
+    private func surveyDurationTicks(forRing ringIndex: Int, difficulty: Difficulty, oreConfig: OrePatchesConfigDef) -> UInt64 {
+        let difficultyID = DifficultyID(rawValue: difficulty.rawValue) ?? .normal
+        let surveySeconds = oreConfig.surveySecondsByRing.values(for: difficultyID)
+        let seconds = ringIndex < surveySeconds.count ? max(0, surveySeconds[ringIndex]) : 0
+        return UInt64(seconds * 20)
     }
 
     private func rotation(for direction: CardinalDirection) -> Rotation {
@@ -514,6 +602,10 @@ public struct EconomySystem: SimulationSystem {
                 patch.remainingOre -= 1
                 progress -= 1.0
                 if patch.remainingOre <= 0 {
+                    if patch.exhaustedAtTick == nil {
+                        patch.exhaustedAtTick = state.tick
+                    }
+                    patch.renewalProcessed = false
                     exhaustedThisTick = true
                     break
                 }

@@ -19,6 +19,7 @@ public struct ContentLoader {
         let hq: HQDef = try decode("hq.json", in: directory)
         let difficulty: DifficultyConfigDef = try decode("difficulty.json", in: directory)
         let buildings: [BuildingDef] = try decode("buildings.json", in: directory)
+        let orePatches: OrePatchesConfigDef = try decode("ore_patches.json", in: directory)
 
         return GameContentBundle(
             items: items,
@@ -30,7 +31,8 @@ public struct ContentLoader {
             board: board,
             hq: hq,
             difficulty: difficulty,
-            buildings: buildings
+            buildings: buildings,
+            orePatches: orePatches
         )
     }
 

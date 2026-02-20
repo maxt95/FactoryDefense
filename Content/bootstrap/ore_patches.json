@@ -1,0 +1,63 @@
+{
+  "rings": [
+    {
+      "index": 0,
+      "minDistance": 0,
+      "maxDistance": 6,
+      "patchCount": { "easy": 7, "normal": 5, "hard": 3 },
+      "richnessWeights": { "poor": 0.4, "normal": 0.5, "rich": 0.1 }
+    },
+    {
+      "index": 1,
+      "minDistance": 7,
+      "maxDistance": 14,
+      "patchCount": { "easy": 8, "normal": 7, "hard": 6 },
+      "richnessWeights": { "poor": 0.2, "normal": 0.5, "rich": 0.3 }
+    },
+    {
+      "index": 2,
+      "minDistance": 15,
+      "maxDistance": 22,
+      "patchCount": { "easy": 10, "normal": 9, "hard": 8 },
+      "richnessWeights": { "poor": 0.1, "normal": 0.4, "rich": 0.5 }
+    },
+    {
+      "index": 3,
+      "minDistance": 23,
+      "maxDistance": 32,
+      "patchCount": { "easy": 8, "normal": 7, "hard": 6 },
+      "richnessWeights": { "poor": 0.0, "normal": 0.3, "rich": 0.7 }
+    }
+  ],
+  "oreTypes": [
+    {
+      "oreType": "ore_iron",
+      "rarityWeight": 1.0,
+      "amounts": { "poor": 300, "normal": 500, "rich": 800 }
+    },
+    {
+      "oreType": "ore_copper",
+      "rarityWeight": 0.6,
+      "amounts": { "poor": 200, "normal": 400, "rich": 650 }
+    },
+    {
+      "oreType": "ore_coal",
+      "rarityWeight": 0.4,
+      "amounts": { "poor": 150, "normal": 300, "rich": 500 }
+    }
+  ],
+  "surveySecondsByRing": {
+    "easy": [0, 14, 18, 22],
+    "normal": [0, 18, 24, 30],
+    "hard": [0, 12, 16, 20]
+  },
+  "renewal": {
+    "minSpacing": 3,
+    "minDistanceFromBase": 8,
+    "maxActivePatches": 20,
+    "batchCap": { "easy": 3, "normal": 2, "hard": 2 },
+    "hardSkipPercent": 25,
+    "hardMaxConsecutiveSkips": 2,
+    "edgeBiasPower": 1.5
+  }
+}

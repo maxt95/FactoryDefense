@@ -586,6 +586,15 @@ private struct FactoryDefenseiPadOSGameplayView: View {
         guard let node = techTree.nodeDefs.first(where: { $0.id == nodeID }) else { return false }
         guard !techTree.unlockedNodeIDs.contains(nodeID) else { return true }
         guard node.prerequisites.allSatisfy({ techTree.unlockedNodeIDs.contains($0) }) else { return false }
+
+        if nodeID.hasPrefix("geology_survey_") {
+            let buffer = runtime.world.economy.structureInputBuffers[researchCenterID, default: [:]]
+            guard node.costs.allSatisfy({ buffer[$0.itemID, default: 0] >= $0.quantity }) else { return false }
+            runtime.startOreSurvey(nodeID: nodeID, researchCenterID: researchCenterID)
+            techTree.unlockedNodeIDs.insert(nodeID)
+            return true
+        }
+
         guard runtime.deductFromInputBuffer(entityID: researchCenterID, costs: node.costs) else { return false }
         techTree.unlockedNodeIDs.insert(nodeID)
         return true

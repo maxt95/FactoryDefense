@@ -596,6 +596,244 @@ public struct DifficultyConfigDef: Codable, Hashable, Sendable {
     )
 }
 
+public struct OreRingPatchCountDef: Codable, Hashable, Sendable {
+    public var easy: Int
+    public var normal: Int
+    public var hard: Int
+
+    public init(easy: Int, normal: Int, hard: Int) {
+        self.easy = easy
+        self.normal = normal
+        self.hard = hard
+    }
+
+    public func value(for difficulty: DifficultyID) -> Int {
+        switch difficulty {
+        case .easy:
+            return easy
+        case .normal:
+            return normal
+        case .hard:
+            return hard
+        }
+    }
+}
+
+public struct OreRingRichnessWeightsDef: Codable, Hashable, Sendable {
+    public var poor: Double
+    public var normal: Double
+    public var rich: Double
+
+    public init(poor: Double, normal: Double, rich: Double) {
+        self.poor = poor
+        self.normal = normal
+        self.rich = rich
+    }
+}
+
+public struct OreRingDef: Codable, Hashable, Sendable {
+    public var index: Int
+    public var minDistance: Int
+    public var maxDistance: Int
+    public var patchCount: OreRingPatchCountDef
+    public var richnessWeights: OreRingRichnessWeightsDef
+
+    public init(
+        index: Int,
+        minDistance: Int,
+        maxDistance: Int,
+        patchCount: OreRingPatchCountDef,
+        richnessWeights: OreRingRichnessWeightsDef
+    ) {
+        self.index = index
+        self.minDistance = minDistance
+        self.maxDistance = maxDistance
+        self.patchCount = patchCount
+        self.richnessWeights = richnessWeights
+    }
+}
+
+public struct OreTypeAmountsDef: Codable, Hashable, Sendable {
+    public var poor: Int
+    public var normal: Int
+    public var rich: Int
+
+    public init(poor: Int, normal: Int, rich: Int) {
+        self.poor = poor
+        self.normal = normal
+        self.rich = rich
+    }
+}
+
+public struct OreTypeDef: Codable, Hashable, Sendable {
+    public var oreType: ItemID
+    public var rarityWeight: Double
+    public var amounts: OreTypeAmountsDef
+
+    public init(oreType: ItemID, rarityWeight: Double, amounts: OreTypeAmountsDef) {
+        self.oreType = oreType
+        self.rarityWeight = rarityWeight
+        self.amounts = amounts
+    }
+}
+
+public struct OreSurveySecondsByRingDef: Codable, Hashable, Sendable {
+    public var easy: [Int]
+    public var normal: [Int]
+    public var hard: [Int]
+
+    public init(easy: [Int], normal: [Int], hard: [Int]) {
+        self.easy = easy
+        self.normal = normal
+        self.hard = hard
+    }
+
+    public func values(for difficulty: DifficultyID) -> [Int] {
+        switch difficulty {
+        case .easy:
+            return easy
+        case .normal:
+            return normal
+        case .hard:
+            return hard
+        }
+    }
+}
+
+public struct OreRenewalBatchCapDef: Codable, Hashable, Sendable {
+    public var easy: Int
+    public var normal: Int
+    public var hard: Int
+
+    public init(easy: Int, normal: Int, hard: Int) {
+        self.easy = easy
+        self.normal = normal
+        self.hard = hard
+    }
+
+    public func value(for difficulty: DifficultyID) -> Int {
+        switch difficulty {
+        case .easy:
+            return easy
+        case .normal:
+            return normal
+        case .hard:
+            return hard
+        }
+    }
+}
+
+public struct OreRenewalConfigDef: Codable, Hashable, Sendable {
+    public var minSpacing: Int
+    public var minDistanceFromBase: Int
+    public var maxActivePatches: Int
+    public var batchCap: OreRenewalBatchCapDef
+    public var hardSkipPercent: Int
+    public var hardMaxConsecutiveSkips: Int
+    public var edgeBiasPower: Double
+
+    public init(
+        minSpacing: Int,
+        minDistanceFromBase: Int,
+        maxActivePatches: Int,
+        batchCap: OreRenewalBatchCapDef,
+        hardSkipPercent: Int,
+        hardMaxConsecutiveSkips: Int,
+        edgeBiasPower: Double
+    ) {
+        self.minSpacing = minSpacing
+        self.minDistanceFromBase = minDistanceFromBase
+        self.maxActivePatches = maxActivePatches
+        self.batchCap = batchCap
+        self.hardSkipPercent = hardSkipPercent
+        self.hardMaxConsecutiveSkips = hardMaxConsecutiveSkips
+        self.edgeBiasPower = edgeBiasPower
+    }
+}
+
+public struct OrePatchesConfigDef: Codable, Hashable, Sendable {
+    public var rings: [OreRingDef]
+    public var oreTypes: [OreTypeDef]
+    public var surveySecondsByRing: OreSurveySecondsByRingDef
+    public var renewal: OreRenewalConfigDef
+
+    public init(
+        rings: [OreRingDef],
+        oreTypes: [OreTypeDef],
+        surveySecondsByRing: OreSurveySecondsByRingDef,
+        renewal: OreRenewalConfigDef
+    ) {
+        self.rings = rings
+        self.oreTypes = oreTypes
+        self.surveySecondsByRing = surveySecondsByRing
+        self.renewal = renewal
+    }
+
+    public static let v1Default = OrePatchesConfigDef(
+        rings: [
+            OreRingDef(
+                index: 0,
+                minDistance: 0,
+                maxDistance: 6,
+                patchCount: OreRingPatchCountDef(easy: 7, normal: 5, hard: 3),
+                richnessWeights: OreRingRichnessWeightsDef(poor: 0.40, normal: 0.50, rich: 0.10)
+            ),
+            OreRingDef(
+                index: 1,
+                minDistance: 7,
+                maxDistance: 14,
+                patchCount: OreRingPatchCountDef(easy: 8, normal: 7, hard: 6),
+                richnessWeights: OreRingRichnessWeightsDef(poor: 0.20, normal: 0.50, rich: 0.30)
+            ),
+            OreRingDef(
+                index: 2,
+                minDistance: 15,
+                maxDistance: 22,
+                patchCount: OreRingPatchCountDef(easy: 10, normal: 9, hard: 8),
+                richnessWeights: OreRingRichnessWeightsDef(poor: 0.10, normal: 0.40, rich: 0.50)
+            ),
+            OreRingDef(
+                index: 3,
+                minDistance: 23,
+                maxDistance: 32,
+                patchCount: OreRingPatchCountDef(easy: 8, normal: 7, hard: 6),
+                richnessWeights: OreRingRichnessWeightsDef(poor: 0.0, normal: 0.30, rich: 0.70)
+            )
+        ],
+        oreTypes: [
+            OreTypeDef(
+                oreType: "ore_iron",
+                rarityWeight: 1.0,
+                amounts: OreTypeAmountsDef(poor: 300, normal: 500, rich: 800)
+            ),
+            OreTypeDef(
+                oreType: "ore_copper",
+                rarityWeight: 0.6,
+                amounts: OreTypeAmountsDef(poor: 200, normal: 400, rich: 650)
+            ),
+            OreTypeDef(
+                oreType: "ore_coal",
+                rarityWeight: 0.4,
+                amounts: OreTypeAmountsDef(poor: 150, normal: 300, rich: 500)
+            )
+        ],
+        surveySecondsByRing: OreSurveySecondsByRingDef(
+            easy: [0, 14, 18, 22],
+            normal: [0, 18, 24, 30],
+            hard: [0, 12, 16, 20]
+        ),
+        renewal: OreRenewalConfigDef(
+            minSpacing: 3,
+            minDistanceFromBase: 8,
+            maxActivePatches: 20,
+            batchCap: OreRenewalBatchCapDef(easy: 3, normal: 2, hard: 2),
+            hardSkipPercent: 25,
+            hardMaxConsecutiveSkips: 2,
+            edgeBiasPower: 1.5
+        )
+    )
+}
+
 public struct GameContentBundle: Codable, Sendable {
     public var items: [ItemDef]
     public var recipes: [RecipeDef]
@@ -607,6 +845,7 @@ public struct GameContentBundle: Codable, Sendable {
     public var hq: HQDef
     public var difficulty: DifficultyConfigDef
     public var buildings: [BuildingDef]
+    public var orePatches: OrePatchesConfigDef
 
     public init(
         items: [ItemDef],
@@ -618,7 +857,8 @@ public struct GameContentBundle: Codable, Sendable {
         board: BoardDef = .starter,
         hq: HQDef = .v1Default,
         difficulty: DifficultyConfigDef = .v1Default,
-        buildings: [BuildingDef] = []
+        buildings: [BuildingDef] = [],
+        orePatches: OrePatchesConfigDef = .v1Default
     ) {
         self.items = items
         self.recipes = recipes
@@ -630,6 +870,7 @@ public struct GameContentBundle: Codable, Sendable {
         self.hq = hq
         self.difficulty = difficulty
         self.buildings = buildings
+        self.orePatches = orePatches
     }
 
     public init(
@@ -642,7 +883,8 @@ public struct GameContentBundle: Codable, Sendable {
         board: BoardDef = .starter,
         hq: HQDef = .v1Default,
         difficulty: DifficultyConfigDef = .v1Default,
-        buildings: [BuildingDef] = []
+        buildings: [BuildingDef] = [],
+        orePatches: OrePatchesConfigDef = .v1Default
     ) {
         self.items = items
         self.recipes = recipes
@@ -654,6 +896,7 @@ public struct GameContentBundle: Codable, Sendable {
         self.hq = hq
         self.difficulty = difficulty
         self.buildings = buildings
+        self.orePatches = orePatches
     }
 
     public var waves: [WaveDef] {
@@ -670,7 +913,8 @@ public struct GameContentBundle: Codable, Sendable {
         board: .starter,
         hq: .v1Default,
         difficulty: .v1Default,
-        buildings: []
+        buildings: [],
+        orePatches: .v1Default
     )
 }
 
