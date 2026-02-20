@@ -381,7 +381,10 @@ private struct FactoryDefenseGameplayView: View {
                             mode: interaction.mode,
                             structureName: interaction.isBuildMode ? buildMenu.selectedEntry()?.title : nil
                         )
-                        .allowsHitTesting(false)
+                        .onTapGesture {
+                            returnToInteractMode()
+                        }
+                        .allowsHitTesting(interaction.mode != .interact)
                         Spacer()
                         PauseHUDButton { pauseGame() }
                         GameClockView(tick: runtime.world.tick)
@@ -837,6 +840,20 @@ private struct FactoryDefenseGameplayView: View {
     private func resumeGame() {
         isPaused = false
         runtime.start()
+    }
+
+    private func returnToInteractMode() {
+        switch interaction.mode {
+        case .interact:
+            break
+        case .build:
+            interaction.exitBuildMode()
+            runtime.clearPlacementPreview()
+        case .editBelts:
+            interaction.exitEditBeltsMode()
+        case .planBelt:
+            interaction.exitPlanBeltMode()
+        }
     }
 
     private func closeTechTree() {
