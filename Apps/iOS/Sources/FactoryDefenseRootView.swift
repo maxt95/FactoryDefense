@@ -7,18 +7,55 @@ import GameUI
 import GamePlatform
 
 struct FactoryDefenseRootView: View {
-    @State private var didStartGame = false
+    @State private var screen: AppScreen = .mainMenu
 
     var body: some View {
-        if didStartGame {
-            FactoryDefenseGameplayView()
-        } else {
+        switch screen {
+        case .mainMenu:
             FactoryDefenseMainMenu(
                 title: "Factory Defense",
-                onStart: { didStartGame = true }
+                onStart: { screen = .difficultySelect }
+            )
+        case .difficultySelect:
+            FactoryDefenseDifficultySelect(
+                onSelectDifficulty: { difficulty in
+                    let run = RunConfiguration(
+                        difficulty: difficulty,
+                        seed: RunSeed.random(in: RunSeed.min ... RunSeed.max)
+                    )
+                    screen = .gameplay(run)
+                },
+                onBack: { screen = .mainMenu }
+            )
+        case .gameplay(let run):
+            FactoryDefenseGameplayView(
+                initialWorld: .bootstrap(difficulty: run.difficulty, seed: run.seed),
+                onRunEnded: { summary in
+                    screen = .runSummary(summary)
+                },
+                onQuit: { screen = .mainMenu }
+            )
+            .id("gameplay-\(run.difficulty.rawValue)-\(run.seed)")
+        case .runSummary(let summary):
+            FactoryDefenseRunSummaryView(
+                summary: summary,
+                onNewRun: { screen = .difficultySelect },
+                onMainMenu: { screen = .mainMenu }
             )
         }
     }
+}
+
+private struct RunConfiguration: Hashable {
+    var difficulty: Difficulty
+    var seed: RunSeed
+}
+
+private enum AppScreen: Hashable {
+    case mainMenu
+    case difficultySelect
+    case gameplay(RunConfiguration)
+    case runSummary(RunSummarySnapshot)
 }
 
 private struct FactoryDefenseMainMenu: View {
@@ -229,7 +266,7 @@ private struct FactoryDefenseGameplayView: View {
 
     private static let isTablet = UIDevice.current.userInterfaceIdiom == .pad
 
-    @StateObject private var runtime = GameRuntimeController()
+    @StateObject private var runtime: GameRuntimeController
     @State private var buildMenu = BuildMenuViewModel.productionPreset
     @State private var techTree = TechTreeViewModel.productionPreset
     @State private var onboarding = OnboardingGuideViewModel.starter
@@ -245,6 +282,20 @@ private struct FactoryDefenseGameplayView: View {
     @State private var activeTechTreeResearchCenterID: EntityID? = nil
     @State private var conveyorInputDirection: CardinalDirection = .west
     @State private var conveyorOutputDirection: CardinalDirection = .east
+    @State private var didReportRunSummary = false
+
+    let onRunEnded: (RunSummarySnapshot) -> Void
+    let onQuit: () -> Void
+
+    init(
+        initialWorld: WorldState,
+        onRunEnded: @escaping (RunSummarySnapshot) -> Void,
+        onQuit: @escaping () -> Void
+    ) {
+        _runtime = StateObject(wrappedValue: GameRuntimeController(initialWorld: initialWorld))
+        self.onRunEnded = onRunEnded
+        self.onQuit = onQuit
+    }
 
     private static let keyboardPanStep: Float = 56
     private let picker = WhiteboxPicker()
@@ -410,6 +461,11 @@ private struct FactoryDefenseGameplayView: View {
             }
             .onDisappear {
                 runtime.stop()
+            }
+            .onChange(of: runtime.runSummary) { _, summary in
+                guard let summary, !didReportRunSummary else { return }
+                didReportRunSummary = true
+                onRunEnded(summary)
             }
             .onChange(of: runtime.world.tick) { _, _ in
                 onboarding.update(from: runtime.world)
@@ -984,6 +1040,207 @@ private struct FactoryDefenseGameplayView: View {
                 viewport: viewport
             )
         )
+    }
+}
+
+private struct FactoryDefenseDifficultySelect: View {
+    let onSelectDifficulty: (Difficulty) -> Void
+    let onBack: () -> Void
+    @State private var cardScale: CGFloat = 0.94
+    @State private var cardOpacity: Double = 0
+    @State private var cardOffsetY: CGFloat = -8
+
+    var body: some View {
+        ZStack {
+            MainMenuBackground()
+
+            VStack(spacing: 24) {
+                VStack(spacing: 8) {
+                    Image(systemName: "gauge.with.dots.needle.50percent")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundStyle(HUDColor.accentTeal)
+
+                    Text("SELECT DIFFICULTY")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .tracking(2)
+                        .foregroundStyle(HUDColor.primaryText)
+                }
+
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                HUDColor.border.opacity(0),
+                                HUDColor.accentTeal.opacity(0.4),
+                                HUDColor.border.opacity(0)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 180, height: 1)
+
+                VStack(spacing: 10) {
+                    DifficultyOptionButton(
+                        name: "Easy",
+                        subtitle: "Slower waves, forgiving economy",
+                        accent: HUDColor.accentGreen,
+                        action: { onSelectDifficulty(.easy) }
+                    )
+                    DifficultyOptionButton(
+                        name: "Normal",
+                        subtitle: "Balanced challenge",
+                        accent: HUDColor.accentTeal,
+                        action: { onSelectDifficulty(.normal) }
+                    )
+                    DifficultyOptionButton(
+                        name: "Hard",
+                        subtitle: "Relentless waves, tight resources",
+                        accent: HUDColor.accentRed,
+                        action: { onSelectDifficulty(.hard) }
+                    )
+                }
+
+                MainMenuButton(
+                    title: "Back",
+                    icon: "chevron.left",
+                    action: onBack
+                )
+            }
+            .padding(.horizontal, 40)
+            .padding(.vertical, 36)
+            .background {
+                RoundedRectangle(cornerRadius: 22)
+                    .fill(HUDColor.background.opacity(0.92))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22)
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [
+                                        HUDColor.accentTeal.opacity(0.25),
+                                        HUDColor.border,
+                                        HUDColor.accentTeal.opacity(0.25)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1
+                            )
+                    }
+                    .shadow(color: HUDColor.accentTeal.opacity(0.08), radius: 60, y: 10)
+                    .shadow(color: Color.black.opacity(0.6), radius: 40, y: 8)
+            }
+            .scaleEffect(cardScale)
+            .opacity(cardOpacity)
+            .offset(y: cardOffsetY)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.45)) {
+                    cardScale = 1.0
+                    cardOpacity = 1.0
+                    cardOffsetY = 0
+                }
+            }
+            .padding()
+        }
+    }
+}
+
+private struct DifficultyOptionButton: View {
+    let name: String
+    let subtitle: String
+    let accent: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Text(name)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(HUDColor.primaryText)
+
+                Text(subtitle)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(HUDColor.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .frame(width: 220, height: 64)
+            .background(accent.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 13))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13)
+                    .strokeBorder(accent.opacity(0.30), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct FactoryDefenseRunSummaryView: View {
+    let summary: RunSummarySnapshot
+    let onNewRun: () -> Void
+    let onMainMenu: () -> Void
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.10, green: 0.11, blue: 0.17), Color(red: 0.04, green: 0.06, blue: 0.10)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                Text("Run Summary")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    summaryRow("Waves survived", "\(summary.wavesSurvived)")
+                    summaryRow("Run duration", formattedDuration(summary.runDurationSeconds))
+                    summaryRow("Enemies destroyed", "\(summary.enemiesDestroyed)")
+                    summaryRow("Structures built", "\(summary.structuresBuilt)")
+                    summaryRow("Ammo spent", "\(summary.ammoSpent)")
+                }
+                .frame(maxWidth: 320)
+
+                VStack(spacing: 10) {
+                    MainMenuButton(
+                        title: "New Run",
+                        icon: "arrow.counterclockwise",
+                        action: onNewRun
+                    )
+                    MainMenuButton(
+                        title: "Main Menu",
+                        icon: "house.fill",
+                        action: onMainMenu
+                    )
+                }
+            }
+            .padding(32)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .padding()
+        }
+    }
+
+    private func summaryRow(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.white.opacity(0.85))
+            Spacer()
+            Text(value)
+                .foregroundStyle(.white)
+                .fontWeight(.semibold)
+        }
+    }
+
+    private func formattedDuration(_ seconds: Int) -> String {
+        let clamped = max(0, seconds)
+        let minutes = clamped / 60
+        let remaining = clamped % 60
+        let paddedSeconds = remaining < 10 ? "0\(remaining)" : "\(remaining)"
+        return "\(minutes)m \(paddedSeconds)s"
     }
 }
 
