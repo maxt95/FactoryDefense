@@ -9,7 +9,7 @@
     "id": "logistics_1",
     "costs": [{ "itemID": "plate_iron", "quantity": 20 }],
     "prerequisites": ["root"],
-    "unlocks": ["conveyor_mk2", "storage_bins"]
+    "unlocks": ["conveyor_mk2", "storage_bins", "geology_survey_1"]
   },
   {
     "id": "defense_1",
@@ -34,6 +34,24 @@
     "costs": [{ "itemID": "plate_steel", "quantity": 14 }],
     "prerequisites": ["logistics_1"],
     "unlocks": ["logistics_2"]
+  },
+  {
+    "id": "geology_survey_1",
+    "costs": [{ "itemID": "gear", "quantity": 12 }],
+    "prerequisites": ["logistics_1"],
+    "unlocks": ["geology_survey_2"]
+  },
+  {
+    "id": "geology_survey_2",
+    "costs": [{ "itemID": "plate_steel", "quantity": 18 }],
+    "prerequisites": ["geology_survey_1"],
+    "unlocks": ["geology_survey_3"]
+  },
+  {
+    "id": "geology_survey_3",
+    "costs": [{ "itemID": "circuit", "quantity": 14 }],
+    "prerequisites": ["geology_survey_2"],
+    "unlocks": []
   },
   {
     "id": "heavy_ammo",

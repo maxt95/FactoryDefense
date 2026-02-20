@@ -300,6 +300,7 @@ public enum CommandPayload: Codable, Hashable, Sendable {
     case configureConveyorIO(entityID: EntityID, inputDirection: CardinalDirection, outputDirection: CardinalDirection)
     case rotateBuilding(entityID: EntityID)
     case pinRecipe(entityID: EntityID, recipeID: String)
+    case startOreSurvey(nodeID: String, researchCenterID: EntityID)
     case triggerWave
 
     private enum CodingKeys: String, CodingKey {
@@ -311,6 +312,8 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         case inputDirection
         case outputDirection
         case recipeID
+        case nodeID
+        case researchCenterID
     }
 
     private enum Kind: String, Codable {
@@ -320,6 +323,7 @@ public enum CommandPayload: Codable, Hashable, Sendable {
         case configureConveyorIO
         case rotateBuilding
         case pinRecipe
+        case startOreSurvey
         case triggerWave
     }
 
@@ -350,6 +354,11 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             self = .pinRecipe(
                 entityID: try container.decode(EntityID.self, forKey: .entityID),
                 recipeID: try container.decode(String.self, forKey: .recipeID)
+            )
+        case .startOreSurvey:
+            self = .startOreSurvey(
+                nodeID: try container.decode(String.self, forKey: .nodeID),
+                researchCenterID: try container.decode(EntityID.self, forKey: .researchCenterID)
             )
         case .triggerWave:
             self = .triggerWave
@@ -383,6 +392,10 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             try container.encode(Kind.pinRecipe, forKey: .kind)
             try container.encode(entityID, forKey: .entityID)
             try container.encode(recipeID, forKey: .recipeID)
+        case .startOreSurvey(let nodeID, let researchCenterID):
+            try container.encode(Kind.startOreSurvey, forKey: .kind)
+            try container.encode(nodeID, forKey: .nodeID)
+            try container.encode(researchCenterID, forKey: .researchCenterID)
         case .triggerWave:
             try container.encode(Kind.triggerWave, forKey: .kind)
         }
@@ -403,6 +416,8 @@ public enum CommandPayload: Codable, Hashable, Sendable {
             return "rotate:\(entityID)"
         case .pinRecipe(let entityID, let recipeID):
             return "pin:\(entityID):\(recipeID)"
+        case .startOreSurvey(let nodeID, let researchCenterID):
+            return "survey:\(nodeID):\(researchCenterID)"
         case .triggerWave:
             return "triggerWave"
         }
@@ -447,6 +462,9 @@ public enum EventKind: String, Codable, Sendable {
     case placementRejected
     case patchExhausted
     case minerIdled
+    case ringSurveyStarted
+    case ringRevealed
+    case oreRenewalSpawned
     case wallNetworkSplit
     case wallNetworkRebuilt
     case bottleneckActivated
@@ -1030,31 +1048,90 @@ public enum OrePatchRichness: String, Codable, Sendable {
     case rich
 }
 
+public enum OreRingVisibilityState: String, Codable, Sendable {
+    case locked
+    case surveying
+    case revealed
+}
+
+public struct RenewalRequest: Codable, Hashable, Sendable {
+    public var sourcePatchID: Int
+    public var oreType: ItemID
+    public var exhaustedAtTick: UInt64
+    public var skipCount: Int
+
+    public init(sourcePatchID: Int, oreType: ItemID, exhaustedAtTick: UInt64, skipCount: Int = 0) {
+        self.sourcePatchID = sourcePatchID
+        self.oreType = oreType
+        self.exhaustedAtTick = exhaustedAtTick
+        self.skipCount = max(0, skipCount)
+    }
+}
+
+public struct OreLifecycleState: Codable, Hashable, Sendable {
+    public var ringStates: [Int: OreRingVisibilityState]
+    public var surveyEndTickByRing: [Int: UInt64]
+    public var renewalQueue: [RenewalRequest]
+    public var nextPatchID: Int
+    public var lastRenewalWaveProcessed: Int
+
+    public init(
+        ringStates: [Int: OreRingVisibilityState] = [
+            0: .revealed,
+            1: .locked,
+            2: .locked,
+            3: .locked
+        ],
+        surveyEndTickByRing: [Int: UInt64] = [:],
+        renewalQueue: [RenewalRequest] = [],
+        nextPatchID: Int = 1,
+        lastRenewalWaveProcessed: Int = 0
+    ) {
+        self.ringStates = ringStates
+        self.surveyEndTickByRing = surveyEndTickByRing
+        self.renewalQueue = renewalQueue
+        self.nextPatchID = max(1, nextPatchID)
+        self.lastRenewalWaveProcessed = max(0, lastRenewalWaveProcessed)
+    }
+}
+
 public struct OrePatch: Codable, Hashable, Sendable {
     public var id: Int
     public var oreType: ItemID
     public var richness: OrePatchRichness
     public var position: GridPosition
+    public var revealRing: Int
+    public var isRevealed: Bool
     public var totalOre: Int
     public var remainingOre: Int
     public var boundMinerID: EntityID?
+    public var exhaustedAtTick: UInt64?
+    public var renewalProcessed: Bool
 
     public init(
         id: Int,
         oreType: ItemID,
         richness: OrePatchRichness,
         position: GridPosition,
+        revealRing: Int = 0,
+        isRevealed: Bool = true,
         totalOre: Int,
         remainingOre: Int,
-        boundMinerID: EntityID? = nil
+        boundMinerID: EntityID? = nil,
+        exhaustedAtTick: UInt64? = nil,
+        renewalProcessed: Bool = false
     ) {
         self.id = id
         self.oreType = oreType
         self.richness = richness
         self.position = position
+        self.revealRing = revealRing
+        self.isRevealed = isRevealed
         self.totalOre = totalOre
         self.remainingOre = remainingOre
         self.boundMinerID = boundMinerID
+        self.exhaustedAtTick = exhaustedAtTick
+        self.renewalProcessed = renewalProcessed
     }
 
     public var isExhausted: Bool {
@@ -1067,6 +1144,7 @@ public struct WorldState: Codable, Hashable, Sendable {
     public var board: BoardState
     public var entities: EntityStore
     public var orePatches: [OrePatch]
+    public var oreLifecycle: OreLifecycleState
     public var economy: EconomyState
     public var threat: ThreatState
     public var run: RunState
@@ -1078,6 +1156,7 @@ public struct WorldState: Codable, Hashable, Sendable {
         board: BoardState = .bootstrap(),
         entities: EntityStore,
         orePatches: [OrePatch] = [],
+        oreLifecycle: OreLifecycleState = OreLifecycleState(),
         economy: EconomyState,
         threat: ThreatState,
         run: RunState,
@@ -1088,6 +1167,7 @@ public struct WorldState: Codable, Hashable, Sendable {
         self.board = board
         self.entities = entities
         self.orePatches = orePatches
+        self.oreLifecycle = oreLifecycle
         self.economy = economy
         self.threat = threat
         self.run = run
@@ -1115,8 +1195,15 @@ public struct WorldState: Codable, Hashable, Sendable {
         let waveCompressionTicks = UInt64(max(0, difficultyValues.gapCompressionPerWave) * 20)
         let trickleTicks = UInt64(max(1, difficultyValues.trickleIntervalSeconds) * 20)
         let startingResources = content.hq.startingResources.values(for: difficultyID)
+        let oreConfig = content.orePatches
 
-        let orePatches = generateRing0OrePatches(seed: seed, difficulty: difficulty)
+        let orePatches = generateRing0OrePatches(
+            seed: seed,
+            difficulty: difficulty,
+            board: board,
+            oreConfig: oreConfig
+        )
+        let oreLifecycle = OreLifecycleState(nextPatchID: (orePatches.map(\.id).max() ?? 0) + 1)
         for patch in orePatches {
             let cell = GridPosition(x: patch.position.x, y: patch.position.y, z: 0)
             if !board.restrictedCells.contains(where: { $0.x == cell.x && $0.y == cell.y }) {
@@ -1129,6 +1216,7 @@ public struct WorldState: Codable, Hashable, Sendable {
             board: board,
             entities: store,
             orePatches: orePatches,
+            oreLifecycle: oreLifecycle,
             economy: EconomyState(
                 inventories: [:],
                 structureInputBuffers: [:],
@@ -1247,79 +1335,119 @@ private struct DeterministicRNG {
     }
 }
 
-private func generateRing0OrePatches(seed: RunSeed, difficulty: Difficulty) -> [OrePatch] {
-    let patchCount: Int
-    switch difficulty {
-    case .easy:
-        patchCount = 7
-    case .normal:
-        patchCount = 5
-    case .hard:
-        patchCount = 3
-    }
+private func generateRing0OrePatches(
+    seed: RunSeed,
+    difficulty: Difficulty,
+    board: BoardState,
+    oreConfig: OrePatchesConfigDef
+) -> [OrePatch] {
+    let difficultyID = DifficultyID(rawValue: difficulty.rawValue) ?? .normal
+    let ring0 = oreConfig.rings.first(where: { $0.index == 0 }) ?? OrePatchesConfigDef.v1Default.rings[0]
+    let patchCount = max(1, ring0.patchCount.value(for: difficultyID))
+    let base = board.basePosition
 
-    let minX = 34
-    let maxX = 46
-    let minY = 26
-    let maxY = 38
-    let hqFootprint: Set<GridPosition> = [
-        GridPosition(x: 39, y: 31),
-        GridPosition(x: 40, y: 31),
-        GridPosition(x: 39, y: 32),
-        GridPosition(x: 40, y: 32)
-    ]
-    var restrictedCells = hqFootprint
-    // Keep the immediate one-tile moat around the HQ clear so players can form a closed starter wall ring.
-    for hqCell in hqFootprint {
+    var blocked: Set<GridPosition> = Set(board.restrictedCells + board.blockedCells)
+    let hqFootprint = Set([
+        base.translated(byX: -1, byY: -1),
+        base.translated(byX: 0, byY: -1),
+        base.translated(byX: -1, byY: 0),
+        base.translated(byX: 0, byY: 0)
+    ])
+    blocked.formUnion(hqFootprint)
+
+    // Keep a one-tile moat around HQ clear for starter walling.
+    for cell in hqFootprint {
         for dy in -1...1 {
             for dx in -1...1 {
-                restrictedCells.insert(hqCell.translated(byX: dx, byY: dy))
+                blocked.insert(cell.translated(byX: dx, byY: dy))
             }
         }
     }
 
     var candidates: [GridPosition] = []
-    for y in minY...maxY {
-        for x in minX...maxX {
-            let position = GridPosition(x: x, y: y)
-            if !restrictedCells.contains(position) {
-                candidates.append(position)
-            }
+    for y in 0..<board.height {
+        for x in 0..<board.width {
+            let position = GridPosition(x: x, y: y, z: 0)
+            guard !blocked.contains(position) else { continue }
+            let distance = max(abs(position.x - base.x), abs(position.y - base.y))
+            guard distance >= 2, distance <= max(2, ring0.maxDistance) else { continue }
+            candidates.append(position)
         }
     }
-    candidates.sort {
-        if $0.y == $1.y { return $0.x < $1.x }
-        return $0.y < $1.y
+    candidates.sort { lhs, rhs in
+        if lhs.y == rhs.y { return lhs.x < rhs.x }
+        return lhs.y < rhs.y
     }
 
     var rng = DeterministicRNG(seed: seed)
-    var placed: [GridPosition] = []
+    var placedPositions: [GridPosition] = []
+    let oreTypesByID = Dictionary(uniqueKeysWithValues: oreConfig.oreTypes.map { ($0.oreType, $0) })
+    let weightedOreTypes = oreConfig.oreTypes
+        .filter { $0.rarityWeight > 0 }
+        .sorted { $0.oreType < $1.oreType }
 
-    func isValid(_ candidate: GridPosition) -> Bool {
-        placed.allSatisfy { existing in
-            max(abs(existing.x - candidate.x), abs(existing.y - candidate.y)) >= 3
+    func chebyshevDistance(_ lhs: GridPosition, _ rhs: GridPosition) -> Int {
+        max(abs(lhs.x - rhs.x), abs(lhs.y - rhs.y))
+    }
+
+    func canPlace(_ position: GridPosition, spacing: Int) -> Bool {
+        placedPositions.allSatisfy { existing in
+            chebyshevDistance(position, existing) >= spacing
         }
     }
 
-    func pickPosition() -> GridPosition? {
-        guard !candidates.isEmpty else { return nil }
-        for _ in 0..<(candidates.count * 2) {
-            let candidate = candidates[rng.nextInt(upperBound: candidates.count)]
-            if isValid(candidate) {
-                return candidate
+    func pickPosition(
+        minDistance: Int,
+        maxDistance: Int,
+        preferredSpacing: Int = 3,
+        fallbackSpacing: Int = 2
+    ) -> GridPosition? {
+        let localCandidates = candidates.filter { position in
+            let distance = chebyshevDistance(position, base)
+            return distance >= minDistance && distance <= maxDistance
+        }
+        guard !localCandidates.isEmpty else { return nil }
+
+        for spacing in [preferredSpacing, fallbackSpacing] where spacing > 0 {
+            for _ in 0..<(localCandidates.count * 2) {
+                let candidate = localCandidates[rng.nextInt(upperBound: localCandidates.count)]
+                if canPlace(candidate, spacing: spacing) {
+                    return candidate
+                }
+            }
+            if let deterministicPick = localCandidates.first(where: { canPlace($0, spacing: spacing) }) {
+                return deterministicPick
             }
         }
-        return candidates.first(where: isValid)
+        return nil
     }
 
     func rollRichness() -> OrePatchRichness {
-        let roll = rng.nextInt(upperBound: 100)
-        if roll < 40 { return .poor }
-        if roll < 90 { return .normal }
+        let poor = max(0, ring0.richnessWeights.poor)
+        let normal = max(0, ring0.richnessWeights.normal)
+        let rich = max(0, ring0.richnessWeights.rich)
+        let total = poor + normal + rich
+        guard total > 0 else { return .normal }
+
+        let bucket = Double(rng.nextInt(upperBound: 10_000)) / 10_000.0
+        var threshold = poor / total
+        if bucket < threshold { return .poor }
+        threshold += normal / total
+        if bucket < threshold { return .normal }
         return .rich
     }
 
     func oreAmount(itemID: ItemID, richness: OrePatchRichness) -> Int {
+        if let oreType = oreTypesByID[itemID] {
+            switch richness {
+            case .poor:
+                return max(1, oreType.amounts.poor)
+            case .normal:
+                return max(1, oreType.amounts.normal)
+            case .rich:
+                return max(1, oreType.amounts.rich)
+            }
+        }
         switch (itemID, richness) {
         case ("ore_iron", .poor): return 300
         case ("ore_iron", .normal): return 500
@@ -1335,18 +1463,28 @@ private func generateRing0OrePatches(seed: RunSeed, difficulty: Difficulty) -> [
     }
 
     func rollOreType() -> ItemID {
-        let roll = rng.nextInt(upperBound: 20)
-        if roll < 10 { return "ore_iron" }
-        if roll < 16 { return "ore_copper" }
-        return "ore_coal"
+        guard !weightedOreTypes.isEmpty else { return "ore_iron" }
+        let totalWeight = weightedOreTypes.reduce(0.0) { $0 + max(0, $1.rarityWeight) }
+        guard totalWeight > 0 else { return weightedOreTypes[0].oreType }
+
+        var target = Double(rng.nextInt(upperBound: 10_000)) / 10_000.0 * totalWeight
+        for oreType in weightedOreTypes {
+            let weight = max(0, oreType.rarityWeight)
+            if target < weight {
+                return oreType.oreType
+            }
+            target -= weight
+        }
+        return weightedOreTypes[weightedOreTypes.count - 1].oreType
     }
 
     var patches: [OrePatch] = []
     let guaranteedTypes: [ItemID] = ["ore_iron", "ore_copper", "ore_coal"]
     let guaranteedCount = min(patchCount, guaranteedTypes.count)
+
     for oreType in guaranteedTypes.prefix(guaranteedCount) {
-        guard let position = pickPosition() else { break }
-        placed.append(position)
+        guard let position = pickPosition(minDistance: 2, maxDistance: min(4, ring0.maxDistance)) else { break }
+        placedPositions.append(position)
         let richness = rollRichness()
         let totalOre = oreAmount(itemID: oreType, richness: richness)
         patches.append(
@@ -1355,6 +1493,8 @@ private func generateRing0OrePatches(seed: RunSeed, difficulty: Difficulty) -> [
                 oreType: oreType,
                 richness: richness,
                 position: position,
+                revealRing: 0,
+                isRevealed: true,
                 totalOre: totalOre,
                 remainingOre: totalOre
             )
@@ -1362,8 +1502,8 @@ private func generateRing0OrePatches(seed: RunSeed, difficulty: Difficulty) -> [
     }
 
     while patches.count < patchCount {
-        guard let position = pickPosition() else { break }
-        placed.append(position)
+        guard let position = pickPosition(minDistance: 4, maxDistance: max(4, ring0.maxDistance)) else { break }
+        placedPositions.append(position)
         let oreType = rollOreType()
         let richness = rollRichness()
         let totalOre = oreAmount(itemID: oreType, richness: richness)
@@ -1373,6 +1513,8 @@ private func generateRing0OrePatches(seed: RunSeed, difficulty: Difficulty) -> [
                 oreType: oreType,
                 richness: richness,
                 position: position,
+                revealRing: 0,
+                isRevealed: true,
                 totalOre: totalOre,
                 remainingOre: totalOre
             )

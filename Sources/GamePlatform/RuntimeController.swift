@@ -183,6 +183,10 @@ public final class GameRuntimeController: ObservableObject {
         enqueue(payload: .placeConveyor(position: position, direction: direction))
     }
 
+    public func startOreSurvey(nodeID: String, researchCenterID: EntityID) {
+        enqueue(payload: .startOreSurvey(nodeID: nodeID, researchCenterID: researchCenterID))
+    }
+
     public func configureConveyorIO(
         entityID: EntityID,
         inputDirection: CardinalDirection,

@@ -62,6 +62,7 @@ public final class SimulationEngine {
             CommandSystem(),
             EconomySystem(),
             WaveSystem(),
+            OreLifecycleSystem(),
             EnemyMovementSystem(),
             CombatSystem(),
             ProjectileSystem(),

@@ -10,6 +10,7 @@ public enum ContentValidationError: Error, Equatable, Sendable {
     case invalidHQ(reason: String)
     case invalidDifficulty(reason: String)
     case invalidBuilding(reason: String)
+    case invalidOrePatches(reason: String)
 }
 
 public struct ContentValidator {
@@ -26,6 +27,7 @@ public struct ContentValidator {
         errors += validateHQ(bundle.hq, itemIDs: bundle.itemIDs)
         errors += validateDifficulty(bundle.difficulty)
         errors += validateBuildings(bundle.buildings, itemIDs: bundle.itemIDs)
+        errors += validateOrePatches(bundle.orePatches, itemIDs: bundle.itemIDs)
         return errors
     }
 
@@ -441,6 +443,126 @@ public struct ContentValidator {
                     }
                 }
             }
+        }
+
+        return errors
+    }
+
+    private func validateOrePatches(_ orePatches: OrePatchesConfigDef, itemIDs: Set<ItemID>) -> [ContentValidationError] {
+        var errors: [ContentValidationError] = []
+
+        if orePatches.rings.isEmpty {
+            errors.append(.invalidOrePatches(reason: "ore rings must define at least one ring"))
+            return errors
+        }
+
+        let sortedRings = orePatches.rings.sorted { $0.index < $1.index }
+        let indices = sortedRings.map(\.index)
+        if Set(indices).count != indices.count {
+            errors.append(.invalidOrePatches(reason: "ore rings must use unique indices"))
+        }
+        if sortedRings.first?.index != 0 {
+            errors.append(.invalidOrePatches(reason: "ore rings must start at index 0"))
+        }
+
+        for (offset, ring) in sortedRings.enumerated() {
+            if ring.minDistance < 0 || ring.maxDistance < 0 {
+                errors.append(.invalidOrePatches(reason: "ring \(ring.index): distances must be non-negative"))
+            }
+            if ring.minDistance > ring.maxDistance {
+                errors.append(.invalidOrePatches(reason: "ring \(ring.index): minDistance cannot exceed maxDistance"))
+            }
+            if ring.patchCount.easy <= 0 || ring.patchCount.normal <= 0 || ring.patchCount.hard <= 0 {
+                errors.append(.invalidOrePatches(reason: "ring \(ring.index): patch counts must be positive"))
+            }
+
+            let poor = ring.richnessWeights.poor
+            let normal = ring.richnessWeights.normal
+            let rich = ring.richnessWeights.rich
+            if poor < 0 || normal < 0 || rich < 0 {
+                errors.append(.invalidOrePatches(reason: "ring \(ring.index): richness weights cannot be negative"))
+            }
+            if (poor + normal + rich) <= 0 {
+                errors.append(.invalidOrePatches(reason: "ring \(ring.index): richness weights must sum to > 0"))
+            }
+
+            if offset > 0 {
+                let previous = sortedRings[offset - 1]
+                if ring.minDistance <= previous.maxDistance {
+                    errors.append(
+                        .invalidOrePatches(
+                            reason: "ring \(ring.index): distance range overlaps ring \(previous.index)"
+                        )
+                    )
+                }
+            }
+        }
+
+        if orePatches.oreTypes.isEmpty {
+            errors.append(.invalidOrePatches(reason: "ore types must define at least one ore type"))
+        } else {
+            let oreTypeIDs = orePatches.oreTypes.map(\.oreType)
+            if Set(oreTypeIDs).count != oreTypeIDs.count {
+                errors.append(.invalidOrePatches(reason: "ore types must be unique"))
+            }
+            for oreType in orePatches.oreTypes {
+                if !itemIDs.contains(oreType.oreType) {
+                    errors.append(.invalidOrePatches(reason: "ore type '\(oreType.oreType)' is missing from items.json"))
+                }
+                if oreType.rarityWeight <= 0 {
+                    errors.append(.invalidOrePatches(reason: "ore type '\(oreType.oreType)' rarityWeight must be positive"))
+                }
+                if oreType.amounts.poor <= 0 || oreType.amounts.normal <= 0 || oreType.amounts.rich <= 0 {
+                    errors.append(.invalidOrePatches(reason: "ore type '\(oreType.oreType)' richness amounts must be positive"))
+                }
+            }
+        }
+
+        let maxRingIndex = sortedRings.map(\.index).max() ?? 0
+        let surveyByDifficulty: [(DifficultyID, [Int])] = [
+            (.easy, orePatches.surveySecondsByRing.easy),
+            (.normal, orePatches.surveySecondsByRing.normal),
+            (.hard, orePatches.surveySecondsByRing.hard)
+        ]
+        for (difficulty, seconds) in surveyByDifficulty {
+            if seconds.count <= maxRingIndex {
+                errors.append(
+                    .invalidOrePatches(
+                        reason: "\(difficulty.rawValue): surveySecondsByRing must include ring indices 0...\(maxRingIndex)"
+                    )
+                )
+                continue
+            }
+            for (ringIndex, value) in seconds.enumerated() where ringIndex <= maxRingIndex && value < 0 {
+                errors.append(
+                    .invalidOrePatches(
+                        reason: "\(difficulty.rawValue): surveySecondsByRing[\(ringIndex)] cannot be negative"
+                    )
+                )
+            }
+        }
+
+        let renewal = orePatches.renewal
+        if renewal.minSpacing <= 0 {
+            errors.append(.invalidOrePatches(reason: "renewal.minSpacing must be positive"))
+        }
+        if renewal.minDistanceFromBase < 0 {
+            errors.append(.invalidOrePatches(reason: "renewal.minDistanceFromBase cannot be negative"))
+        }
+        if renewal.maxActivePatches <= 0 {
+            errors.append(.invalidOrePatches(reason: "renewal.maxActivePatches must be positive"))
+        }
+        if renewal.batchCap.easy <= 0 || renewal.batchCap.normal <= 0 || renewal.batchCap.hard <= 0 {
+            errors.append(.invalidOrePatches(reason: "renewal.batchCap values must be positive"))
+        }
+        if !(0...100).contains(renewal.hardSkipPercent) {
+            errors.append(.invalidOrePatches(reason: "renewal.hardSkipPercent must be within 0...100"))
+        }
+        if renewal.hardMaxConsecutiveSkips < 0 {
+            errors.append(.invalidOrePatches(reason: "renewal.hardMaxConsecutiveSkips cannot be negative"))
+        }
+        if renewal.edgeBiasPower <= 0 {
+            errors.append(.invalidOrePatches(reason: "renewal.edgeBiasPower must be positive"))
         }
 
         return errors

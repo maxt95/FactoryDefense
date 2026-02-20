@@ -16,6 +16,7 @@ final class CommandPayloadTests: XCTestCase {
             .configureConveyorIO(entityID: 7, inputDirection: .north, outputDirection: .east),
             .rotateBuilding(entityID: 42),
             .pinRecipe(entityID: 5, recipeID: "smelt_iron"),
+            .startOreSurvey(nodeID: "geology_survey_1", researchCenterID: 17),
             .triggerWave
         ]
 
@@ -52,5 +53,9 @@ final class CommandPayloadTests: XCTestCase {
         )
         XCTAssertEqual(CommandPayload.rotateBuilding(entityID: 7).sortToken, "rotate:7")
         XCTAssertEqual(CommandPayload.pinRecipe(entityID: 7, recipeID: "a").sortToken, "pin:7:a")
+        XCTAssertEqual(
+            CommandPayload.startOreSurvey(nodeID: "geology_survey_1", researchCenterID: 19).sortToken,
+            "survey:geology_survey_1:19"
+        )
     }
 }

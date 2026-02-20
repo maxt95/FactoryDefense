@@ -88,6 +88,7 @@ public struct PlacementValidator {
             guard let patch = world.orePatches.first(where: { $0.id == targetPatchID }) else {
                 return nil
             }
+            guard patch.isRevealed else { return nil }
             guard patch.boundMinerID == nil else { return nil }
             guard !patch.isExhausted else { return nil }
             return isAdjacent(minerPosition, patch.position) ? patch.id : nil
@@ -95,7 +96,10 @@ public struct PlacementValidator {
 
         let candidates = world.orePatches
             .filter { patch in
-                patch.boundMinerID == nil && !patch.isExhausted && isAdjacent(minerPosition, patch.position)
+                patch.isRevealed
+                    && patch.boundMinerID == nil
+                    && !patch.isExhausted
+                    && isAdjacent(minerPosition, patch.position)
             }
             .map(\.id)
             .sorted()
