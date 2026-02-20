@@ -34,6 +34,7 @@ public struct FixedHUDBar: View {
                 Spacer(minLength: 8)
 
                 powerIndicator
+                    .tutorialAnchor("hudPower")
 
                 Divider()
                     .frame(height: 20)
@@ -61,6 +62,7 @@ public struct FixedHUDBar: View {
             ResourceTray(resources: snapshot.allResources)
                 .frame(height: 28)
                 .allowsHitTesting(false)
+                .tutorialAnchor("hudResources")
         }
         .background(HUDColor.background.opacity(0.85))
         .overlay(alignment: .bottom) {

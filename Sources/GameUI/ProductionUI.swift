@@ -389,6 +389,7 @@ public struct BuildMenuPanel: View {
             }
         }
         .padding(10)
+        .tutorialAnchor("buildMenu")
     }
 
     private func costLabel(_ costs: [ItemStack]) -> String {

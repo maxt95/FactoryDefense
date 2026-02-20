@@ -582,6 +582,7 @@ private struct FactoryDefensemacOSGameplayView: View {
     }
 
     @StateObject private var runtime: GameRuntimeController
+    @StateObject private var tutorialController = TutorialStateController()
     @State private var buildMenu = BuildMenuViewModel.productionPreset
     @State private var techTree = TechTreeViewModel.productionPreset
     @State private var onboarding = OnboardingGuideViewModel.starter
@@ -602,6 +603,8 @@ private struct FactoryDefensemacOSGameplayView: View {
     @State private var hoveredGridPosition: GridPosition?
     @State private var isPaused = false
     @State private var showsPauseSettings = false
+    @State private var uiAnchors: [String: CGRect] = [:]
+    @State private var didCameraInteract = false
     @AppStorage("settings.enableDebugViews") private var debugViewsSetting = false
 
     let enableDebugViews: Bool
@@ -622,6 +625,7 @@ private struct FactoryDefensemacOSGameplayView: View {
 
     private static let keyboardPanStep: Float = 56
     private let picker = WhiteboxPicker()
+    private let spotlightResolver = TutorialSpotlightResolver()
     private let objectInspectorBuilder = ObjectInspectorBuilder()
     private let orePatchInspectorBuilder = OrePatchInspectorBuilder()
     private let dragDrawPlanner = GameplayDragDrawPlanner()
@@ -669,6 +673,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                     onScrollZoom: { delta, location, viewport in
                         let scale: Float = delta < 0 ? 0.92 : 1.08
                         zoomCamera(scale: scale, around: location, viewport: viewport)
+                        didCameraInteract = true
                     },
                     onKeyboardPan: { dx, dy, viewport in
                         handleKeyboardPan(deltaX: dx, deltaY: dy, viewport: viewport)
@@ -697,6 +702,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                             let anchor = CGPoint(x: proxy.size.width * 0.5, y: proxy.size.height * 0.5)
                             zoomCamera(scale: inverted, around: anchor, viewport: proxy.size)
                             zoomGestureScale = scale
+                            didCameraInteract = true
                         }
                         .onEnded { _ in
                             zoomGestureScale = 1
@@ -772,7 +778,19 @@ private struct FactoryDefensemacOSGameplayView: View {
                     overlayContent(for: windowID)
                 }
 
-                // Layer 4: Full-screen tech tree
+                // Layer 4: Tutorial overlay
+                if tutorialController.isActive {
+                    TutorialOverlay(
+                        controller: tutorialController,
+                        spotlightRect: resolvedSpotlightRect(viewport: proxy.size),
+                        viewportSize: proxy.size
+                    )
+                    .zIndex(900)
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.2), value: tutorialController.currentStepIndex)
+                }
+
+                // Layer 5: Full-screen tech tree
                 if let rcID = activeTechTreeResearchCenterID {
                     TechTreeFullScreenView(
                         techTree: $techTree,
@@ -787,7 +805,7 @@ private struct FactoryDefensemacOSGameplayView: View {
                     .animation(.easeInOut(duration: 0.25), value: activeTechTreeResearchCenterID != nil)
                 }
 
-                // Layer 5: Pause menu
+                // Layer 6: Pause menu
                 if isPaused {
                     PauseMenuOverlay(
                         onResume: { resumeGame() },
@@ -828,6 +846,12 @@ private struct FactoryDefensemacOSGameplayView: View {
                 onboarding.update(from: runtime.world)
                 enforceCameraConstraints(viewport: proxy.size)
                 syncOverlayLayout(viewport: proxy.size, safeAreaInsets: safeAreaInsets(from: proxy))
+
+                // Wire tutorial controller
+                tutorialController.onPauseRequested = { runtime.stop() }
+                tutorialController.onResumeRequested = { runtime.start() }
+                tutorialController.captureWorldSnapshot(world: runtime.world)
+                tutorialController.beginIfNeeded()
             }
             .onDisappear {
                 runtime.stop()
@@ -840,6 +864,14 @@ private struct FactoryDefensemacOSGameplayView: View {
             .onChange(of: runtime.world.tick) { _, _ in
                 onboarding.update(from: runtime.world)
                 validateSelection()
+                if tutorialController.isActive {
+                    tutorialController.evaluate(
+                        world: runtime.world,
+                        interactionMode: interaction.mode,
+                        buildMenuSelection: buildMenu.selectedEntryID,
+                        didCameraInteract: &didCameraInteract
+                    )
+                }
             }
             .onChange(of: runtime.latestEvents) { _, events in
                 placementFeedback.consume(events: events)
@@ -849,6 +881,14 @@ private struct FactoryDefensemacOSGameplayView: View {
             }
             .onChange(of: buildMenu.selectedEntryID) { _, _ in
                 refreshPlacementPreview(viewport: proxy.size)
+                if tutorialController.isActive {
+                    tutorialController.evaluate(
+                        world: runtime.world,
+                        interactionMode: interaction.mode,
+                        buildMenuSelection: buildMenu.selectedEntryID,
+                        didCameraInteract: &didCameraInteract
+                    )
+                }
             }
             .onChange(of: interaction.mode) { _, mode in
                 switch mode {
@@ -865,6 +905,9 @@ private struct FactoryDefensemacOSGameplayView: View {
             .onChange(of: proxy.size) { _, _ in
                 enforceCameraConstraints(viewport: proxy.size)
                 syncOverlayLayout(viewport: proxy.size, safeAreaInsets: safeAreaInsets(from: proxy))
+            }
+            .onPreferenceChange(TutorialAnchorKey.self) { anchors in
+                uiAnchors = anchors
             }
             .alert(
                 "Remove structure?",
@@ -1221,6 +1264,7 @@ private struct FactoryDefensemacOSGameplayView: View {
         cameraState.panBy(deltaX: -Float(deltaX), deltaY: -Float(deltaY))
         enforceCameraConstraints(viewport: viewport)
         dragTranslation = value.translation
+        didCameraInteract = true
         handlePointerMove(at: value.location, viewport: viewport)
     }
 
@@ -1347,6 +1391,18 @@ private struct FactoryDefensemacOSGameplayView: View {
     private func resumeGame() {
         isPaused = false
         runtime.start()
+    }
+
+    private func resolvedSpotlightRect(viewport: CGSize) -> CGRect? {
+        guard let step = tutorialController.currentStep else { return nil }
+        let target = tutorialController.resolvedSpotlight(for: step, world: runtime.world)
+        return spotlightResolver.resolve(
+            target: target,
+            viewport: viewport,
+            camera: cameraState,
+            board: runtime.world.board,
+            uiAnchors: uiAnchors
+        )
     }
 
     private func closeTechTree() {

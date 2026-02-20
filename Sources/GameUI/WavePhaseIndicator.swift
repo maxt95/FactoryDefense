@@ -22,6 +22,7 @@ public struct WavePhaseIndicator: View {
                 .font(.system(size: 15, weight: .semibold).monospacedDigit())
                 .foregroundStyle(phaseColor)
         }
+        .tutorialAnchor("graceTimer")
     }
 
     private var phaseIcon: String {
