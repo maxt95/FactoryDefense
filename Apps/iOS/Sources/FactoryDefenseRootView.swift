@@ -888,11 +888,16 @@ private struct FactoryDefenseGameplayView: View {
     private func resolvedSpotlightRect(viewport: CGSize) -> CGRect? {
         guard let step = tutorialController.currentStep else { return nil }
         let target = tutorialController.resolvedSpotlight(for: step, world: runtime.world)
+        let cam = cameraState
+        let board = runtime.world.board
+        let zoom = max(0.001, CGFloat(cam.zoom))
+        let tileSize = CGSize(width: 34 * zoom, height: 22 * zoom)
         return spotlightResolver.resolve(
             target: target,
-            viewport: viewport,
-            camera: cameraState,
-            board: runtime.world.board,
+            gridToScreen: { pos in
+                picker.screenPosition(for: pos, viewport: viewport, camera: cam, board: board)
+            },
+            tileSize: tileSize,
             uiAnchors: uiAnchors
         )
     }

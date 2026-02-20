@@ -1,26 +1,25 @@
 #if canImport(SwiftUI)
 import CoreGraphics
-import GameRendering
 import GameSimulation
 
 // MARK: - Spotlight Resolver
 
 public struct TutorialSpotlightResolver {
-    private let picker = WhiteboxPicker()
-
     public init() {}
 
+    /// Resolves a spotlight target to a screen-space rect.
+    /// - Parameters:
+    ///   - gridToScreen: Maps a `GridPosition` to a screen-space center point.
+    ///   - tileSize: Current tile size in screen points at the active zoom level.
     public func resolve(
         target: TutorialSpotlightTarget,
-        viewport: CGSize,
-        camera: WhiteboxCameraState,
-        board: BoardState,
+        gridToScreen: (GridPosition) -> CGPoint,
+        tileSize: CGSize,
         uiAnchors: [String: CGRect]
     ) -> CGRect? {
         switch target {
         case .gridPosition(let position):
-            let center = picker.screenPosition(for: position, viewport: viewport, camera: camera, board: board)
-            let tileSize = tileSizeAtZoom(camera.zoom)
+            let center = gridToScreen(position)
             return CGRect(
                 x: center.x - tileSize.width * 0.5,
                 y: center.y - tileSize.height * 0.5,
@@ -29,14 +28,10 @@ public struct TutorialSpotlightResolver {
             ).insetBy(dx: -4, dy: -4)
 
         case .gridRegion(let origin, let width, let height):
-            let topLeft = picker.screenPosition(for: origin, viewport: viewport, camera: camera, board: board)
-            let bottomRight = picker.screenPosition(
-                for: GridPosition(x: origin.x + width, y: origin.y + height),
-                viewport: viewport,
-                camera: camera,
-                board: board
+            let topLeft = gridToScreen(origin)
+            let bottomRight = gridToScreen(
+                GridPosition(x: origin.x + width, y: origin.y + height)
             )
-            let tileSize = tileSizeAtZoom(camera.zoom)
             let halfTile = CGSize(width: tileSize.width * 0.5, height: tileSize.height * 0.5)
             return CGRect(
                 x: topLeft.x - halfTile.width,
@@ -51,11 +46,6 @@ public struct TutorialSpotlightResolver {
         case .none:
             return nil
         }
-    }
-
-    private func tileSizeAtZoom(_ zoom: Float) -> CGSize {
-        let z = max(0.001, CGFloat(zoom))
-        return CGSize(width: 34 * z, height: 22 * z)
     }
 }
 #endif

@@ -1,7 +1,6 @@
 #if canImport(SwiftUI)
 import SwiftUI
 import GameSimulation
-import GameRendering
 
 // MARK: - Tutorial Overlay
 
