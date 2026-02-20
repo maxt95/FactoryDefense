@@ -283,6 +283,8 @@ private struct FactoryDefenseGameplayView: View {
     @State private var conveyorInputDirection: CardinalDirection = .west
     @State private var conveyorOutputDirection: CardinalDirection = .east
     @State private var didReportRunSummary = false
+    @State private var isPaused = false
+    @Environment(\.scenePhase) private var scenePhase
 
     let onRunEnded: (RunSummarySnapshot) -> Void
     let onQuit: () -> Void
@@ -372,18 +374,21 @@ private struct FactoryDefenseGameplayView: View {
                         snapshot: hudModel.snapshot,
                         warning: hudModel.warning
                     )
+                    .allowsHitTesting(false)
                     Spacer()
                     HStack(alignment: .bottom) {
                         ModeIndicatorView(
                             mode: interaction.mode,
                             structureName: interaction.isBuildMode ? buildMenu.selectedEntry()?.title : nil
                         )
+                        .allowsHitTesting(false)
                         Spacer()
+                        PauseHUDButton { pauseGame() }
                         GameClockView(tick: runtime.world.tick)
+                            .allowsHitTesting(false)
                     }
                     .padding(16)
                 }
-                .allowsHitTesting(false)
 
                 if interaction.mode == .interact {
                     if let quickEditID = interaction.quickEditTarget,
@@ -449,6 +454,20 @@ private struct FactoryDefenseGameplayView: View {
                     .transition(.opacity)
                     .animation(.easeInOut(duration: 0.25), value: activeTechTreeResearchCenterID != nil)
                 }
+
+                // Pause menu overlay
+                if isPaused {
+                    PauseMenuOverlay(
+                        onResume: { resumeGame() },
+                        onSettings: { },
+                        onQuit: {
+                            isPaused = false
+                            onQuit()
+                        }
+                    )
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.2), value: isPaused)
+                }
             }
             .onAppear {
                 runtime.start()
@@ -495,6 +514,11 @@ private struct FactoryDefenseGameplayView: View {
             .onChange(of: proxy.size) { _, _ in
                 enforceCameraConstraints(viewport: proxy.size)
                 syncOverlayLayout(viewport: proxy.size, safeAreaInsets: safeAreaInsets(from: proxy))
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase != .active, !isPaused {
+                    pauseGame()
+                }
             }
             .alert(
                 "Remove structure?",
@@ -803,6 +827,16 @@ private struct FactoryDefenseGameplayView: View {
             deltaBaseY: newBoard.basePosition.y - oldBoard.basePosition.y
         )
         cameraState.clampToSafePerimeter(viewport: viewport, board: newBoard)
+    }
+
+    private func pauseGame() {
+        isPaused = true
+        runtime.stop()
+    }
+
+    private func resumeGame() {
+        isPaused = false
+        runtime.start()
     }
 
     private func closeTechTree() {
