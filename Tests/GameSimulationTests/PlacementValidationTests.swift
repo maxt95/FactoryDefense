@@ -91,6 +91,8 @@ final class PlacementValidationTests: XCTestCase {
     }
 
     func testTwoByTwoPlacementTouchingRestrictedCellIsRejected() {
+        // HQ is now 5x5; anchor at (4,4) covers cells [0..4]x[0..4] on a 6x6 board.
+        // A restricted cell at (1,1) falls inside that footprint, so placement must be rejected.
         let board = BoardState(
             width: 6,
             height: 6,
@@ -119,12 +121,14 @@ final class PlacementValidationTests: XCTestCase {
         let validator = PlacementValidator()
 
         XCTAssertEqual(
-            validator.canPlace(.hq, at: GridPosition(x: 2, y: 2), in: world),
+            validator.canPlace(.hq, at: GridPosition(x: 4, y: 4), in: world),
             .restrictedZone
         )
     }
 
     func testTwoByTwoPlacementTouchingOccupiedCellIsRejected() {
+        // HQ is now 5x5; anchor at (4,4) covers cells [0..4]x[0..4] on a 6x6 board.
+        // A wall at (1,1) falls inside that footprint, so placement must be rejected as occupied.
         let board = BoardState(
             width: 6,
             height: 6,
@@ -155,7 +159,7 @@ final class PlacementValidationTests: XCTestCase {
         let validator = PlacementValidator()
 
         XCTAssertEqual(
-            validator.canPlace(.hq, at: GridPosition(x: 2, y: 2), in: world),
+            validator.canPlace(.hq, at: GridPosition(x: 4, y: 4), in: world),
             .occupied
         )
     }
@@ -339,8 +343,8 @@ final class PlacementValidationTests: XCTestCase {
         _ = engine.step()
         let finalWorld = engine.worldState
 
-        XCTAssertEqual(finalWorld.board.width, 112)
-        XCTAssertEqual(finalWorld.board.height, 80)
+        XCTAssertEqual(finalWorld.board.width, 208)
+        XCTAssertEqual(finalWorld.board.height, 144)
         XCTAssertEqual(finalWorld.board.basePosition, originalBase.translated(byX: 16, byY: 16))
         XCTAssertEqual(finalWorld.board.spawnEdgeX, originalSpawnEdgeX + 16)
         XCTAssertEqual(finalWorld.board.spawnYMin, originalSpawnYMin + 16)
@@ -362,6 +366,9 @@ final class PlacementValidationTests: XCTestCase {
     }
 
     func testMinerPlacementRequiresAdjacentUnboundPatch() {
+        // Miner is now 2x2; its footprint must CONTAIN the ore patch cell.
+        // Ore at (4,4); anchor at (5,5) gives footprint covering [4..5]x[4..5], which includes (4,4).
+        // Anchor at (8,8) gives footprint [7..8]x[7..8] — no ore → invalidMinerPlacement.
         let board = BoardState(
             width: 12,
             height: 12,
@@ -370,7 +377,7 @@ final class PlacementValidationTests: XCTestCase {
             spawnYMin: 0,
             spawnYMax: 0,
             blockedCells: [],
-            restrictedCells: [GridPosition(x: 4, y: 4)],
+            restrictedCells: [],
             ramps: []
         )
         let world = WorldState(
@@ -395,7 +402,7 @@ final class PlacementValidationTests: XCTestCase {
 
         let validator = PlacementValidator()
         XCTAssertEqual(
-            validator.canPlace(.miner, at: GridPosition(x: 5, y: 4), in: world),
+            validator.canPlace(.miner, at: GridPosition(x: 5, y: 5), in: world),
             .ok
         )
         XCTAssertEqual(
@@ -405,6 +412,9 @@ final class PlacementValidationTests: XCTestCase {
     }
 
     func testMinerPlacementRejectsOccupiedPatchBindingTarget() {
+        // Miner is now 2x2; ore at (4,4) with boundMinerID already set.
+        // Anchor at (5,5) gives footprint [4..5]x[4..5], which contains (4,4).
+        // Since the patch is already bound, placement must be rejected as invalidMinerPlacement.
         let board = BoardState(
             width: 12,
             height: 12,
@@ -413,7 +423,7 @@ final class PlacementValidationTests: XCTestCase {
             spawnYMin: 0,
             spawnYMax: 0,
             blockedCells: [],
-            restrictedCells: [GridPosition(x: 4, y: 4)],
+            restrictedCells: [],
             ramps: []
         )
         let world = WorldState(
@@ -439,7 +449,7 @@ final class PlacementValidationTests: XCTestCase {
 
         let validator = PlacementValidator()
         XCTAssertEqual(
-            validator.canPlace(.miner, at: GridPosition(x: 5, y: 4), targetPatchID: 8, in: world),
+            validator.canPlace(.miner, at: GridPosition(x: 5, y: 5), targetPatchID: 8, in: world),
             .invalidMinerPlacement
         )
     }

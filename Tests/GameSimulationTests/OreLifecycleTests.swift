@@ -69,6 +69,13 @@ final class OreLifecycleTests: XCTestCase {
     }
 
     func testMinerPlacementRejectsHiddenPatchTargets() {
+        // Board: 20x20. The restricted cell at (10,10) is kept away from the ore patch
+        // and miner position so that the placement fails specifically due to the patch
+        // being hidden (invalidMinerPlacement) rather than hitting a restricted zone.
+        // The ore patch is at (15,15). The miner is placed at anchor (16,15), giving a
+        // 2x2 footprint covering (15,14),(16,14),(15,15),(16,15) — overlapping the patch.
+        // Because the patch isRevealed=false, resolvedMinerPatchID returns nil, causing
+        // invalidMinerPlacement before any restricted-zone rejection.
         let board = BoardState(
             width: 20,
             height: 20,
@@ -89,7 +96,7 @@ final class OreLifecycleTests: XCTestCase {
                     id: 7,
                     oreType: "ore_iron",
                     richness: .normal,
-                    position: GridPosition(x: 10, y: 10),
+                    position: GridPosition(x: 15, y: 15),
                     revealRing: 1,
                     isRevealed: false,
                     totalOre: 500,
@@ -112,7 +119,7 @@ final class OreLifecycleTests: XCTestCase {
                 payload: .placeStructure(
                     BuildRequest(
                         structure: .miner,
-                        position: GridPosition(x: 11, y: 10),
+                        position: GridPosition(x: 16, y: 15),
                         targetPatchID: 7
                     )
                 )

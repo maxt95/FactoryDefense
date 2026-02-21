@@ -912,9 +912,13 @@ public struct EconomySystem: SimulationSystem {
     }
 
     private func boundPatchIndex(for miner: Entity, state: inout WorldState) -> Int? {
+        let minerCells = Set(StructureType.miner.footprint.coveredCells(anchor: miner.position).map {
+            GridPosition(x: $0.x, y: $0.y, z: 0)
+        })
+
         if let patchID = miner.boundPatchID,
            let patchIndex = state.orePatches.firstIndex(where: { $0.id == patchID }),
-           isAdjacent(miner.position, state.orePatches[patchIndex].position),
+           minerCells.contains(GridPosition(x: state.orePatches[patchIndex].position.x, y: state.orePatches[patchIndex].position.y, z: 0)),
            state.orePatches[patchIndex].boundMinerID == miner.id {
             return patchIndex
         }
@@ -922,7 +926,8 @@ public struct EconomySystem: SimulationSystem {
         let candidates = state.orePatches.indices
             .filter { index in
                 let patch = state.orePatches[index]
-                return patch.boundMinerID == nil && !patch.isExhausted && isAdjacent(miner.position, patch.position)
+                let patchPos = GridPosition(x: patch.position.x, y: patch.position.y, z: 0)
+                return patch.boundMinerID == nil && !patch.isExhausted && minerCells.contains(patchPos)
             }
             .sorted { lhs, rhs in
                 state.orePatches[lhs].id < state.orePatches[rhs].id
@@ -933,10 +938,6 @@ public struct EconomySystem: SimulationSystem {
         state.orePatches[selectedIndex].boundMinerID = miner.id
         state.entities.updateBoundPatchID(miner.id, to: patchID)
         return selectedIndex
-    }
-
-    private func isAdjacent(_ lhs: GridPosition, _ rhs: GridPosition) -> Bool {
-        abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y) == 1
     }
 
     private func advanceConveyors(structures: [Entity], state: inout WorldState) {
@@ -954,8 +955,13 @@ public struct EconomySystem: SimulationSystem {
         var structuresByPosition: [GridPosition: Entity] = [:]
         var wallsByPosition: [GridPosition: EntityID] = [:]
         for structure in structures.sorted(by: { $0.id < $1.id }) {
-            if structuresByPosition[structure.position] == nil {
-                structuresByPosition[structure.position] = structure
+            if let structureType = structure.structureType {
+                for cell in structureType.coveredCells(anchor: structure.position) {
+                    let key = GridPosition(x: cell.x, y: cell.y, z: 0)
+                    if structuresByPosition[key] == nil {
+                        structuresByPosition[key] = structure
+                    }
+                }
             }
             if structure.structureType == .wall {
                 wallsByPosition[structure.position] = structure.id
@@ -1044,8 +1050,13 @@ public struct EconomySystem: SimulationSystem {
         var structuresByPosition: [GridPosition: Entity] = [:]
         var wallsByPosition: [GridPosition: EntityID] = [:]
         for structure in structures.sorted(by: { $0.id < $1.id }) {
-            if structuresByPosition[structure.position] == nil {
-                structuresByPosition[structure.position] = structure
+            if let structureType = structure.structureType {
+                for cell in structureType.coveredCells(anchor: structure.position) {
+                    let key = GridPosition(x: cell.x, y: cell.y, z: 0)
+                    if structuresByPosition[key] == nil {
+                        structuresByPosition[key] = structure
+                    }
+                }
             }
             if let type = structure.structureType, isBeltNode(type), beltNodesByPosition[structure.position] == nil {
                 beltNodesByPosition[structure.position] = structure.id
@@ -1060,45 +1071,61 @@ public struct EconomySystem: SimulationSystem {
             guard let structureType = structure.structureType else { continue }
             guard outputBufferCapacity(for: structureType) > 0 else { continue }
             guard !(state.economy.structureOutputBuffers[structure.id, default: [:]].isEmpty) else { continue }
-            for outputDirection in buildingTransferDirections(for: structureType) {
-                let targetPosition = structure.position.translated(by: outputDirection)
-                guard let itemID = popFirstOutputItem(structureID: structure.id, state: &state) else {
-                    continue
-                }
+            // Iterate by direction so we can compute the internal (source) cell for each edge cell.
+            // The source position is the footprint cell just inside the building adjacent to the
+            // edge cell. Conveyors use sourcePosition to validate that input comes from the
+            // correct side, so it must be the cell one step back into the building.
+            let footprint = structureType.footprint
+            let anchor = structure.position
+            for edgeDirection in CardinalDirection.allCases {
+                guard outputBufferCapacity(for: structureType) > 0 else { break }
+                guard !state.economy.structureOutputBuffers[structure.id, default: [:]].isEmpty else { break }
+                let edgeCells = footprint.edgeCells(anchor: anchor, direction: edgeDirection)
+                for targetPosition in edgeCells {
+                    guard let itemID = popFirstOutputItem(structureID: structure.id, state: &state) else {
+                        break
+                    }
 
-                var delivered = false
-                if let beltNodeID = beltNodesByPosition[targetPosition],
-                   enqueueBeltPayload(
-                    itemID: itemID,
-                    targetStructureID: beltNodeID,
-                    sourcePosition: structure.position,
-                    readySourcePositions: [],
-                    nodesByID: beltNodesByID,
-                    state: &state
-                   ) {
-                    delivered = true
-                } else if let targetStructure = structuresByPosition[targetPosition],
-                          let targetType = targetStructure.structureType,
-                          enqueueInputItem(
-                            itemID: itemID,
-                            structureID: targetStructure.id,
-                            structureType: targetType,
-                            sourcePosition: structure.position,
-                            state: &state
-                          ) {
-                    delivered = true
-                } else if let wallID = wallsByPosition[targetPosition],
-                          injectWallNetwork(itemID: itemID, wallID: wallID, state: &state) {
-                    delivered = true
-                }
+                    // sourcePosition is the footprint cell adjacent to the edge (one step inward).
+                    // Conveyors check that sourcePosition == their inputPosition (node.position + inputDirection),
+                    // so a conveyor at targetPosition facing edgeDirection must have inputDirection == opposite,
+                    // making inputPosition == targetPosition.translated(by: edgeDirection.opposite) == internalCell.
+                    let internalPosition = targetPosition.translated(by: edgeDirection.opposite)
 
-                if delivered {
-                    continue
-                }
+                    var delivered = false
+                    if let beltNodeID = beltNodesByPosition[targetPosition],
+                       enqueueBeltPayload(
+                        itemID: itemID,
+                        targetStructureID: beltNodeID,
+                        sourcePosition: internalPosition,
+                        readySourcePositions: [],
+                        nodesByID: beltNodesByID,
+                        state: &state
+                       ) {
+                        delivered = true
+                    } else if let targetStructure = structuresByPosition[targetPosition],
+                              let targetType = targetStructure.structureType,
+                              enqueueInputItem(
+                                itemID: itemID,
+                                structureID: targetStructure.id,
+                                structureType: targetType,
+                                sourcePosition: internalPosition,
+                                state: &state
+                              ) {
+                        delivered = true
+                    } else if let wallID = wallsByPosition[targetPosition],
+                              injectWallNetwork(itemID: itemID, wallID: wallID, state: &state) {
+                        delivered = true
+                    }
 
-                var outputBuffer = state.economy.structureOutputBuffers[structure.id, default: [:]]
-                outputBuffer[itemID, default: 0] += 1
-                state.economy.structureOutputBuffers[structure.id] = outputBuffer
+                    if delivered {
+                        continue
+                    }
+
+                    var outputBuffer = state.economy.structureOutputBuffers[structure.id, default: [:]]
+                    outputBuffer[itemID, default: 0] += 1
+                    state.economy.structureOutputBuffers[structure.id] = outputBuffer
+                }
             }
         }
     }
@@ -1115,8 +1142,13 @@ public struct EconomySystem: SimulationSystem {
         var structuresByPosition: [GridPosition: Entity] = [:]
         var wallsByPosition: [GridPosition: EntityID] = [:]
         for structure in structures.sorted(by: { $0.id < $1.id }) {
-            if structuresByPosition[structure.position] == nil {
-                structuresByPosition[structure.position] = structure
+            if let structureType = structure.structureType {
+                for cell in structureType.coveredCells(anchor: structure.position) {
+                    let key = GridPosition(x: cell.x, y: cell.y, z: 0)
+                    if structuresByPosition[key] == nil {
+                        structuresByPosition[key] = structure
+                    }
+                }
             }
             if structure.structureType == .wall {
                 wallsByPosition[structure.position] = structure.id
@@ -1127,8 +1159,9 @@ public struct EconomySystem: SimulationSystem {
             .filter { $0.structureType == .storage || $0.structureType == .hq }
             .sorted(by: { $0.id < $1.id })
         for storage in storages {
-            for outputDirection in CardinalDirection.allCases {
-                let targetPosition = storage.position.translated(by: outputDirection)
+            guard let storageType = storage.structureType else { continue }
+            let edgeTargets = buildingEdgeTargets(for: storageType, anchor: storage.position)
+            for targetPosition in edgeTargets {
                 guard let itemID = popFirstStoragePoolItem(storageID: storage.id, state: &state) else {
                     continue
                 }
@@ -1138,7 +1171,7 @@ public struct EconomySystem: SimulationSystem {
                    enqueueBeltPayload(
                     itemID: itemID,
                     targetStructureID: beltNodeID,
-                    sourcePosition: storage.position,
+                    sourcePosition: targetPosition,
                     readySourcePositions: [],
                     nodesByID: beltNodesByID,
                     state: &state
@@ -1150,7 +1183,7 @@ public struct EconomySystem: SimulationSystem {
                             itemID: itemID,
                             structureID: targetStructure.id,
                             structureType: targetType,
-                            sourcePosition: storage.position,
+                            sourcePosition: targetPosition,
                             state: &state
                           ) {
                     delivered = true
@@ -1227,10 +1260,17 @@ public struct EconomySystem: SimulationSystem {
         return ConveyorIOConfig.default(for: node.rotation)
     }
 
-    private func buildingTransferDirections(for structureType: StructureType) -> [CardinalDirection] {
+    /// Returns all edge cells (cells just outside the footprint) for a building,
+    /// used for output buffer drain and storage pool drain.
+    private func buildingEdgeTargets(for structureType: StructureType, anchor: GridPosition) -> [GridPosition] {
         switch structureType {
         case .miner, .smelter, .assembler, .ammoModule, .storage, .hq:
-            return CardinalDirection.allCases
+            var targets: [GridPosition] = []
+            let footprint = structureType.footprint
+            for direction in CardinalDirection.allCases {
+                targets.append(contentsOf: footprint.edgeCells(anchor: anchor, direction: direction))
+            }
+            return targets
         default:
             return []
         }

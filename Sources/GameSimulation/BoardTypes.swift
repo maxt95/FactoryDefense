@@ -40,8 +40,8 @@ public struct RampCell: Codable, Hashable, Sendable {
 }
 
 public enum BoardGrowthPolicy {
-    public static let initialWidth = 96
-    public static let initialHeight = 64
+    public static let initialWidth = 192
+    public static let initialHeight = 128
     public static let maxWidth = 512
     public static let maxHeight = 512
     public static let expansionTriggerTiles = 8

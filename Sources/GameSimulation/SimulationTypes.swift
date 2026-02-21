@@ -180,15 +180,59 @@ public struct StructureFootprint: Codable, Hashable, Sendable {
         }
         return cells
     }
+
+    /// Returns cells just OUTSIDE the footprint edge in a given direction.
+    /// For example, for a 3x2 building with anchor at (x,y), calling
+    /// edgeCells(anchor:, direction: .west) returns the cells to the west
+    /// of the building where conveyors can attach.
+    public func edgeCells(anchor: GridPosition, direction: CardinalDirection) -> [GridPosition] {
+        let minX = anchor.x - (width - 1)
+        let maxX = anchor.x
+        let minY = anchor.y - (height - 1)
+        let maxY = anchor.y
+
+        var cells: [GridPosition] = []
+        switch direction {
+        case .north:
+            // Row above the building
+            for x in minX...maxX {
+                cells.append(GridPosition(x: x, y: minY - 1, z: anchor.z))
+            }
+        case .south:
+            // Row below the building
+            for x in minX...maxX {
+                cells.append(GridPosition(x: x, y: maxY + 1, z: anchor.z))
+            }
+        case .west:
+            // Column to the left of the building
+            for y in minY...maxY {
+                cells.append(GridPosition(x: minX - 1, y: y, z: anchor.z))
+            }
+        case .east:
+            // Column to the right of the building
+            for y in minY...maxY {
+                cells.append(GridPosition(x: maxX + 1, y: y, z: anchor.z))
+            }
+        }
+        return cells
+    }
 }
 
 public extension StructureType {
     var footprint: StructureFootprint {
         switch self {
         case .hq:
-            return StructureFootprint(width: 2, height: 2)
-        case .wall, .turretMount, .miner, .smelter, .assembler, .ammoModule, .powerPlant, .conveyor, .splitter, .merger, .storage, .researchCenter:
+            return StructureFootprint(width: 5, height: 5)
+        case .conveyor, .splitter, .merger, .wall, .turretMount:
             return StructureFootprint(width: 1, height: 1)
+        case .miner, .ammoModule:
+            return StructureFootprint(width: 2, height: 2)
+        case .smelter, .storage:
+            return StructureFootprint(width: 3, height: 2)
+        case .assembler, .researchCenter:
+            return StructureFootprint(width: 3, height: 3)
+        case .powerPlant:
+            return StructureFootprint(width: 4, height: 3)
         }
     }
 
@@ -201,15 +245,15 @@ public extension StructureType {
         case .hq:
             return []
         case .powerPlant:
-            return [ItemStack(itemID: "circuit", quantity: 2), ItemStack(itemID: "plate_copper", quantity: 4)]
+            return [ItemStack(itemID: "circuit", quantity: 6), ItemStack(itemID: "plate_copper", quantity: 10), ItemStack(itemID: "plate_steel", quantity: 4)]
         case .miner:
-            return [ItemStack(itemID: "plate_iron", quantity: 6), ItemStack(itemID: "gear", quantity: 3)]
+            return [ItemStack(itemID: "plate_iron", quantity: 10), ItemStack(itemID: "gear", quantity: 5)]
         case .smelter:
-            return [ItemStack(itemID: "plate_steel", quantity: 4)]
+            return [ItemStack(itemID: "plate_steel", quantity: 8), ItemStack(itemID: "gear", quantity: 2)]
         case .assembler:
-            return [ItemStack(itemID: "plate_iron", quantity: 4), ItemStack(itemID: "circuit", quantity: 2)]
+            return [ItemStack(itemID: "plate_iron", quantity: 8), ItemStack(itemID: "circuit", quantity: 4), ItemStack(itemID: "gear", quantity: 2)]
         case .ammoModule:
-            return [ItemStack(itemID: "circuit", quantity: 2), ItemStack(itemID: "plate_steel", quantity: 2)]
+            return [ItemStack(itemID: "circuit", quantity: 4), ItemStack(itemID: "plate_steel", quantity: 4)]
         case .conveyor:
             return [ItemStack(itemID: "plate_iron", quantity: 1)]
         case .splitter:
@@ -217,13 +261,13 @@ public extension StructureType {
         case .merger:
             return [ItemStack(itemID: "plate_iron", quantity: 1)]
         case .storage:
-            return [ItemStack(itemID: "plate_steel", quantity: 3), ItemStack(itemID: "gear", quantity: 2)]
+            return [ItemStack(itemID: "plate_steel", quantity: 6), ItemStack(itemID: "gear", quantity: 4)]
         case .wall:
             return [ItemStack(itemID: "wall_kit", quantity: 1)]
         case .turretMount:
             return [ItemStack(itemID: "turret_core", quantity: 1), ItemStack(itemID: "plate_steel", quantity: 2)]
         case .researchCenter:
-            return [ItemStack(itemID: "plate_iron", quantity: 8), ItemStack(itemID: "circuit", quantity: 4)]
+            return [ItemStack(itemID: "plate_iron", quantity: 12), ItemStack(itemID: "circuit", quantity: 6), ItemStack(itemID: "gear", quantity: 4)]
         }
     }
 
@@ -232,15 +276,15 @@ public extension StructureType {
         case .hq:
             return 0
         case .powerPlant:
-            return -12
+            return -30
         case .miner:
-            return 2
+            return 3
         case .smelter:
-            return 3
+            return 5
         case .assembler:
-            return 3
+            return 6
         case .ammoModule:
-            return 4
+            return 5
         case .conveyor:
             return 1
         case .splitter, .merger:
@@ -250,7 +294,7 @@ public extension StructureType {
         case .wall, .turretMount:
             return 0
         case .researchCenter:
-            return 2
+            return 3
         }
     }
 
@@ -817,9 +861,9 @@ public struct CombatState: Codable, Hashable, Sendable {
         projectiles: [EntityID: ProjectileRuntime] = [:],
         lastFireTickByTurret: [EntityID: UInt64] = [:],
         basePosition: GridPosition = .zero,
-        spawnEdgeX: Int = 56,
-        spawnYMin: Int = 27,
-        spawnYMax: Int = 36,
+        spawnEdgeX: Int = 120,
+        spawnYMin: Int = 52,
+        spawnYMax: Int = 76,
         wallNetworkByWallEntityID: [EntityID: Int] = [:],
         wallNetworks: [Int: WallNetworkState] = [:],
         wallNetworksDirty: Bool = true
@@ -1347,18 +1391,13 @@ private func generateRing0OrePatches(
     let base = board.basePosition
 
     var blocked: Set<GridPosition> = Set(board.restrictedCells + board.blockedCells)
-    let hqFootprint = Set([
-        base.translated(byX: -1, byY: -1),
-        base.translated(byX: 0, byY: -1),
-        base.translated(byX: -1, byY: 0),
-        base.translated(byX: 0, byY: 0)
-    ])
+    let hqFootprint = Set(StructureType.hq.footprint.coveredCells(anchor: base))
     blocked.formUnion(hqFootprint)
 
-    // Keep a one-tile moat around HQ clear for starter walling.
+    // Keep a two-tile moat around HQ clear for starter walling.
     for cell in hqFootprint {
-        for dy in -1...1 {
-            for dx in -1...1 {
+        for dy in -2...2 {
+            for dx in -2...2 {
                 blocked.insert(cell.translated(byX: dx, byY: dy))
             }
         }
@@ -1370,7 +1409,7 @@ private func generateRing0OrePatches(
             let position = GridPosition(x: x, y: y, z: 0)
             guard !blocked.contains(position) else { continue }
             let distance = max(abs(position.x - base.x), abs(position.y - base.y))
-            guard distance >= 2, distance <= max(2, ring0.maxDistance) else { continue }
+            guard distance >= 4, distance <= max(4, ring0.maxDistance) else { continue }
             candidates.append(position)
         }
     }
@@ -1483,7 +1522,7 @@ private func generateRing0OrePatches(
     let guaranteedCount = min(patchCount, guaranteedTypes.count)
 
     for oreType in guaranteedTypes.prefix(guaranteedCount) {
-        guard let position = pickPosition(minDistance: 2, maxDistance: min(4, ring0.maxDistance)) else { break }
+        guard let position = pickPosition(minDistance: 4, maxDistance: min(8, ring0.maxDistance)) else { break }
         placedPositions.append(position)
         let richness = rollRichness()
         let totalOre = oreAmount(itemID: oreType, richness: richness)
@@ -1502,7 +1541,7 @@ private func generateRing0OrePatches(
     }
 
     while patches.count < patchCount {
-        guard let position = pickPosition(minDistance: 4, maxDistance: max(4, ring0.maxDistance)) else { break }
+        guard let position = pickPosition(minDistance: 6, maxDistance: max(6, ring0.maxDistance)) else { break }
         placedPositions.append(position)
         let oreType = rollOreType()
         let richness = rollRichness()

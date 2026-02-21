@@ -309,8 +309,8 @@ public struct ContentValidator {
         if hq.storageCapacity <= 0 {
             errors.append(.invalidHQ(reason: "hq storageCapacity must be positive"))
         }
-        if hq.footprint.width != 2 || hq.footprint.height != 2 {
-            errors.append(.invalidHQ(reason: "hq footprint must be 2x2"))
+        if hq.footprint.width != 5 || hq.footprint.height != 5 {
+            errors.append(.invalidHQ(reason: "hq footprint must be 5x5"))
         }
 
         let resourcesByDifficulty: [(DifficultyID, [ItemID: Int])] = [
@@ -415,12 +415,12 @@ public struct ContentValidator {
                 errors.append(.invalidBuilding(reason: "\(building.id): must define at least one directional port"))
             }
             if building.id == "powerPlant",
-               (building.footprint.width != 1 || building.footprint.height != 1) {
-                errors.append(.invalidBuilding(reason: "powerPlant footprint must be 1x1"))
+               (building.footprint.width != 4 || building.footprint.height != 3) {
+                errors.append(.invalidBuilding(reason: "powerPlant footprint must be 4x3"))
             }
             if building.id == "storage",
-               (building.footprint.width != 1 || building.footprint.height != 1) {
-                errors.append(.invalidBuilding(reason: "storage footprint must be 1x1"))
+               (building.footprint.width != 3 || building.footprint.height != 2) {
+                errors.append(.invalidBuilding(reason: "storage footprint must be 3x2"))
             }
             if building.id == "storage", building.powerDraw != 0 {
                 errors.append(.invalidBuilding(reason: "storage powerDraw must be 0"))

@@ -144,10 +144,17 @@ inline int ramp_elevation(const device WhiteboxRamp* ramps, uint count, int2 cel
 }
 
 inline int2 footprint_size_for_type(uint typeRaw) {
-    if (typeRaw == 12u) {
-        return int2(2, 2);
+    switch (typeRaw) {
+        case 12u: return int2(5, 5); // hq
+        case 3u:  return int2(2, 2); // miner
+        case 6u:  return int2(2, 2); // ammo module
+        case 4u:  return int2(3, 2); // smelter
+        case 11u: return int2(3, 2); // storage
+        case 5u:  return int2(3, 3); // assembler
+        case 13u: return int2(3, 3); // research center
+        case 7u:  return int2(4, 3); // power plant
+        default:  return int2(1, 1); // wall, turretMount, conveyor, splitter, merger
     }
-    return int2(1, 1);
 }
 
 inline int4 footprint_rect_from_anchor(int anchorX, int anchorY, int footprintWidth, int footprintHeight) {
@@ -166,19 +173,19 @@ inline bool point_in_rect(int2 cell, int4 rect) {
 
 inline float structure_height_in_tiles(uint typeRaw) {
     switch (typeRaw) {
-        case 1u: return 0.28; // wall
-        case 2u: return 0.95; // turret mount
-        case 3u: return 0.60; // miner
-        case 4u: return 0.68; // smelter
-        case 5u: return 0.58; // assembler
-        case 6u: return 0.52; // ammo module
-        case 7u: return 1.05; // power plant
-        case 8u: return 0.18; // conveyor
-        case 9u: return 0.20; // splitter
-        case 10u: return 0.20; // merger
-        case 11u: return 0.72; // storage
-        case 12u: return 0.90; // hq
-        case 13u: return 0.65; // research center
+        case 1u: return 0.28;  // wall
+        case 2u: return 0.95;  // turret mount
+        case 3u: return 0.55;  // miner (2x2)
+        case 4u: return 0.80;  // smelter (3x2)
+        case 5u: return 0.75;  // assembler (3x3)
+        case 6u: return 0.55;  // ammo module (2x2)
+        case 7u: return 1.30;  // power plant (4x3)
+        case 8u: return 0.12;  // conveyor (thin belt)
+        case 9u: return 0.14;  // splitter (thin junction)
+        case 10u: return 0.14; // merger (thin junction)
+        case 11u: return 0.65; // storage (3x2)
+        case 12u: return 1.40; // hq (5x5, tallest)
+        case 13u: return 0.78; // research center (3x3)
         default: return 0.50;
     }
 }

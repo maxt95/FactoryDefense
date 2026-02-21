@@ -352,9 +352,11 @@ final class LogisticsRuntimeTests: XCTestCase {
     }
 
     func testSmelterCanOutputToConveyorOnAnySide() {
+        // Smelter is 3x2. Anchor at (20,20) covers (18,19)..(20,20).
+        // North edge cells: y=18, x in 18..20 → (18,18),(19,18),(20,18).
         var entities = EntityStore()
-        let smelterID = entities.spawnStructure(.smelter, at: GridPosition(x: 3, y: 3))
-        let northConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 3, y: 2), rotation: .north)
+        let smelterID = entities.spawnStructure(.smelter, at: GridPosition(x: 20, y: 20))
+        let northConveyor = entities.spawnStructure(.conveyor, at: GridPosition(x: 20, y: 18), rotation: .north)
 
         let world = WorldState(
             tick: 0,
@@ -376,10 +378,14 @@ final class LogisticsRuntimeTests: XCTestCase {
     }
 
     func testConnectedConveyorBackpressureBlocksOutputDrain() {
+        // Use positions far from origin to avoid footprint overlaps.
+        // PowerPlant 4x3 at (20,20): covers (17,18)..(20,20).
+        // AmmoModule 2x2 at (22,20): covers (21,19)..(22,20).
+        // East edge of ammoModule: x=23, y in 19..20 → conveyor at (23,20).
         var entities = EntityStore()
-        _ = entities.spawnStructure(.powerPlant, at: GridPosition(x: 0, y: 1))
-        let ammoModuleID = entities.spawnStructure(.ammoModule, at: GridPosition(x: 0, y: 0))
-        let conveyorID = entities.spawnStructure(.conveyor, at: GridPosition(x: 1, y: 0), rotation: .east)
+        _ = entities.spawnStructure(.powerPlant, at: GridPosition(x: 20, y: 20))
+        let ammoModuleID = entities.spawnStructure(.ammoModule, at: GridPosition(x: 22, y: 20))
+        let conveyorID = entities.spawnStructure(.conveyor, at: GridPosition(x: 23, y: 20), rotation: .east)
 
         let world = WorldState(
             tick: 0,
@@ -441,6 +447,9 @@ final class LogisticsRuntimeTests: XCTestCase {
     }
 
     func testMinerPlacementBindsRequestedPatch() {
+        // Miner is 2x2. To place on ore at (8,8), use anchor (9,9) covering (8,8)..(9,9).
+        // No restricted cells at those positions; the old (4,4) restriction is removed.
+        // Miner build cost: plate_iron: 10, gear: 5 — supply enough resources.
         let board = BoardState(
             width: 12,
             height: 12,
@@ -449,7 +458,7 @@ final class LogisticsRuntimeTests: XCTestCase {
             spawnYMin: 0,
             spawnYMax: 0,
             blockedCells: [],
-            restrictedCells: [GridPosition(x: 4, y: 4)],
+            restrictedCells: [],
             ramps: []
         )
         let world = WorldState(
@@ -461,12 +470,12 @@ final class LogisticsRuntimeTests: XCTestCase {
                     id: 7,
                     oreType: "ore_iron",
                     richness: .normal,
-                    position: GridPosition(x: 4, y: 4),
+                    position: GridPosition(x: 8, y: 8),
                     totalOre: 500,
                     remainingOre: 500
                 )
             ],
-            economy: EconomyState(storageSharedPoolByEntity: [1: ["plate_iron": 6, "gear": 3]]),
+            economy: EconomyState(storageSharedPoolByEntity: [1: ["plate_iron": 10, "gear": 5]]),
             threat: ThreatState(),
             run: RunState()
         )
@@ -478,7 +487,7 @@ final class LogisticsRuntimeTests: XCTestCase {
                 payload: .placeStructure(
                     BuildRequest(
                         structure: .miner,
-                        position: GridPosition(x: 5, y: 4),
+                        position: GridPosition(x: 9, y: 9),
                         targetPatchID: 7
                     )
                 )
@@ -496,6 +505,9 @@ final class LogisticsRuntimeTests: XCTestCase {
     }
 
     func testMinerPlacementAutoBindsAdjacentPatchWhenTargetOmitted() {
+        // Miner is 2x2. To place on ore at (8,8), use anchor (9,9) covering (8,8)..(9,9).
+        // No restricted cells at those positions; the old (4,4) restriction is removed.
+        // Miner build cost: plate_iron: 10, gear: 5 — supply enough resources.
         let board = BoardState(
             width: 12,
             height: 12,
@@ -504,7 +516,7 @@ final class LogisticsRuntimeTests: XCTestCase {
             spawnYMin: 0,
             spawnYMax: 0,
             blockedCells: [],
-            restrictedCells: [GridPosition(x: 4, y: 4)],
+            restrictedCells: [],
             ramps: []
         )
         let world = WorldState(
@@ -516,12 +528,12 @@ final class LogisticsRuntimeTests: XCTestCase {
                     id: 7,
                     oreType: "ore_iron",
                     richness: .normal,
-                    position: GridPosition(x: 4, y: 4),
+                    position: GridPosition(x: 8, y: 8),
                     totalOre: 500,
                     remainingOre: 500
                 )
             ],
-            economy: EconomyState(storageSharedPoolByEntity: [1: ["plate_iron": 6, "gear": 3]]),
+            economy: EconomyState(storageSharedPoolByEntity: [1: ["plate_iron": 10, "gear": 5]]),
             threat: ThreatState(),
             run: RunState()
         )
@@ -533,7 +545,7 @@ final class LogisticsRuntimeTests: XCTestCase {
                 payload: .placeStructure(
                     BuildRequest(
                         structure: .miner,
-                        position: GridPosition(x: 5, y: 4)
+                        position: GridPosition(x: 9, y: 9)
                     )
                 )
             )

@@ -15,53 +15,63 @@ public enum WhiteboxAssetCatalog {
             addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.25, 0.10, 0.25), offset: SIMD3<Float>(0, 0.50, 0))
 
         case .miner:
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.40, 0.20, 0.40))
+            // 2x2 footprint — solid extraction platform with taller drill
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.42, 0.22, 0.42))
             addMesh(
                 &builder,
-                MeshPrimitives.cylinder(radius: 0.10, height: 0.30, segments: 10),
-                offset: SIMD3<Float>(0, 0.40, 0)
+                MeshPrimitives.cylinder(radius: 0.12, height: 0.40, segments: 10),
+                offset: SIMD3<Float>(0, 0.44, 0)
             )
 
         case .smelter:
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.40, 0.30, 0.40))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.25, 0.08), offset: SIMD3<Float>(0.20, 0.60, -0.15))
+            // 3x2 footprint — wide furnace body with taller chimney
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.42, 0.32, 0.42))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.10, 0.35, 0.10), offset: SIMD3<Float>(0.20, 0.64, -0.15))
 
         case .assembler:
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.45, 0.25, 0.45))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.14, 0.14, 0.14), offset: SIMD3<Float>(-0.18, 0.53, 0))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.14, 0.14, 0.14), offset: SIMD3<Float>(0.18, 0.53, 0))
+            // 3x3 footprint — large workshop floor with taller work stations
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.44, 0.28, 0.44))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.16, 0.18, 0.16), offset: SIMD3<Float>(-0.18, 0.56, 0))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.16, 0.18, 0.16), offset: SIMD3<Float>(0.18, 0.56, 0))
 
         case .ammoModule:
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.35, 0.30, 0.35))
+            // 2x2 footprint — ammo fabrication box
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.40, 0.28, 0.40))
             addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.10, 0.10, 0.22), offset: SIMD3<Float>(0.30, 0.34, 0))
 
         case .powerPlant:
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.40, 0.40, 0.40))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.16, 0.20, 0.16), offset: SIMD3<Float>(0, 0.80, 0))
+            // 4x3 footprint — massive generator block with tall smokestack
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.44, 0.45, 0.44))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.14, 0.30, 0.14), offset: SIMD3<Float>(0, 0.90, 0))
 
         case .conveyor:
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.45, 0.05, 0.45))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.10, 0.02, 0.10), offset: SIMD3<Float>(0.24, 0.10, 0))
+            // 1x1 — narrow belt strip
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.45, 0.04, 0.16))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.06, 0.02, 0.06), offset: SIMD3<Float>(0.30, 0.08, 0))
 
         case .splitter:
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.42, 0.08, 0.42))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.10, 0.03, 0.10), offset: SIMD3<Float>(0.22, 0.14, 0))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(0.08, 0.14, 0.20))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(0.08, 0.14, -0.20))
+            // 1x1 — compact junction
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.42, 0.06, 0.20))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.10, 0.03, 0.10), offset: SIMD3<Float>(0.22, 0.12, 0))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(0.08, 0.12, 0.12))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(0.08, 0.12, -0.12))
 
         case .merger:
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.42, 0.08, 0.42))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.10, 0.03, 0.10), offset: SIMD3<Float>(0.25, 0.14, 0))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(-0.20, 0.14, 0.16))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(-0.20, 0.14, -0.16))
+            // 1x1 — compact junction
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.42, 0.06, 0.20))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.10, 0.03, 0.10), offset: SIMD3<Float>(0.25, 0.12, 0))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(-0.20, 0.12, 0.12))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.08, 0.03, 0.08), offset: SIMD3<Float>(-0.20, 0.12, -0.12))
 
         case .storage:
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.45, 0.20, 0.45))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.18, 0.08, 0.18), offset: SIMD3<Float>(0, 0.45, 0))
+            // 3x2 footprint — low warehouse
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.44, 0.24, 0.44))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.18, 0.08, 0.18), offset: SIMD3<Float>(0, 0.48, 0))
 
         case .hq:
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.45, 0.45, 0.45))
-            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.16, 0.16, 0.16), offset: SIMD3<Float>(0, 0.90, 0))
+            // 5x5 footprint — massive command block with spire
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.44, 0.48, 0.44))
+            addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.18, 0.20, 0.18), offset: SIMD3<Float>(0, 0.96, 0))
 
         case .swarmling:
             addGroundedBox(&builder, halfExtents: SIMD3<Float>(0.15, 0.15, 0.15))
