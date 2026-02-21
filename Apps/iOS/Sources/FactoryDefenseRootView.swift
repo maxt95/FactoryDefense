@@ -503,6 +503,7 @@ private struct FactoryDefenseGameplayView: View {
                 tutorialController.onResumeRequested = { runtime.start() }
                 tutorialController.captureWorldSnapshot(world: runtime.world)
                 tutorialController.beginIfNeeded()
+                normalizeTutorialSelectionState()
             }
             .onDisappear {
                 runtime.stop()
@@ -515,6 +516,7 @@ private struct FactoryDefenseGameplayView: View {
             .onChange(of: runtime.world.tick) { _, _ in
                 onboarding.update(from: runtime.world)
                 validateSelection()
+                normalizeTutorialSelectionState()
                 if tutorialController.isActive {
                     tutorialController.evaluate(
                         world: runtime.world,
@@ -532,6 +534,7 @@ private struct FactoryDefenseGameplayView: View {
             }
             .onChange(of: buildMenu.selectedEntryID) { _, _ in
                 refreshPlacementPreview(viewport: proxy.size)
+                normalizeTutorialSelectionState()
                 if tutorialController.isActive {
                     tutorialController.evaluate(
                         world: runtime.world,
@@ -550,6 +553,16 @@ private struct FactoryDefenseGameplayView: View {
                     didCameraInteract: &didCameraInteract
                 )
             }
+            .onChange(of: tutorialController.currentStepIndex) { _, _ in
+                guard tutorialController.isActive else { return }
+                normalizeTutorialSelectionState()
+                tutorialController.evaluate(
+                    world: runtime.world,
+                    interactionMode: interaction.mode,
+                    buildMenuSelection: buildMenu.selectedEntryID,
+                    didCameraInteract: &didCameraInteract
+                )
+            }
             .onChange(of: interaction.mode) { _, mode in
                 switch mode {
                 case .build:
@@ -557,6 +570,15 @@ private struct FactoryDefenseGameplayView: View {
                     refreshPlacementPreview(viewport: proxy.size)
                 case .interact, .editBelts, .planBelt:
                     runtime.clearPlacementPreview()
+                }
+                normalizeTutorialSelectionState()
+                if tutorialController.isActive {
+                    tutorialController.evaluate(
+                        world: runtime.world,
+                        interactionMode: interaction.mode,
+                        buildMenuSelection: buildMenu.selectedEntryID,
+                        didCameraInteract: &didCameraInteract
+                    )
                 }
             }
             .onChange(of: selectedTarget) { _, _ in
@@ -909,6 +931,20 @@ private struct FactoryDefenseGameplayView: View {
             tileSize: tileSize,
             uiAnchors: uiAnchors
         )
+    }
+
+    private func normalizeTutorialSelectionState() {
+        guard tutorialController.isActive, let step = tutorialController.currentStep else { return }
+        guard case .selectBuildEntry(let requiredEntryID) = step.completionCondition else { return }
+        if buildMenu.selectedEntryID != requiredEntryID {
+            if buildMenu.selectedEntryID != nil {
+                buildMenu.selectedEntryID = nil
+            }
+            if interaction.mode == .build {
+                interaction.exitBuildMode()
+                runtime.clearPlacementPreview()
+            }
+        }
     }
 
     private func returnToInteractMode() {
