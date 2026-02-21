@@ -541,6 +541,15 @@ private struct FactoryDefenseGameplayView: View {
                     )
                 }
             }
+            .onChange(of: didCameraInteract) { _, didInteract in
+                guard didInteract, tutorialController.isActive else { return }
+                tutorialController.evaluate(
+                    world: runtime.world,
+                    interactionMode: interaction.mode,
+                    buildMenuSelection: buildMenu.selectedEntryID,
+                    didCameraInteract: &didCameraInteract
+                )
+            }
             .onChange(of: interaction.mode) { _, mode in
                 switch mode {
                 case .build:
