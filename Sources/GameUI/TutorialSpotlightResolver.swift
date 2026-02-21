@@ -28,16 +28,36 @@ public struct TutorialSpotlightResolver {
             ).insetBy(dx: -4, dy: -4)
 
         case .gridRegion(let origin, let width, let height):
-            let topLeft = gridToScreen(origin)
-            let bottomRight = gridToScreen(
-                GridPosition(x: origin.x + width, y: origin.y + height)
-            )
+            let boundedWidth = max(1, width)
+            let boundedHeight = max(1, height)
+            let xRange = origin.x..<(origin.x + boundedWidth)
+            let yRange = origin.y..<(origin.y + boundedHeight)
+
+            var minCenterX: CGFloat = .greatestFiniteMagnitude
+            var maxCenterX: CGFloat = -.greatestFiniteMagnitude
+            var minCenterY: CGFloat = .greatestFiniteMagnitude
+            var maxCenterY: CGFloat = -.greatestFiniteMagnitude
+
+            for y in yRange {
+                for x in xRange {
+                    let center = gridToScreen(GridPosition(x: x, y: y))
+                    minCenterX = min(minCenterX, center.x)
+                    maxCenterX = max(maxCenterX, center.x)
+                    minCenterY = min(minCenterY, center.y)
+                    maxCenterY = max(maxCenterY, center.y)
+                }
+            }
+
+            guard minCenterX.isFinite, maxCenterX.isFinite, minCenterY.isFinite, maxCenterY.isFinite else {
+                return nil
+            }
+
             let halfTile = CGSize(width: tileSize.width * 0.5, height: tileSize.height * 0.5)
             return CGRect(
-                x: topLeft.x - halfTile.width,
-                y: topLeft.y - halfTile.height,
-                width: (bottomRight.x - topLeft.x) + tileSize.width,
-                height: (bottomRight.y - topLeft.y) + tileSize.height
+                x: minCenterX - halfTile.width,
+                y: minCenterY - halfTile.height,
+                width: (maxCenterX - minCenterX) + tileSize.width,
+                height: (maxCenterY - minCenterY) + tileSize.height
             ).insetBy(dx: -8, dy: -8)
 
         case .uiElement(let anchorKey):

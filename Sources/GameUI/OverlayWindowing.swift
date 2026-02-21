@@ -447,6 +447,7 @@ private struct GameplayOverlayWindowInstance<Content: View>: View {
         ) {
             content
         }
+        .tutorialAnchor(state.id.rawValue)
         .frame(width: size.width, height: size.height, alignment: .topLeading)
         .clipped()
         .contentShape(Rectangle())

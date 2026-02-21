@@ -146,7 +146,7 @@ public struct TutorialSequence: Sendable {
         TutorialStepDefinition(
             id: "place_miner",
             title: "Place a Miner",
-            body: "Now tap on an ore patch to place your first miner. It will begin extracting resources automatically once powered.",
+            body: "Now tap an empty tile next to an ore patch to place your first miner. It will begin extracting resources automatically once powered.",
             iconSystemName: "square.grid.3x3.topleft.filled",
             spotlight: .gridPosition(GridPosition(x: 0, y: 0)),
             arrowDirection: .down,
@@ -158,10 +158,10 @@ public struct TutorialSequence: Sendable {
         TutorialStepDefinition(
             id: "power_intro",
             title: "Power Up",
-            body: "Your miner needs electricity! Open the Build menu and place a Power Plant nearby. Watch the power indicator in the HUD — keep supply above demand.",
+            body: "Your miner needs electricity! Select Power Plant from the Build menu, then place it nearby. Watch the power indicator in the HUD — keep supply above demand.",
             iconSystemName: "bolt.fill",
-            spotlight: .uiElement(anchorKey: "hudPower"),
-            arrowDirection: .down,
+            spotlight: .uiElement(anchorKey: "buildMenu"),
+            arrowDirection: .right,
             completionCondition: .placeStructure(.powerPlant),
             simulationMode: .running,
             dimOpacity: 0.40,

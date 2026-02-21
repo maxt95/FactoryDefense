@@ -124,9 +124,24 @@ public final class TutorialStateController: ObservableObject {
                 height: 3
             )
 
-        case "ore_patches", "place_miner":
+        case "ore_patches":
             if let nearest = nearestOrePatch(to: world.board.basePosition, in: world) {
-                return .gridPosition(nearest.position)
+                let board = world.board
+                let minX = max(0, nearest.position.x - 1)
+                let minY = max(0, nearest.position.y - 1)
+                let maxX = min(board.width - 1, nearest.position.x + 1)
+                let maxY = min(board.height - 1, nearest.position.y + 1)
+                return .gridRegion(
+                    origin: GridPosition(x: minX, y: minY),
+                    width: max(1, maxX - minX + 1),
+                    height: max(1, maxY - minY + 1)
+                )
+            }
+            return step.spotlight
+
+        case "place_miner":
+            if let placement = nearestValidMinerPlacement(to: world.board.basePosition, in: world) {
+                return .gridPosition(placement)
             }
             return step.spotlight
 
@@ -176,6 +191,48 @@ public final class TutorialStateController: ObservableObject {
             let distB = abs(rhs.position.x - position.x) + abs(rhs.position.y - position.y)
             return distA < distB
         })
+    }
+
+    private func nearestValidMinerPlacement(to position: GridPosition, in world: WorldState) -> GridPosition? {
+        let validator = PlacementValidator()
+        let sortedPatches = world.orePatches
+            .filter { $0.isRevealed && !$0.isExhausted }
+            .sorted { lhs, rhs in
+                let distA = abs(lhs.position.x - position.x) + abs(lhs.position.y - position.y)
+                let distB = abs(rhs.position.x - position.x) + abs(rhs.position.y - position.y)
+                if distA != distB {
+                    return distA < distB
+                }
+                return lhs.id < rhs.id
+            }
+
+        for patch in sortedPatches {
+            let candidates = [
+                patch.position.translated(byX: 0, byY: -1),
+                patch.position.translated(byX: 1, byY: 0),
+                patch.position.translated(byX: 0, byY: 1),
+                patch.position.translated(byX: -1, byY: 0)
+            ]
+            .filter { world.board.contains($0) }
+            .sorted { lhs, rhs in
+                let distA = abs(lhs.x - position.x) + abs(lhs.y - position.y)
+                let distB = abs(rhs.x - position.x) + abs(rhs.y - position.y)
+                if distA != distB {
+                    return distA < distB
+                }
+                if lhs.y != rhs.y {
+                    return lhs.y < rhs.y
+                }
+                return lhs.x < rhs.x
+            }
+
+            if let placement = candidates.first(where: {
+                validator.canPlace(.miner, at: $0, targetPatchID: patch.id, in: world) == .ok
+            }) {
+                return placement
+            }
+        }
+        return nil
     }
 }
 #endif
