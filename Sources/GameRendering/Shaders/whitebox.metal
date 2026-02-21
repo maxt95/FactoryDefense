@@ -393,8 +393,14 @@ kernel void whitebox_board(
         }
 
         // HQ area - cleared platform with paved concrete look
+        // basePosition is the anchor (bottom-right corner) of the 5x5 HQ footprint.
+        // Compute the footprint center so the platform visual aligns with the actual building.
         {
-            const float chebyshevDist = max(abs(float(cell.x - uniforms.baseX)), abs(float(cell.y - uniforms.baseY)));
+            const int hqFootprintW = 5;
+            const int hqFootprintH = 5;
+            const float hqCenterX = float(uniforms.baseX) - float(hqFootprintW - 1) * 0.5;
+            const float hqCenterY = float(uniforms.baseY) - float(hqFootprintH - 1) * 0.5;
+            const float chebyshevDist = max(abs(float(cell.x) - hqCenterX), abs(float(cell.y) - hqCenterY));
             if (chebyshevDist <= 3.0) {
                 const float3 concreteBase = float3(0.25, 0.27, 0.30);
                 const float2 voro = voronoi(cellF * 2.0);
