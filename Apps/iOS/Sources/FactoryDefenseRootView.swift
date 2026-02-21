@@ -630,10 +630,7 @@ private struct FactoryDefenseGameplayView: View {
     private var overlayWindowDefinitions: [GameplayOverlayWindowDefinition] {
         [
             GameplayOverlayWindowDefinition(id: .buildMenu, title: "Build", preferredWidth: 290, preferredHeight: 520),
-            GameplayOverlayWindowDefinition(id: .buildingReference, title: "Buildings", preferredWidth: 290, preferredHeight: 520),
-            GameplayOverlayWindowDefinition(id: .tileLegend, title: "Tile Legend", preferredWidth: 280, preferredHeight: 340),
-            GameplayOverlayWindowDefinition(id: .onboarding, title: "Objectives", preferredWidth: 360, preferredHeight: 340),
-            GameplayOverlayWindowDefinition(id: .tuningDashboard, title: "Telemetry", preferredWidth: 220, preferredHeight: 260)
+            GameplayOverlayWindowDefinition(id: .onboarding, title: "Objectives", preferredWidth: 360, preferredHeight: 340)
         ]
     }
 
