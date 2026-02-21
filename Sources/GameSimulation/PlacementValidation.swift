@@ -23,7 +23,21 @@ public struct PlacementValidator {
     ) -> PlacementResult {
         let coveredCells = structure.coveredCells(anchor: position)
         guard coveredCells.allSatisfy(world.board.contains(_:)) else { return .outOfBounds }
-        guard !coveredCells.contains(where: world.board.isRestricted(_:)) else { return .restrictedZone }
+
+        // Miners are placed ON ore patches, which are restricted cells.
+        // Allow miners to overlap ore patch positions but reject other restricted cells.
+        if structure == .miner {
+            let orePatchPositions = Set(world.orePatches.map {
+                GridPosition(x: $0.position.x, y: $0.position.y, z: 0)
+            })
+            let nonOreRestricted = coveredCells.contains { cell in
+                let normalized = GridPosition(x: cell.x, y: cell.y, z: 0)
+                return world.board.isRestricted(normalized) && !orePatchPositions.contains(normalized)
+            }
+            guard !nonOreRestricted else { return .restrictedZone }
+        } else {
+            guard !coveredCells.contains(where: world.board.isRestricted(_:)) else { return .restrictedZone }
+        }
 
         if structure == .turretMount {
             guard resolvedTurretHostWallID(forTurretAt: position, in: world.entities) != nil else {
@@ -84,6 +98,10 @@ public struct PlacementValidator {
         targetPatchID: Int?,
         in world: WorldState
     ) -> Int? {
+        let minerCells = Set(StructureType.miner.footprint.coveredCells(anchor: minerPosition).map {
+            GridPosition(x: $0.x, y: $0.y, z: 0)
+        })
+
         if let targetPatchID {
             guard let patch = world.orePatches.first(where: { $0.id == targetPatchID }) else {
                 return nil
@@ -91,23 +109,19 @@ public struct PlacementValidator {
             guard patch.isRevealed else { return nil }
             guard patch.boundMinerID == nil else { return nil }
             guard !patch.isExhausted else { return nil }
-            return isAdjacent(minerPosition, patch.position) ? patch.id : nil
+            let patchPos = GridPosition(x: patch.position.x, y: patch.position.y, z: 0)
+            return minerCells.contains(patchPos) ? patch.id : nil
         }
 
         let candidates = world.orePatches
             .filter { patch in
-                patch.isRevealed
-                    && patch.boundMinerID == nil
-                    && !patch.isExhausted
-                    && isAdjacent(minerPosition, patch.position)
+                guard patch.isRevealed, patch.boundMinerID == nil, !patch.isExhausted else { return false }
+                let patchPos = GridPosition(x: patch.position.x, y: patch.position.y, z: 0)
+                return minerCells.contains(patchPos)
             }
             .map(\.id)
             .sorted()
         return candidates.first
-    }
-
-    private func isAdjacent(_ lhs: GridPosition, _ rhs: GridPosition) -> Bool {
-        abs(lhs.x - rhs.x) + abs(lhs.y - rhs.y) == 1
     }
 
     func navigationMap(for world: WorldState, pendingBlockingCells: [GridPosition] = []) -> GridMap {

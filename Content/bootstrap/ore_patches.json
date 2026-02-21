@@ -3,28 +3,28 @@
     {
       "index": 0,
       "minDistance": 0,
-      "maxDistance": 6,
+      "maxDistance": 10,
       "patchCount": { "easy": 7, "normal": 5, "hard": 3 },
       "richnessWeights": { "poor": 0.4, "normal": 0.5, "rich": 0.1 }
     },
     {
       "index": 1,
-      "minDistance": 7,
-      "maxDistance": 14,
+      "minDistance": 11,
+      "maxDistance": 22,
       "patchCount": { "easy": 8, "normal": 7, "hard": 6 },
       "richnessWeights": { "poor": 0.2, "normal": 0.5, "rich": 0.3 }
     },
     {
       "index": 2,
-      "minDistance": 15,
-      "maxDistance": 22,
+      "minDistance": 23,
+      "maxDistance": 38,
       "patchCount": { "easy": 10, "normal": 9, "hard": 8 },
       "richnessWeights": { "poor": 0.1, "normal": 0.4, "rich": 0.5 }
     },
     {
       "index": 3,
-      "minDistance": 23,
-      "maxDistance": 32,
+      "minDistance": 39,
+      "maxDistance": 56,
       "patchCount": { "easy": 8, "normal": 7, "hard": 6 },
       "richnessWeights": { "poor": 0.0, "normal": 0.3, "rich": 0.7 }
     }
@@ -53,7 +53,7 @@
   },
   "renewal": {
     "minSpacing": 3,
-    "minDistanceFromBase": 8,
+    "minDistanceFromBase": 14,
     "maxActivePatches": 20,
     "batchCap": { "easy": 3, "normal": 2, "hard": 2 },
     "hardSkipPercent": 25,

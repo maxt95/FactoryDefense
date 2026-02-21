@@ -5,23 +5,23 @@ import XCTest
 final class CommandSystemExtensionTests: XCTestCase {
     func testRemoveStructureEmitsEventAndAppliesRefund() {
         var entities = EntityStore()
-        let assemblerID = entities.spawnStructure(.assembler, at: GridPosition(x: 2, y: 2))
+        let smelterID = entities.spawnStructure(.smelter, at: GridPosition(x: 2, y: 2))
         let world = makeWorld(
             entities: entities,
             inventories: [
-                "plate_iron": 0,
-                "circuit": 0
+                "plate_steel": 0,
+                "gear": 0
             ]
         )
 
         let engine = SimulationEngine(worldState: world, systems: [CommandSystem()])
-        engine.enqueue(PlayerCommand(tick: 0, actor: PlayerID(1), payload: .removeStructure(entityID: assemblerID)))
+        engine.enqueue(PlayerCommand(tick: 0, actor: PlayerID(1), payload: .removeStructure(entityID: smelterID)))
         let events = engine.step()
 
-        XCTAssertNil(engine.worldState.entities.entity(id: assemblerID))
-        XCTAssertTrue(events.contains(where: { $0.kind == EventKind.structureRemoved && $0.entity == assemblerID }))
-        XCTAssertEqual(engine.worldState.economy.inventories["plate_iron"], 2)
-        XCTAssertEqual(engine.worldState.economy.inventories["circuit"], 1)
+        XCTAssertNil(engine.worldState.entities.entity(id: smelterID))
+        XCTAssertTrue(events.contains(where: { $0.kind == EventKind.structureRemoved && $0.entity == smelterID }))
+        XCTAssertEqual(engine.worldState.economy.inventories["plate_steel"], 4)
+        XCTAssertEqual(engine.worldState.economy.inventories["gear"], 1)
     }
 
     func testPlaceConveyorCommandPlacesDirectionalConveyor() {
@@ -44,14 +44,14 @@ final class CommandSystemExtensionTests: XCTestCase {
     }
 
     func testPlacingProductionStructureSetsDefaultPinnedRecipe() {
-        let world = makeWorld(inventories: ["plate_steel": 4])
+        let world = makeWorld(inventories: ["plate_steel": 8, "gear": 2])
         let engine = SimulationEngine(worldState: world, systems: [CommandSystem()])
         engine.enqueue(
             PlayerCommand(
                 tick: 0,
                 actor: PlayerID(1),
                 payload: .placeStructure(
-                    BuildRequest(structure: .smelter, position: GridPosition(x: 4, y: 4))
+                    BuildRequest(structure: .smelter, position: GridPosition(x: 20, y: 20))
                 )
             )
         )
@@ -128,18 +128,18 @@ final class CommandSystemExtensionTests: XCTestCase {
     ) -> WorldState {
         var entities = entities
         let board = BoardState(
-            width: 12,
-            height: 8,
-            basePosition: GridPosition(x: 0, y: 0),
-            spawnEdgeX: 11,
-            spawnYMin: 0,
-            spawnYMax: 0,
+            width: 192,
+            height: 128,
+            basePosition: GridPosition(x: 80, y: 64),
+            spawnEdgeX: 120,
+            spawnYMin: 52,
+            spawnYMax: 76,
             blockedCells: [],
             restrictedCells: [],
             ramps: []
         )
         let hqID = entities.structures(of: .hq).first?.id
-            ?? entities.spawnStructure(.hq, at: GridPosition(x: 11, y: 7))
+            ?? entities.spawnStructure(.hq, at: GridPosition(x: 80, y: 64))
 
         return WorldState(
             tick: 0,
@@ -152,10 +152,10 @@ final class CommandSystemExtensionTests: XCTestCase {
             threat: ThreatState(),
             run: RunState(hqEntityID: hqID),
             combat: CombatState(
-                basePosition: GridPosition(x: 0, y: 0),
-                spawnEdgeX: 11,
-                spawnYMin: 0,
-                spawnYMax: 0
+                basePosition: GridPosition(x: 80, y: 64),
+                spawnEdgeX: 120,
+                spawnYMin: 52,
+                spawnYMax: 76
             )
         )
     }

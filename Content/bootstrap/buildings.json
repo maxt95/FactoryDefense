@@ -22,9 +22,9 @@
   {
     "id": "miner",
     "displayName": "Miner",
-    "footprint": { "width": 1, "height": 1 },
-    "powerDraw": 2,
-    "buildCosts": [{ "itemID": "plate_iron", "quantity": 6 }, { "itemID": "gear", "quantity": 3 }],
+    "footprint": { "width": 2, "height": 2 },
+    "powerDraw": 3,
+    "buildCosts": [{ "itemID": "plate_iron", "quantity": 10 }, { "itemID": "gear", "quantity": 5 }],
     "ports": [
       { "id": "ore_out", "direction": "east", "mode": "output", "filter": { "kind": "allow", "items": ["ore_iron", "ore_copper", "ore_coal"] }, "bufferCapacity": 8 }
     ]
@@ -32,9 +32,9 @@
   {
     "id": "smelter",
     "displayName": "Smelter",
-    "footprint": { "width": 1, "height": 1 },
-    "powerDraw": 3,
-    "buildCosts": [{ "itemID": "plate_steel", "quantity": 4 }],
+    "footprint": { "width": 3, "height": 2 },
+    "powerDraw": 5,
+    "buildCosts": [{ "itemID": "plate_steel", "quantity": 8 }, { "itemID": "gear", "quantity": 2 }],
     "ports": [
       { "id": "materials_in", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["ore_iron", "ore_copper", "ore_coal", "plate_iron"] }, "bufferCapacity": 12 },
       { "id": "products_out", "direction": "east", "mode": "output", "filter": { "kind": "allow", "items": ["plate_iron", "plate_copper", "plate_steel"] }, "bufferCapacity": 4 }
@@ -43,9 +43,9 @@
   {
     "id": "assembler",
     "displayName": "Assembler",
-    "footprint": { "width": 1, "height": 1 },
-    "powerDraw": 3,
-    "buildCosts": [{ "itemID": "plate_iron", "quantity": 4 }, { "itemID": "circuit", "quantity": 2 }],
+    "footprint": { "width": 3, "height": 3 },
+    "powerDraw": 6,
+    "buildCosts": [{ "itemID": "plate_iron", "quantity": 8 }, { "itemID": "circuit", "quantity": 4 }, { "itemID": "gear", "quantity": 2 }],
     "ports": [
       { "id": "parts_in_west", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_copper", "plate_steel", "ore_coal", "gear", "circuit"] }, "bufferCapacity": 6 },
       { "id": "parts_in_north", "direction": "north", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_copper", "plate_steel", "ore_coal", "gear", "circuit"] }, "bufferCapacity": 6 },
@@ -55,9 +55,9 @@
   {
     "id": "ammoModule",
     "displayName": "Ammo Module",
-    "footprint": { "width": 1, "height": 1 },
-    "powerDraw": 4,
-    "buildCosts": [{ "itemID": "circuit", "quantity": 2 }, { "itemID": "plate_steel", "quantity": 2 }],
+    "footprint": { "width": 2, "height": 2 },
+    "powerDraw": 5,
+    "buildCosts": [{ "itemID": "circuit", "quantity": 4 }, { "itemID": "plate_steel", "quantity": 4 }],
     "ports": [
       { "id": "ammo_in_west", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_steel", "ammo_light", "power_cell", "circuit"] }, "bufferCapacity": 6 },
       { "id": "ammo_in_north", "direction": "north", "mode": "input", "filter": { "kind": "allow", "items": ["plate_iron", "plate_steel", "ammo_light", "power_cell", "circuit"] }, "bufferCapacity": 6 },
@@ -67,9 +67,9 @@
   {
     "id": "powerPlant",
     "displayName": "Power Plant",
-    "footprint": { "width": 1, "height": 1 },
-    "powerDraw": -12,
-    "buildCosts": [{ "itemID": "circuit", "quantity": 2 }, { "itemID": "plate_copper", "quantity": 4 }],
+    "footprint": { "width": 4, "height": 3 },
+    "powerDraw": -30,
+    "buildCosts": [{ "itemID": "circuit", "quantity": 6 }, { "itemID": "plate_copper", "quantity": 10 }, { "itemID": "plate_steel", "quantity": 4 }],
     "ports": [
       { "id": "fuel_in", "direction": "west", "mode": "input", "filter": { "kind": "allow", "items": ["ore_coal", "power_cell"] }, "bufferCapacity": 6 }
     ]
@@ -112,9 +112,9 @@
   {
     "id": "storage",
     "displayName": "Storage",
-    "footprint": { "width": 1, "height": 1 },
+    "footprint": { "width": 3, "height": 2 },
     "powerDraw": 0,
-    "buildCosts": [{ "itemID": "plate_steel", "quantity": 3 }, { "itemID": "gear", "quantity": 2 }],
+    "buildCosts": [{ "itemID": "plate_steel", "quantity": 6 }, { "itemID": "gear", "quantity": 4 }],
     "ports": [
       { "id": "storage_west", "direction": "west", "mode": "bidirectional", "filter": { "kind": "any" }, "bufferCapacity": 24 },
       { "id": "storage_east", "direction": "east", "mode": "bidirectional", "filter": { "kind": "any" }, "bufferCapacity": 24 }
