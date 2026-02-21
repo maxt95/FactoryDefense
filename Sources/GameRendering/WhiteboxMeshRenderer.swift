@@ -283,9 +283,11 @@ public final class WhiteboxMeshRenderer {
 
             let meshID = MeshID(structureTypeRaw: structure.typeRaw)
             let footprintScale = SIMD3<Float>(Float(width) * 0.92, 1.0, Float(depth) * 0.92)
+            let rotationAngles: [Float] = [-.pi / 2, 0, .pi / 2, .pi]
+            let angle = rotationAngles[Int(structure.rotationRaw) % 4]
             let model = simd_float4x4.translation(
                 SIMD3<Float>(centerX, baseElevation + verticalOffset, centerZ)
-            ) * simd_float4x4.scale(footprintScale)
+            ) * simd_float4x4.rotationY(angle) * simd_float4x4.scale(footprintScale)
 
             grouped[meshID, default: []].append(
                 InstanceUniforms(

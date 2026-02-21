@@ -344,13 +344,15 @@ public struct WhiteboxStructureMarker: Hashable, Sendable {
     public var typeRaw: UInt32
     public var footprintWidth: Int32
     public var footprintHeight: Int32
+    public var rotationRaw: UInt8
 
-    public init(anchorX: Int32, anchorY: Int32, typeRaw: UInt32, footprintWidth: Int32, footprintHeight: Int32) {
+    public init(anchorX: Int32, anchorY: Int32, typeRaw: UInt32, footprintWidth: Int32, footprintHeight: Int32, rotationRaw: UInt8 = 1) {
         self.anchorX = anchorX
         self.anchorY = anchorY
         self.typeRaw = typeRaw
         self.footprintWidth = footprintWidth
         self.footprintHeight = footprintHeight
+        self.rotationRaw = rotationRaw
     }
 }
 
@@ -404,13 +406,20 @@ public struct WhiteboxSceneBuilder {
                 guard let structureType = entity.structureType else { continue }
                 let structureID = WhiteboxStructureTypeID(structureType: structureType)
                 let footprint = structureType.footprint
+                let rotIndex: UInt8 = switch entity.rotation {
+                case .north: 0
+                case .east:  1
+                case .south: 2
+                case .west:  3
+                }
                 structures.append(
                     WhiteboxStructureMarker(
                         anchorX: Int32(entity.position.x),
                         anchorY: Int32(entity.position.y),
                         typeRaw: structureID.rawValue,
                         footprintWidth: Int32(footprint.width),
-                        footprintHeight: Int32(footprint.height)
+                        footprintHeight: Int32(footprint.height),
+                        rotationRaw: rotIndex
                     )
                 )
             case .enemy:

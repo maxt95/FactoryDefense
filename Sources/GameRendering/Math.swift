@@ -67,6 +67,17 @@ public extension simd_float4x4 {
         ))
     }
 
+    static func rotationY(_ radians: Float) -> simd_float4x4 {
+        let c = cos(radians)
+        let s = sin(radians)
+        return simd_float4x4(columns: (
+            SIMD4<Float>(c, 0, s, 0),
+            SIMD4<Float>(0, 1, 0, 0),
+            SIMD4<Float>(-s, 0, c, 0),
+            SIMD4<Float>(0, 0, 0, 1)
+        ))
+    }
+
     static func perspective(fovY: Float, aspect: Float, near: Float, far: Float) -> simd_float4x4 {
         let yScale = 1.0 / tan(fovY * 0.5)
         let xScale = yScale / aspect
