@@ -1289,7 +1289,7 @@ private struct FactoryDefensemacOSGameplayView: View {
 
         let deltaX = value.translation.width - dragTranslation.width
         let deltaY = value.translation.height - dragTranslation.height
-        cameraState.panBy(deltaX: -Float(deltaX), deltaY: -Float(deltaY))
+        cameraState.panBy(deltaX: Float(deltaX), deltaY: Float(deltaY))
         enforceCameraConstraints(viewport: viewport)
         dragTranslation = value.translation
         didCameraInteract = true
