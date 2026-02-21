@@ -79,8 +79,6 @@ if [[ -z "${DERIVED_DATA_PATH}" ]]; then
   DERIVED_DATA_PATH="${REPO_ROOT}/.derivedData"
 fi
 
-APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/${SCHEME}.app"
-
 if ! command -v xcodebuild >/dev/null 2>&1; then
   echo "error: xcodebuild is not available." >&2
   exit 1
@@ -88,13 +86,33 @@ fi
 
 cd "${REPO_ROOT}"
 
+XCODEPROJ="${REPO_ROOT}/FactoryDefense.xcodeproj"
+if [[ ! -d "${XCODEPROJ}" ]]; then
+  echo "[run_macos_app] xcodeproj not found — generating..."
+  "${REPO_ROOT}/scripts/generate_xcode_project.sh"
+fi
+
+# Resolve the actual PRODUCT_NAME from the build settings so the app path
+# and process-kill logic use the right name regardless of project.yml changes.
+PRODUCT_NAME=$(xcodebuild -project "${XCODEPROJ}" \
+  -scheme "${SCHEME}" -configuration "${CONFIGURATION}" \
+  -showBuildSettings 2>/dev/null \
+  | sed -n 's/^ *PRODUCT_NAME = //p')
+if [[ -z "${PRODUCT_NAME}" ]]; then
+  echo "warning: could not resolve PRODUCT_NAME; falling back to scheme name" >&2
+  PRODUCT_NAME="${SCHEME}"
+fi
+
+APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/${PRODUCT_NAME}.app"
+
 echo "[run_macos_app] repo root: ${REPO_ROOT}"
 echo "[run_macos_app] derived data: ${DERIVED_DATA_PATH}"
+echo "[run_macos_app] product name: ${PRODUCT_NAME}"
 
 # Prevent macOS "open" from reusing an old app process.
-if pgrep -x "${SCHEME}" >/dev/null 2>&1; then
-  echo "[run_macos_app] stopping existing ${SCHEME} process"
-  pkill -x "${SCHEME}" || true
+if pgrep -x "${PRODUCT_NAME}" >/dev/null 2>&1; then
+  echo "[run_macos_app] stopping existing ${PRODUCT_NAME} process"
+  pkill -x "${PRODUCT_NAME}" || true
   sleep 0.2
 fi
 
@@ -105,6 +123,7 @@ fi
 
 xcodebuild_cmd=(
   xcodebuild
+  -project "${XCODEPROJ}"
   -scheme "${SCHEME}"
   -destination "${DESTINATION}"
   -configuration "${CONFIGURATION}"
